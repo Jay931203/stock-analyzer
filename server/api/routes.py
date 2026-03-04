@@ -1,5 +1,6 @@
 """FastAPI route handlers."""
 
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
@@ -438,6 +439,10 @@ SECTOR_MAP = {
 
 AVAILABLE_SECTORS = ["All"] + sorted(SECTOR_MAP.keys())
 
+# Server-side cache for trending data (5 min TTL)
+_trending_cache: dict = {"data": None, "ts": 0}
+_TRENDING_TTL = 300  # 5 minutes
+
 
 @router.get("/sectors")
 async def get_sectors():
@@ -452,22 +457,34 @@ async def trending_stocks(
     sector: str = Query("All", description="Filter by sector"),
     order: str = Query("desc", description="Sort order: asc or desc"),
 ):
-    """Get popular stocks with price, volume, returns data."""
-    tickers = POPULAR_TICKERS
+    """Get popular stocks with price, volume, returns data. Cached for 5 minutes."""
+    now = time.time()
+
+    # Use cached data if fresh
+    if _trending_cache["data"] and now - _trending_cache["ts"] < _TRENDING_TTL:
+        all_quotes = _trending_cache["data"]
+    else:
+        all_quotes = fetch_batch_quotes(POPULAR_TICKERS)
+
+        # Enrich with sector info from our map
+        sector_lookup = {}
+        for sec, sec_tickers in SECTOR_MAP.items():
+            for t in sec_tickers:
+                sector_lookup[t] = sec
+        for q in all_quotes:
+            if not q.get("sector"):
+                q["sector"] = sector_lookup.get(q["ticker"], "")
+
+        _trending_cache["data"] = all_quotes
+        _trending_cache["ts"] = now
+
+    # Filter by sector
+    quotes = all_quotes
     if sector != "All" and sector in SECTOR_MAP:
-        tickers = SECTOR_MAP[sector]
+        sector_tickers = set(SECTOR_MAP[sector])
+        quotes = [q for q in all_quotes if q["ticker"] in sector_tickers]
 
-    quotes = fetch_batch_quotes(tickers[:limit])
-
-    # Enrich with sector info from our map for tickers missing sector
-    sector_lookup = {}
-    for sec, sec_tickers in SECTOR_MAP.items():
-        for t in sec_tickers:
-            sector_lookup[t] = sec
-    for q in quotes:
-        if not q.get("sector"):
-            q["sector"] = sector_lookup.get(q["ticker"], "")
-
+    # Sort
     reverse = order != "asc"
     if sort == "volume":
         quotes.sort(key=lambda x: x.get("volume", 0), reverse=reverse)
@@ -480,7 +497,12 @@ async def trending_stocks(
     else:  # change_pct
         quotes.sort(key=lambda x: x.get("change_pct", 0), reverse=reverse)
 
-    return {"stocks": quotes, "updated": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    cache_age = int(now - _trending_cache["ts"])
+    return {
+        "stocks": quotes[:limit],
+        "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "cache_age_sec": cache_age,
+    }
 
 
 @router.get("/search/{query}", response_model=SearchResponse)
