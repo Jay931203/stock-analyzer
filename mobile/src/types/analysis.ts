@@ -108,11 +108,19 @@ export interface ConsecutiveData {
   probability?: ProbabilityData;
 }
 
+export interface PriceDistBin {
+  price_low: number;
+  price_high: number;
+  days: number;
+  pct: number;
+}
+
 export interface Week52Data {
   position_pct: number | null;
   high: number | null;
   low: number | null;
   probability?: ProbabilityData;
+  price_distribution?: PriceDistBin[];
 }
 
 export interface PriceInfo {

@@ -113,11 +113,19 @@ class ConsecutiveData(BaseModel):
     probability: ProbabilityData | None = None
 
 
+class PriceDistBin(BaseModel):
+    price_low: float
+    price_high: float
+    days: int
+    pct: float
+
+
 class Week52Data(BaseModel):
     position_pct: float | None = Field(description="0=52w low, 100=52w high")
     high: float | None = None
     low: float | None = None
     probability: ProbabilityData | None = None
+    price_distribution: list[PriceDistBin] | None = None
 
 
 class CombinedProbability(BaseModel):

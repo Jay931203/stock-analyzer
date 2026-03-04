@@ -198,9 +198,11 @@ async def analyze_ticker(ticker: str, period: str = "10y"):
     w52_pos = w52.get("position_pct")
     if w52_pos is not None:
         w52_prob = _to_prob_data(calc_probability(df, "week52_position", w52_pos))
+    price_distribution = w52.get("price_distribution")
     indicator_results["week52"] = Week52Data(
         position_pct=w52_pos, high=w52.get("high"), low=w52.get("low"),
         probability=w52_prob,
+        price_distribution=price_distribution,
     )
 
     # Combined probability

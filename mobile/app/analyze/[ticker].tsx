@@ -220,7 +220,7 @@ export default function AnalyzeScreen() {
           </View>
 
           {price.high_52w && price.low_52w && (
-            <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} />
+            <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
           )}
 
           {/* Backtest period */}

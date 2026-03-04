@@ -180,10 +180,32 @@ def compute_all_indicators(df: pd.DataFrame) -> dict:
     pos_52w = None
     if h and l and h != l:
         pos_52w = round((current_price - l) / (h - l) * 100, 1)
+
+    # Price distribution: divide 52-week range into 20 bins
+    # Count how many days the close price fell into each bin
+    distribution = []
+    if h and l and h > l:
+        bins = 20
+        bin_width = (h - l) / bins
+        last_252 = close.iloc[-252:] if len(close) >= 252 else close
+        for i in range(bins):
+            bin_low = l + i * bin_width
+            bin_high = bin_low + bin_width
+            count = int(((last_252 >= bin_low) & (last_252 < bin_high)).sum())
+            distribution.append({
+                "price_low": round(float(bin_low), 2),
+                "price_high": round(float(bin_high), 2),
+                "days": count,
+                "pct": round(float(count) / len(last_252) * 100, 1),
+            })
+        # Include the exact high in the last bin
+        distribution[-1]["days"] += int((last_252 == h).sum())
+
     result["week52_position"] = {
         "position_pct": pos_52w,  # 0 = at 52w low, 100 = at 52w high
         "high": h,
         "low": l,
+        "price_distribution": distribution,
     }
 
     return result

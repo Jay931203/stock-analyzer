@@ -3,15 +3,17 @@ import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Rect, Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 import { typography, spacing, radius, type ThemeColors } from '../theme';
+import type { PriceDistBin } from '../types/analysis';
 
 interface Props {
   current: number;
   low: number;
   high: number;
   width?: number;
+  distribution?: PriceDistBin[];
 }
 
-export default function Week52Gauge({ current, low, high, width = 280 }: Props) {
+export default function Week52Gauge({ current, low, high, width = 280, distribution }: Props) {
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
 
@@ -67,6 +69,29 @@ export default function Week52Gauge({ current, low, high, width = 280 }: Props) 
           <Text style={[s.labelText, { textAlign: 'right' }]}>52W High</Text>
         </View>
       </View>
+
+      {distribution && distribution.length > 0 && (() => {
+        const maxDays = Math.max(...distribution.map(b => b.days));
+        return (
+          <View style={s.distContainer}>
+            <Text style={s.distLabel}>Price distribution (252d)</Text>
+            <View style={s.distRow}>
+              {distribution.map((bin, i) => {
+                const height = maxDays > 0 ? (bin.days / maxDays) * 36 : 0;
+                const isCurrentBin = current >= bin.price_low && current < bin.price_high;
+                // Include the last bin's upper bound for the highest price
+                const isLastBinCurrent = i === distribution.length - 1 && current === bin.price_high;
+                return (
+                  <View key={i} style={[s.distBar, {
+                    height: Math.max(height, 2),
+                    backgroundColor: (isCurrentBin || isLastBinCurrent) ? colors.accent : `${colors.textMuted}40`,
+                  }]} />
+                );
+              })}
+            </View>
+          </View>
+        );
+      })()}
     </View>
   );
 }
@@ -87,4 +112,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   labelText: { color: c.textMuted, ...typography.labelSm, marginTop: 1 },
   centerLabel: { alignItems: 'center' },
   currentValue: { ...typography.bodyBold },
+  distContainer: { marginTop: 8 },
+  distLabel: { color: c.textMuted, fontSize: 9, marginBottom: 4 },
+  distRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 1, height: 40 },
+  distBar: { flex: 1, borderRadius: 1, minHeight: 2 },
 });
