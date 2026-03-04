@@ -18,7 +18,7 @@ import { useTheme } from '../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../src/theme';
 
 export default function HomeScreen() {
-  const { colors, isDark, toggleTheme } = useTheme();
+  const { colors, isDark, themeMode, cycleTheme } = useTheme();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
@@ -229,8 +229,21 @@ export default function HomeScreen() {
             </View>
           ) : null}
         </View>
-        <Pressable onPress={toggleTheme} style={s.themeBtn}>
-          <Text style={s.themeBtnIcon}>{isDark ? '\u2600' : '\u263D'}</Text>
+        <Pressable
+          onPress={cycleTheme}
+          style={({ pressed }) => [
+            s.themeBtn,
+            pressed && s.themeBtnPressed,
+          ]}
+          accessibilityLabel={`테마 변경, 현재 ${{ light: '라이트', dark: '다크', system: '시스템' }[themeMode]}`}
+          accessibilityRole="button"
+        >
+          <Text style={s.themeBtnIcon}>
+            {themeMode === 'light' ? '\u2600\uFE0E' : themeMode === 'dark' ? '\u263D' : '\u25A3'}
+          </Text>
+          <Text style={s.themeBtnLabel}>
+            {{ light: '라이트', dark: '다크', system: '시스템' }[themeMode]}
+          </Text>
         </Pressable>
       </View>
 
@@ -299,10 +312,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   marketBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 },
   marketBadgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
   themeBtn: {
-    padding: 6, borderRadius: 8,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  themeBtnPressed: {
+    backgroundColor: c.bgElevated,
   },
   themeBtnIcon: {
-    fontSize: 18, color: c.textSecondary,
+    fontSize: 14, color: c.textSecondary,
+  },
+  themeBtnLabel: {
+    fontSize: 10, fontWeight: '500' as const, color: c.textTertiary, letterSpacing: 0.3,
   },
 
   titleArea: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },

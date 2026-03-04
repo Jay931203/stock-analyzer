@@ -1,18 +1,11 @@
-"""Supabase-backed signal cache for fast home screen loading."""
+"""Supabase-backed signal cache using direct REST API (no heavy SDK)."""
 from __future__ import annotations
 
 import os
 import json
-from datetime import datetime, timezone, timedelta
-from typing import Optional
-
-# Try to import supabase, gracefully handle if not available
-try:
-    from supabase import create_client, Client
-    HAS_SUPABASE = True
-except ImportError:
-    HAS_SUPABASE = False
-    Client = None
+import urllib.request
+import urllib.error
+from datetime import datetime, timezone
 
 try:
     from dotenv import load_dotenv
@@ -23,40 +16,46 @@ except ImportError:
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-_client: Optional[Client] = None
+_SIGNAL_FIELDS = [
+    "ticker", "price", "change_pct", "sector",
+    "win_rate_5d", "win_rate_20d", "win_rate_60d", "avg_return_20d",
+    "occurrences", "condition", "indicators_used", "strength", "tier",
+    "updated_at",
+]
 
-# Cache TTL in minutes
-CACHE_TTL_MINUTES = 30
+
+def _headers(*, prefer: str = "") -> dict[str, str]:
+    h = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+    if prefer:
+        h["Prefer"] = prefer
+    return h
 
 
-def _get_client() -> Client | None:
-    global _client
-    if not HAS_SUPABASE or not SUPABASE_URL or not SUPABASE_KEY:
-        return None
-    if _client is None:
-        try:
-            _client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        except Exception:
-            return None
-    return _client
+def _rest_url(path: str) -> str:
+    return f"{SUPABASE_URL}/rest/v1/{path}"
 
 
 def read_cached_signals() -> dict | None:
-    """Read signals from Supabase cache. Returns None only if no data exists."""
-    client = _get_client()
-    if not client:
+    """Read signals from Supabase cache via REST API."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
         return None
 
     try:
-        result = client.table("signal_cache").select("*").order("strength", desc=True).execute()
-        if not result.data:
+        url = _rest_url("signal_cache?select=*&order=strength.desc")
+        req = urllib.request.Request(url, headers=_headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+
+        if not data:
             return None
 
-        # Get the update timestamp for display
-        latest = result.data[0].get("updated_at", "")
-
+        latest = data[0].get("updated_at", "")
         signals = []
-        for row in result.data:
+        for row in data:
             signals.append({
                 "ticker": row["ticker"],
                 "price": row["price"],
@@ -92,18 +91,19 @@ def read_cached_signals() -> dict | None:
 
 
 def write_cached_signals(signals: list[dict]) -> bool:
-    """Write computed signals to Supabase cache."""
-    client = _get_client()
-    if not client or not signals:
+    """Write computed signals to Supabase cache via REST API."""
+    if not SUPABASE_URL or not SUPABASE_KEY or not signals:
         return False
 
     try:
         now = datetime.now(timezone.utc).isoformat()
 
         # Delete old data
-        client.table("signal_cache").delete().neq("ticker", "").execute()
+        del_url = _rest_url("signal_cache?ticker=neq.")
+        del_req = urllib.request.Request(del_url, method="DELETE", headers=_headers())
+        urllib.request.urlopen(del_req, timeout=10)
 
-        # Insert new data
+        # Build rows
         rows = []
         for sig in signals:
             rows.append({
@@ -124,7 +124,13 @@ def write_cached_signals(signals: list[dict]) -> bool:
             })
 
         # Batch insert
-        client.table("signal_cache").insert(rows).execute()
+        ins_url = _rest_url("signal_cache")
+        body = json.dumps(rows).encode()
+        ins_req = urllib.request.Request(
+            ins_url, data=body, method="POST",
+            headers=_headers(prefer="return=minimal"),
+        )
+        urllib.request.urlopen(ins_req, timeout=10)
         return True
     except Exception as e:
         print(f"Supabase write error: {e}")
