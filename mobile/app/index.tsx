@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,75 +27,37 @@ function getReturnValue(stock: TrendingStock, period: ReturnPeriod): number {
   return stock.change_pct ?? 0;
 }
 
-// Similar tickers based on sector/industry
-const SIMILAR_TICKERS: Record<string, string[]> = {
-  // Tech mega-cap
-  AAPL: ['MSFT', 'GOOGL', 'META', 'AMZN'],
-  MSFT: ['AAPL', 'GOOGL', 'ORCL', 'CRM'],
-  GOOGL: ['META', 'MSFT', 'AMZN', 'NFLX'],
-  META: ['GOOGL', 'SNAP', 'PINS', 'NFLX'],
-  // Semis
-  NVDA: ['AMD', 'INTC', 'AVGO', 'QCOM'],
-  AMD: ['NVDA', 'INTC', 'AVGO', 'QCOM'],
-  AVGO: ['NVDA', 'AMD', 'QCOM', 'INTC'],
-  INTC: ['AMD', 'NVDA', 'QCOM', 'AVGO'],
-  QCOM: ['AVGO', 'AMD', 'INTC', 'NVDA'],
-  AMAT: ['LRCX', 'KLAC', 'NVDA', 'AMD'],
-  // Enterprise SW
-  CRM: ['ORCL', 'ADBE', 'MSFT', 'NOW'],
-  ORCL: ['CRM', 'MSFT', 'SAP', 'ADBE'],
-  ADBE: ['CRM', 'ORCL', 'MSFT', 'INTU'],
-  PLTR: ['SNOW', 'CRM', 'AI', 'DDOG'],
-  // Consumer / Retail / EV
-  AMZN: ['SHOP', 'WMT', 'GOOGL', 'MSFT'],
-  TSLA: ['RIVN', 'NIO', 'F', 'GM'],
-  COST: ['WMT', 'TGT', 'HD', 'AMZN'],
-  WMT: ['COST', 'TGT', 'AMZN', 'HD'],
-  HD: ['LOW', 'WMT', 'COST', 'TGT'],
-  NKE: ['LULU', 'ADIDAS', 'UA', 'DECK'],
-  SBUX: ['MCD', 'CMG', 'YUM', 'DPZ'],
-  MCD: ['SBUX', 'CMG', 'YUM', 'DPZ'],
-  // Finance
-  JPM: ['BAC', 'GS', 'MS', 'WFC'],
-  GS: ['MS', 'JPM', 'BAC', 'C'],
-  BAC: ['JPM', 'WFC', 'C', 'GS'],
-  MS: ['GS', 'JPM', 'BAC', 'SCHW'],
-  V: ['MA', 'PYPL', 'SQ', 'AXP'],
-  MA: ['V', 'PYPL', 'SQ', 'AXP'],
-  'BRK-B': ['JPM', 'GS', 'BAC', 'V'],
-  // Healthcare
-  LLY: ['NVO', 'JNJ', 'PFE', 'MRK'],
-  UNH: ['HUM', 'CI', 'ELV', 'CVS'],
-  JNJ: ['PFE', 'MRK', 'ABBV', 'LLY'],
-  PFE: ['MRK', 'JNJ', 'ABBV', 'BMY'],
-  MRK: ['PFE', 'JNJ', 'ABBV', 'LLY'],
-  ABBV: ['MRK', 'PFE', 'JNJ', 'BMY'],
-  TMO: ['DHR', 'ABT', 'ISRG', 'SYK'],
-  // Media
-  NFLX: ['DIS', 'CMCSA', 'WBD', 'PARA'],
-  DIS: ['NFLX', 'CMCSA', 'WBD', 'PARA'],
-  CMCSA: ['DIS', 'NFLX', 'WBD', 'CHTR'],
-  // Energy
-  XOM: ['CVX', 'COP', 'SLB', 'EOG'],
-  CVX: ['XOM', 'COP', 'SLB', 'EOG'],
-  COP: ['XOM', 'CVX', 'EOG', 'DVN'],
-  // Industrial
-  CAT: ['DE', 'UNP', 'GE', 'HON'],
-  BA: ['LMT', 'RTX', 'NOC', 'GD'],
-  LMT: ['BA', 'RTX', 'NOC', 'GD'],
-  UNP: ['CSX', 'NSC', 'CAT', 'FDX'],
-  GE: ['HON', 'MMM', 'CAT', 'RTX'],
-};
-
-function getSimilarTickers(ticker: string): string[] {
-  const upper = ticker.toUpperCase();
-  return SIMILAR_TICKERS[upper] ?? [];
-}
-
 function getMarketLabel(state?: string): string {
   if (state === 'PRE') return 'PRE';
   if (state === 'POST' || state === 'POSTPOST') return 'AFTER';
   return '';
+}
+
+// Skeleton shimmer component
+function SkeletonCard({ colors, index }: { colors: any; index: number }) {
+  const opacity = useRef(new Animated.Value(0.3)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.7, duration: 800, useNativeDriver: true, delay: index * 50 }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ]),
+    ).start();
+  }, []);
+  return (
+    <Animated.View style={{
+      backgroundColor: colors.bgCard, borderRadius: radius.md, padding: spacing.md,
+      marginBottom: 6, borderWidth: 1, borderColor: colors.border, height: 80, opacity,
+      flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    }}>
+      <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.bgElevated }} />
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={{ width: '40%', height: 12, borderRadius: 4, backgroundColor: colors.bgElevated }} />
+        <View style={{ width: '70%', height: 10, borderRadius: 4, backgroundColor: colors.bgElevated }} />
+      </View>
+      <View style={{ width: 60, height: 14, borderRadius: 4, backgroundColor: colors.bgElevated }} />
+    </Animated.View>
+  );
 }
 
 export default function HomeScreen() {
@@ -104,6 +67,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [similarTickers, setSimilarTickers] = useState<{ sector: string; tickers: string[] }>({ sector: '', tickers: [] });
   const [loading, setLoading] = useState(false);
   const [serverOk, setServerOk] = useState<boolean | null>(null);
   const [watchlist, setWatchlist] = useState(getWatchlist());
@@ -172,10 +136,19 @@ export default function HomeScreen() {
   const handleSearch = useCallback((text: string) => {
     setQuery(text);
     if (debounce.current) clearTimeout(debounce.current);
-    if (text.length < 1) { setResults([]); return; }
+    if (text.length < 1) { setResults([]); setSimilarTickers({ sector: '', tickers: [] }); return; }
     debounce.current = setTimeout(async () => {
       setLoading(true);
-      try { setResults(await api.search(text)); } catch { setResults([]); }
+      try {
+        const searchResults = await api.search(text);
+        setResults(searchResults);
+        // Fetch similar tickers from server for first result
+        if (searchResults.length > 0) {
+          api.similar(searchResults[0].ticker).then(res => {
+            setSimilarTickers({ sector: res.sector, tickers: res.similar });
+          }).catch(() => {});
+        }
+      } catch { setResults([]); }
       setLoading(false);
     }, 300);
   }, []);
@@ -183,46 +156,46 @@ export default function HomeScreen() {
   const goToAnalysis = (ticker: string) => router.push(`/analyze/${ticker}`);
   const handleSubmit = () => { const t = query.trim().toUpperCase(); if (t) goToAnalysis(t); };
 
-  const renderSearchResults = () => {
-    const topResult = results[0]?.ticker;
-    const similar = topResult ? getSimilarTickers(topResult) : [];
-
-    return (
-      <View style={{ flex: 1 }}>
-        <FlatList
-          data={results}
-          keyExtractor={(item) => item.ticker}
-          style={s.resultsList}
-          renderItem={({ item }) => (
-            <Pressable style={s.resultItem} onPress={() => goToAnalysis(item.ticker)}>
-              <View style={s.resultLeft}>
-                <View style={s.tickerBadge}>
-                  <Text style={s.tickerBadgeText}>{item.ticker.slice(0, 2)}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.resultTicker}>{item.ticker}</Text>
-                  <Text style={s.resultName} numberOfLines={1}>{item.name}</Text>
-                </View>
+  const renderSearchResults = () => (
+    <View style={{ flex: 1 }}>
+      <FlatList
+        data={results}
+        keyExtractor={(item) => item.ticker}
+        style={s.resultsList}
+        renderItem={({ item }) => (
+          <Pressable
+            style={({ pressed }) => [s.resultItem, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
+            onPress={() => goToAnalysis(item.ticker)}
+          >
+            <View style={s.resultLeft}>
+              <View style={s.tickerBadge}>
+                <Text style={s.tickerBadgeText}>{item.ticker.slice(0, 2)}</Text>
               </View>
-              <Text style={s.resultExchange}>{item.exchange}</Text>
-            </Pressable>
-          )}
-          ListFooterComponent={similar.length > 0 ? (
-            <View style={s.similarSection}>
-              <Text style={s.similarTitle}>Similar to {topResult}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {similar.map(t => (
-                  <Pressable key={t} style={s.similarChip} onPress={() => goToAnalysis(t)}>
-                    <Text style={s.similarChipText}>{t}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
+              <View style={{ flex: 1 }}>
+                <Text style={s.resultTicker}>{item.ticker}</Text>
+                <Text style={s.resultName} numberOfLines={1}>{item.name}</Text>
+              </View>
             </View>
-          ) : null}
-        />
-      </View>
-    );
-  };
+            <Text style={s.resultExchange}>{item.exchange}</Text>
+          </Pressable>
+        )}
+        ListFooterComponent={similarTickers.tickers.length > 0 ? (
+          <View style={s.similarSection}>
+            <Text style={s.similarTitle}>
+              {similarTickers.sector ? `${similarTickers.sector} peers` : `Similar to ${results[0]?.ticker}`}
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {similarTickers.tickers.map(t => (
+                <Pressable key={t} style={s.similarChip} onPress={() => goToAnalysis(t)}>
+                  <Text style={s.similarChipText}>{t}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+      />
+    </View>
+  );
 
   const renderMainContent = () => (
     <ScrollView style={s.mainScroll} showsVerticalScrollIndicator={false}>
@@ -236,7 +209,7 @@ export default function HomeScreen() {
             {watchlist.map((ticker) => (
               <Pressable
                 key={ticker}
-                style={s.watchlistChip}
+                style={({ pressed }) => [s.watchlistChip, pressed && { transform: [{ scale: 0.95 }] }]}
                 onPress={() => goToAnalysis(ticker)}
                 onLongPress={() => removeFromWatchlist(ticker)}
               >
@@ -271,7 +244,7 @@ export default function HomeScreen() {
           </ScrollView>
         )}
 
-        {/* Return period + sort controls */}
+        {/* Sort controls */}
         <View style={s.controlsRow}>
           <View style={s.periodGroup}>
             {(['1D', '1W', '1M'] as ReturnPeriod[]).map((p) => (
@@ -305,12 +278,23 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
+        {/* Skeleton loading */}
+        {trendingLoading && allStocks.length === 0 && (
+          <View>
+            {[0, 1, 2, 3, 4].map(i => <SkeletonCard key={i} colors={colors} index={i} />)}
+          </View>
+        )}
+
         {/* Stock list */}
         {trending.map((stock, i) => {
           const ret = getReturnValue(stock, returnPeriod);
           const mktLabel = getMarketLabel(stock.market_state);
           return (
-            <Pressable key={stock.ticker} style={s.stockCard} onPress={() => goToAnalysis(stock.ticker)}>
+            <Pressable
+              key={stock.ticker}
+              style={({ pressed }) => [s.stockCard, pressed && { transform: [{ scale: 0.98 }], opacity: 0.8 }]}
+              onPress={() => goToAnalysis(stock.ticker)}
+            >
               <View style={s.stockRank}>
                 <Text style={s.stockRankText}>{i + 1}</Text>
               </View>
@@ -358,7 +342,7 @@ export default function HomeScreen() {
         )}
       </View>
 
-      <View style={{ height: 40 }} />
+      <View style={{ height: insets.bottom + 20 }} />
     </ScrollView>
   );
 
@@ -408,7 +392,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
 
   topBar: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, paddingTop: spacing.md,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
   },
   topBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
@@ -449,7 +433,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   resultName: { color: c.textTertiary, ...typography.labelSm, maxWidth: 200, marginTop: 1 },
   resultExchange: { color: c.textMuted, ...typography.labelSm },
 
-  // Similar ticker suggestions
   similarSection: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm },
   similarTitle: { color: c.textTertiary, ...typography.labelSm, marginBottom: spacing.sm },
   similarChip: {

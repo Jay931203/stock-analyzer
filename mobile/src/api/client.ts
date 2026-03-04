@@ -96,6 +96,11 @@ const api = {
     return res.data;
   },
 
+  async similar(ticker: string): Promise<{ ticker: string; sector: string; similar: string[] }> {
+    const res = await axios.get(`${BASE_URL}/api/similar/${ticker}`, { timeout: 10000 });
+    return res.data;
+  },
+
   async smartProbability(ticker: string, selectedIndicators: string[]): Promise<SmartProbabilityResult> {
     const res = await axios.post(
       `${BASE_URL}/api/smart-probability/${ticker}`,

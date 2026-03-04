@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,9 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,19 +22,21 @@ import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../../src/st
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../../src/theme';
 
-const INDICATOR_META: Record<string, { label: string }> = {
-  RSI: { label: 'RSI' },
-  MACD: { label: 'MACD' },
-  MA: { label: 'MA' },
-  BB: { label: 'BB' },
-  Vol: { label: 'Vol' },
-  Stoch: { label: 'Stoch' },
-  Drawdown: { label: 'DD' },
-  ADX: { label: 'ADX' },
-  MADist: { label: 'MADist' },
-  Consec: { label: 'Streak' },
-  W52: { label: '52W' },
-  ATR: { label: 'ATR' },
+const { height: SCREEN_H } = Dimensions.get('window');
+
+const INDICATOR_META: Record<string, { label: string; icon: string }> = {
+  RSI: { label: 'RSI', icon: '📊' },
+  MACD: { label: 'MACD', icon: '📈' },
+  MA: { label: 'MA', icon: '〰️' },
+  BB: { label: 'BB', icon: '🔔' },
+  Vol: { label: 'Vol', icon: '📉' },
+  Stoch: { label: 'Stoch', icon: '⚡' },
+  Drawdown: { label: 'DD', icon: '📉' },
+  ADX: { label: 'ADX', icon: '💪' },
+  MADist: { label: 'MADist', icon: '↔️' },
+  Consec: { label: 'Streak', icon: '🔥' },
+  W52: { label: '52W', icon: '📅' },
+  ATR: { label: 'ATR', icon: '📐' },
 };
 
 const ALL_INDICATORS = Object.keys(INDICATOR_META);
@@ -73,6 +78,7 @@ export default function AnalyzeScreen() {
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
+  const slideAnim = useRef(new Animated.Value(SCREEN_H)).current;
 
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const [data, setData] = useState<AnalysisResponse | null>(null);
@@ -82,7 +88,7 @@ export default function AnalyzeScreen() {
   const [combinedIndicators, setCombinedIndicators] = useState<Set<string>>(
     new Set(['RSI', 'MACD', 'MA', 'BB', 'Vol']),
   );
-  const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
+  const [modalIndicator, setModalIndicator] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(isInWatchlist(ticker ?? ''));
   const [period, setPeriod] = useState<string>('10y');
 
@@ -122,8 +128,22 @@ export default function AnalyzeScreen() {
     });
   };
 
-  const toggleExpand = (key: string) => {
-    setExpandedIndicator(prev => prev === key ? null : key);
+  const openModal = (key: string) => {
+    setModalIndicator(key);
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 11,
+    }).start();
+  };
+
+  const closeModal = () => {
+    Animated.timing(slideAnim, {
+      toValue: SCREEN_H,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => setModalIndicator(null));
   };
 
   if (loading) {
@@ -161,9 +181,8 @@ export default function AnalyzeScreen() {
           />
         }
       >
-        {/* HEADER + COMBINED (one block) */}
+        {/* HEADER + COMBINED */}
         <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
-          {/* Back button + ticker */}
           <View style={s.navRow}>
             <Pressable style={s.backBtn} onPress={() => router.back()}>
               <Text style={s.backBtnText}>← Home</Text>
@@ -173,12 +192,11 @@ export default function AnalyzeScreen() {
               onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
             >
               <Text style={[s.saveBtnText, inWatchlist && s.saveBtnTextActive]}>
-                {inWatchlist ? 'Saved' : 'Save'}
+                {inWatchlist ? '★ Saved' : '☆ Save'}
               </Text>
             </Pressable>
           </View>
 
-          {/* Ticker + price */}
           <Text style={s.tickerLabel}>{ticker_info.ticker}</Text>
           <Text style={s.tickerName} numberOfLines={1}>{ticker_info.name}</Text>
 
@@ -218,9 +236,7 @@ export default function AnalyzeScreen() {
           {/* COMBINED ANALYSIS */}
           <View style={s.combinedSection}>
             <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
-            <Text style={s.hintText}>Toggle indicators to include/exclude from combined analysis</Text>
 
-            {/* Indicator toggle chips */}
             <View style={s.toggleRow}>
               {ALL_INDICATORS.filter(k => k !== 'ATR').map(key => {
                 const active = combinedIndicators.has(key);
@@ -238,7 +254,6 @@ export default function AnalyzeScreen() {
               })}
             </View>
 
-            {/* Smart combined result */}
             {activeForCombined.length >= 2 ? (
               <SmartCombinedView ticker={ticker!} selectedIndicators={activeForCombined} />
             ) : (
@@ -247,55 +262,96 @@ export default function AnalyzeScreen() {
           </View>
         </View>
 
-        {/* INDICATORS - separate section */}
+        {/* INDICATORS - tap to open modal */}
         <View style={s.indicatorsSection}>
-          <Text style={s.sectionTitle}>INDICATOR DETAILS</Text>
-          <Text style={s.hintText}>Tap for detailed analysis with historical probability</Text>
+          <Text style={s.sectionTitle}>INDICATORS</Text>
+          <Text style={s.hintText}>Tap any indicator for detailed analysis</Text>
 
           <View style={s.cardGrid}>
             {ALL_INDICATORS.map(key => {
               const { value, winRate } = getIndicatorPreview(key, data);
               const meta = INDICATOR_META[key];
-              const isExpanded = expandedIndicator === key;
 
               return (
-                <View key={key} style={{ width: '32%', marginBottom: 6 }}>
-                  <Pressable
-                    style={[s.indicatorCard, isExpanded && s.indicatorCardExpanded]}
-                    onPress={() => toggleExpand(key)}
-                  >
-                    <Text style={[s.cardLabel, isExpanded && s.cardLabelExpanded]}>{meta.label}</Text>
-                    <Text style={s.cardValue}>{value}</Text>
-                    {winRate !== null && (
+                <Pressable
+                  key={key}
+                  style={({ pressed }) => [
+                    s.indicatorCard,
+                    pressed && s.indicatorCardPressed,
+                  ]}
+                  onPress={() => openModal(key)}
+                >
+                  <Text style={s.cardIcon}>{meta.icon}</Text>
+                  <Text style={s.cardLabel}>{meta.label}</Text>
+                  <Text style={s.cardValue}>{value}</Text>
+                  {winRate !== null && (
+                    <View style={[s.winBadge, { backgroundColor: winRate >= 50 ? `${colors.bullish}18` : `${colors.bearish}18` }]}>
                       <Text style={[s.cardWinRate, { color: winRate >= 50 ? colors.bullish : colors.bearish }]}>
-                        {winRate.toFixed(0)}% win
+                        {winRate.toFixed(0)}%
                       </Text>
-                    )}
-                  </Pressable>
-                </View>
+                    </View>
+                  )}
+                </Pressable>
               );
             })}
           </View>
         </View>
 
-        {/* EXPANDED INDICATOR DETAIL */}
-        {expandedIndicator && (
-          <View style={s.detailSection}>
-            <View style={s.expandedHeader}>
-              <Text style={s.sectionTitle}>{INDICATOR_META[expandedIndicator]?.label} DETAIL</Text>
-              <Pressable onPress={() => setExpandedIndicator(null)}>
-                <Text style={s.closeBtn}>Close</Text>
-              </Pressable>
-            </View>
-            <IndicatorCard type={expandedIndicator} data={data} />
-          </View>
-        )}
-
-        <View style={s.footer}>
+        <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
           <Text style={s.footerText}>{data.data_range}</Text>
           <Text style={s.footerText}>Updated: {data.analysis_date}</Text>
         </View>
       </ScrollView>
+
+      {/* BOTTOM SHEET MODAL */}
+      <Modal
+        visible={modalIndicator !== null}
+        transparent
+        animationType="none"
+        onRequestClose={closeModal}
+        statusBarTranslucent
+      >
+        <View style={s.modalOverlay}>
+          <Pressable style={s.modalBackdrop} onPress={closeModal} />
+          <Animated.View
+            style={[
+              s.modalSheet,
+              { paddingBottom: insets.bottom + 16 },
+              { transform: [{ translateY: slideAnim }] },
+            ]}
+          >
+            {/* Handle bar */}
+            <View style={s.modalHandleWrap}>
+              <View style={s.modalHandle} />
+            </View>
+
+            {/* Modal header */}
+            <View style={s.modalHeader}>
+              <View style={s.modalTitleRow}>
+                <Text style={s.modalIcon}>{modalIndicator ? INDICATOR_META[modalIndicator]?.icon : ''}</Text>
+                <Text style={s.modalTitle}>
+                  {modalIndicator ? INDICATOR_META[modalIndicator]?.label : ''} Detail
+                </Text>
+              </View>
+              <Pressable style={s.modalCloseBtn} onPress={closeModal}>
+                <Text style={s.modalCloseBtnText}>✕</Text>
+              </Pressable>
+            </View>
+
+            {/* Modal content */}
+            <ScrollView
+              style={s.modalScroll}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              {modalIndicator && data && (
+                <IndicatorCard type={modalIndicator} data={data} />
+              )}
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -325,7 +381,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  backBtn: { paddingVertical: 4 },
+  backBtn: { paddingVertical: 6, paddingRight: 12 },
   backBtnText: { color: c.accent, fontSize: 14, fontWeight: '600' },
   saveBtn: {
     paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.sm,
@@ -365,7 +421,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sectionTitle: { color: c.textTertiary, ...typography.label, marginBottom: spacing.xs },
   hintText: { color: c.textMuted, fontSize: 11, marginBottom: spacing.sm },
 
-  // Indicator toggle chips
+  // Toggle chips
   toggleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: spacing.md },
   toggleChip: {
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.full,
@@ -378,26 +434,51 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // Indicators section
   indicatorsSection: { padding: spacing.lg, paddingTop: spacing.lg },
 
-  cardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  cardGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   indicatorCard: {
-    backgroundColor: c.bgCard, borderRadius: radius.md, padding: spacing.sm,
+    width: '31%' as any,
+    backgroundColor: c.bgCard, borderRadius: radius.lg, padding: spacing.sm,
     borderWidth: 1, borderColor: c.border, alignItems: 'center',
-    minHeight: 72, justifyContent: 'center',
+    minHeight: 90, justifyContent: 'center',
   },
-  indicatorCardExpanded: { borderColor: c.accent, backgroundColor: c.accentDim },
+  indicatorCardPressed: { transform: [{ scale: 0.95 }], backgroundColor: c.bgElevated },
+  cardIcon: { fontSize: 16, marginBottom: 2 },
   cardLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '600', marginBottom: 2 },
-  cardLabelExpanded: { color: c.accent },
-  cardValue: { color: c.textPrimary, fontSize: 14, fontWeight: '700' },
-  cardWinRate: { fontSize: 10, fontWeight: '600', marginTop: 2 },
+  cardValue: { color: c.textPrimary, fontSize: 15, fontWeight: '700' },
+  winBadge: { marginTop: 4, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
+  cardWinRate: { fontSize: 10, fontWeight: '700' },
 
-  // Detail section
-  detailSection: { padding: spacing.lg, paddingTop: spacing.sm },
-  expandedHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  closeBtn: { color: c.accent, fontSize: 12, fontWeight: '600' },
-
-  footer: { alignItems: 'center', paddingVertical: 20, paddingBottom: 50, gap: 2 },
+  // Footer
+  footer: { alignItems: 'center', paddingVertical: 20, gap: 2 },
   footerText: { color: c.textMuted, fontSize: 10 },
+
+  // Modal
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalSheet: {
+    backgroundColor: c.bg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: SCREEN_H * 0.8,
+    minHeight: SCREEN_H * 0.4,
+  },
+  modalHandleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: c.border },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.sm,
+    borderBottomWidth: 1, borderBottomColor: c.border,
+  },
+  modalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  modalIcon: { fontSize: 20 },
+  modalTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '700' },
+  modalCloseBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: c.bgElevated, justifyContent: 'center', alignItems: 'center',
+  },
+  modalCloseBtnText: { color: c.textMuted, fontSize: 16 },
+  modalScroll: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
 });

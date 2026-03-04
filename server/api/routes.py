@@ -444,6 +444,29 @@ _trending_cache: dict = {"data": None, "ts": 0}
 _TRENDING_TTL = 300  # 5 minutes
 
 
+@router.get("/similar/{ticker}")
+async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
+    """Get similar tickers from the same sector."""
+    upper = ticker.upper()
+    # Find which sector this ticker belongs to
+    for sector, tickers in SECTOR_MAP.items():
+        if upper in tickers:
+            similar = [t for t in tickers if t != upper][:limit]
+            return {"ticker": upper, "sector": sector, "similar": similar}
+    # Not in our map - try to find sector from yfinance
+    try:
+        info = get_ticker_info(upper)
+        sector = info.get("sector", "")
+        if sector:
+            for sec_name, sec_tickers in SECTOR_MAP.items():
+                if sec_name.lower() in sector.lower():
+                    similar = sec_tickers[:limit]
+                    return {"ticker": upper, "sector": sec_name, "similar": similar}
+    except Exception:
+        pass
+    return {"ticker": upper, "sector": "", "similar": []}
+
+
 @router.get("/sectors")
 async def get_sectors():
     """List available sector filters."""
