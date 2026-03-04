@@ -152,57 +152,37 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
 
       {!tierData && <Text style={s.noDataText}>No matching historical cases found for this tier.</Text>}
 
-      {/* Impact Analysis - Enhanced with multi-period data */}
+      {/* Impact Analysis - simplified card row */}
       {Object.keys(result.impact).length > 0 && (
-        <View style={s.section}>
-          <Pressable style={s.sectionToggle}
-            onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowImpact(!showImpact); }}
-          >
-            <Text style={s.sectionTitle}>Impact Analysis</Text>
-            <Text style={s.toggleArrow}>{showImpact ? 'v' : '>'}</Text>
-          </Pressable>
+        <Pressable style={s.section}
+          onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowImpact(!showImpact); }}
+        >
+          <View style={s.sectionToggle}>
+            <Text style={s.sectionTitle}>Indicator Impact</Text>
+            <Text style={s.toggleArrow}>{showImpact ? '▾' : '▸'}</Text>
+          </View>
 
           {showImpact && (
-            <View style={s.impactGrid}>
+            <View style={s.impactRow}>
               {Object.entries(result.impact).map(([key, prob]) => {
                 const label = INDICATOR_LABELS[key] ?? key;
-                // Show multiple periods for richer info
-                const periods = ['5', '20', '60', '252'];
+                const wr20 = prob.periods?.['20']?.win_rate ?? 50;
+                const combinedWr = tierData?.periods?.['20']?.win_rate ?? 50;
+                const diff = wr20 - combinedWr;
                 return (
-                  <View key={key} style={s.impactCard}>
-                    <Text style={s.impactLabel}>Without {label}</Text>
-                    <Text style={s.impactSamples}>{prob.occurrences} cases</Text>
-                    <View style={s.impactPeriodRow}>
-                      {periods.map(p => {
-                        const stats = prob.periods?.[p];
-                        const combinedStats = tierData?.periods?.[p];
-                        if (!stats) return null;
-                        const diff = combinedStats ? stats.win_rate - combinedStats.win_rate : null;
-                        const periodLabel = p === '5' ? '5D' : p === '20' ? '1M' : p === '60' ? '3M' : '1Y';
-                        return (
-                          <View key={p} style={s.impactPeriodCell}>
-                            <Text style={s.impactPeriodLabel}>{periodLabel}</Text>
-                            <Text style={[s.impactWinRate, { color: stats.win_rate >= 55 ? colors.bullish : stats.win_rate <= 45 ? colors.bearish : colors.textSecondary }]}>
-                              {stats.win_rate.toFixed(0)}%
-                            </Text>
-                            <Text style={[s.impactAvg, { color: stats.avg_return >= 0 ? colors.bullish : colors.bearish }]}>
-                              {stats.avg_return >= 0 ? '+' : ''}{stats.avg_return.toFixed(1)}%
-                            </Text>
-                            {diff != null && (
-                              <Text style={[s.impactDiff, { color: diff > 0 ? colors.bullish : diff < 0 ? colors.bearish : colors.textMuted }]}>
-                                {diff > 0 ? '+' : ''}{diff.toFixed(1)}
-                              </Text>
-                            )}
-                          </View>
-                        );
-                      })}
-                    </View>
+                  <View key={key} style={s.impactChip}>
+                    <Text style={s.impactChipLabel}>{label}</Text>
+                    <Text style={[s.impactChipDiff, {
+                      color: diff > 2 ? colors.bearish : diff < -2 ? colors.bullish : colors.textMuted,
+                    }]}>
+                      {diff > 0 ? '+' : ''}{diff.toFixed(0)}%
+                    </Text>
                   </View>
                 );
               })}
             </View>
           )}
-        </View>
+        </Pressable>
       )}
 
     </View>
@@ -232,17 +212,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sectionTitle: { color: c.textSecondary, fontSize: 14, fontWeight: '600' },
   toggleArrow: { color: c.textMuted, fontSize: 14 },
 
-  // Impact - Enhanced layout
-  impactGrid: { paddingHorizontal: 14, paddingBottom: 14, gap: 8 },
-  impactCard: { backgroundColor: c.bg, borderRadius: 8, padding: 10 },
-  impactLabel: { color: c.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 2 },
-  impactSamples: { color: c.textMuted, fontSize: 10, marginBottom: 6 },
-  impactPeriodRow: { flexDirection: 'row', gap: 12 },
-  impactPeriodCell: { alignItems: 'center' },
-  impactPeriodLabel: { color: c.textMuted, fontSize: 9, fontWeight: '500' },
-  impactWinRate: { fontSize: 13, fontWeight: '700' },
-  impactAvg: { fontSize: 10, marginTop: 1 },
-  impactDiff: { fontSize: 9, fontWeight: '600', marginTop: 1 },
+  // Impact - card chips
+  impactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingBottom: 14 },
+  impactChip: {
+    backgroundColor: c.bg, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+    alignItems: 'center', minWidth: 60,
+  },
+  impactChipLabel: { color: c.textMuted, fontSize: 10, fontWeight: '500', marginBottom: 2 },
+  impactChipDiff: { fontSize: 14, fontWeight: '700' },
 
   loadingCard: { backgroundColor: c.bgCard, borderRadius: 12, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: c.border },
   loadingText: { color: c.textSecondary, fontSize: 13, flex: 1 },

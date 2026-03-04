@@ -14,10 +14,10 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api, { initServerUrl } from '../src/api/client';
-import type { SearchResult, SignalItem } from '../src/types/analysis';
+import type { SearchResult, SignalItem, TrendingStock } from '../src/types/analysis';
 import { getWatchlist, removeFromWatchlist, subscribe, initWatchlist } from '../src/store/watchlist';
 import { useTheme } from '../src/contexts/ThemeContext';
-import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../src/theme';
+import { spacing, radius, typography, formatVolume, getDirectionColor, type ThemeColors } from '../src/theme';
 
 // Skeleton shimmer for loading state
 function SkeletonSignalCard({ colors, index }: { colors: any; index: number }) {
@@ -148,8 +148,21 @@ export default function HomeScreen() {
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [signalsUpdated, setSignalsUpdated] = useState('');
   const [scannedCount, setScannedCount] = useState(0);
+  const [trendingStocks, setTrendingStocks] = useState<TrendingStock[]>([]);
+  const [trendingLoading, setTrendingLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout>>(null);
+
+  // Build signal lookup for probability badges on popular stocks
+  const signalLookup = useMemo(() => {
+    const map = new Map<string, { win_rate_20d: number; signal_type: string }>();
+    for (const sig of [...bullishSignals, ...bearishSignals]) {
+      if (!map.has(sig.ticker)) {
+        map.set(sig.ticker, { win_rate_20d: sig.win_rate_20d, signal_type: sig.signal_type });
+      }
+    }
+    return map;
+  }, [bullishSignals, bearishSignals]);
 
   useEffect(() => {
     async function init() {
@@ -158,7 +171,10 @@ export default function HomeScreen() {
       setWatchlist(getWatchlist());
       const ok = await api.health();
       setServerOk(ok);
-      if (ok) loadSignals();
+      if (ok) {
+        loadSignals();
+        loadTrending();
+      }
     }
     init();
     return subscribe(() => setWatchlist(getWatchlist()));
@@ -178,9 +194,18 @@ export default function HomeScreen() {
     setSignalsLoading(false);
   };
 
+  const loadTrending = async () => {
+    setTrendingLoading(true);
+    try {
+      const res = await api.trending('change_pct', 20, 'All', 'desc');
+      setTrendingStocks(res.stocks);
+    } catch {}
+    setTrendingLoading(false);
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadSignals();
+    await Promise.all([loadSignals(), loadTrending()]);
     setRefreshing(false);
   };
 
@@ -339,14 +364,81 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
 
+      {/* Popular Stocks with probability badges */}
+      <View style={s.sectionContainer}>
+        <View style={s.sectionHeader}>
+          <Text style={s.sectionLabel}>POPULAR STOCKS</Text>
+          {trendingLoading && <ActivityIndicator size="small" color={colors.accent} />}
+        </View>
+
+        {trendingLoading && trendingStocks.length === 0 && (
+          [0, 1, 2, 3, 4].map(i => <SkeletonSignalCard key={`sk-${i}`} colors={colors} index={i + 6} />)
+        )}
+
+        {trendingStocks.map((stock, i) => {
+          const mktLabel = stock.market_state === 'PRE' ? 'PRE' : (stock.market_state === 'POST' || stock.market_state === 'POSTPOST') ? 'AFTER' : '';
+          const sigInfo = signalLookup.get(stock.ticker);
+          return (
+            <Pressable
+              key={stock.ticker}
+              style={({ pressed }) => [s.stockCard, pressed && { transform: [{ scale: 0.98 }], opacity: 0.8 }]}
+              onPress={() => goToAnalysis(stock.ticker)}
+            >
+              <View style={s.stockRank}>
+                <Text style={s.stockRankText}>{i + 1}</Text>
+              </View>
+              <View style={s.stockInfo}>
+                <View style={s.stockRow1}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={s.stockTicker}>{stock.ticker}</Text>
+                    {stock.sector ? <Text style={s.sectorTag}>{stock.sector}</Text> : null}
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {mktLabel ? <Text style={s.marketTag}>{mktLabel}</Text> : null}
+                    <Text style={s.stockPrice}>${stock.price.toFixed(2)}</Text>
+                  </View>
+                </View>
+                <View style={s.stockRow2}>
+                  <Text style={s.stockName} numberOfLines={1}>{stock.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {sigInfo && (
+                      <View style={[s.probBadge, {
+                        backgroundColor: sigInfo.win_rate_20d >= 55 ? `${colors.bullish}15` : sigInfo.win_rate_20d <= 45 ? `${colors.bearish}15` : `${colors.textMuted}10`,
+                      }]}>
+                        <Text style={[s.probBadgeText, {
+                          color: sigInfo.win_rate_20d >= 55 ? colors.bullish : sigInfo.win_rate_20d <= 45 ? colors.bearish : colors.textMuted,
+                        }]}>
+                          {sigInfo.win_rate_20d.toFixed(0)}%
+                        </Text>
+                      </View>
+                    )}
+                    <View style={[s.changeBadge, { backgroundColor: stock.change_pct >= 0 ? colors.bullishBg : colors.bearishBg }]}>
+                      <Text style={[s.changeText, { color: getDirectionColor(stock.change_pct, colors) }]}>
+                        {stock.change_pct >= 0 ? '+' : ''}{stock.change_pct.toFixed(2)}%
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={s.stockRow3}>
+                  <Text style={s.metricVal}>{formatVolume(stock.volume)}</Text>
+                  {sigInfo && (
+                    <>
+                      <Text style={s.metricDot}>|</Text>
+                      <Text style={[s.metricVal, { color: colors.textTertiary }]}>{sigInfo.signal_type}</Text>
+                    </>
+                  )}
+                </View>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+
       {/* Scan info */}
       {signalsUpdated ? (
         <View style={s.scanInfo}>
           <Text style={s.scanInfoText}>
             Scanned {scannedCount} stocks | Updated {signalsUpdated}
-          </Text>
-          <Text style={s.scanInfoText}>
-            Signals: {bullishSignals.length} bullish, {bearishSignals.length} bearish
           </Text>
         </View>
       ) : null}
@@ -479,6 +571,42 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: radius.full, borderWidth: 1, borderColor: c.border, marginRight: spacing.sm,
   },
   watchlistChipText: { color: c.textPrimary, ...typography.bodyBold, letterSpacing: 0.5 },
+
+  stockCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: c.bgCard, borderRadius: radius.md, padding: spacing.md,
+    marginBottom: 6, borderWidth: 1, borderColor: c.border,
+  },
+  stockRank: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: c.bgElevated, justifyContent: 'center', alignItems: 'center',
+    marginRight: spacing.sm,
+  },
+  stockRankText: { color: c.textMuted, fontSize: 10, fontWeight: '700' },
+  stockInfo: { flex: 1 },
+  stockRow1: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  stockTicker: { color: c.textPrimary, ...typography.bodyBold },
+  sectorTag: { color: c.textMuted, fontSize: 9, fontStyle: 'italic' },
+  marketTag: {
+    color: c.warning, fontSize: 8, fontWeight: '700',
+    backgroundColor: `${c.warning}15`, paddingHorizontal: 4, paddingVertical: 1,
+    borderRadius: 3, overflow: 'hidden',
+  },
+  stockPrice: { color: c.textPrimary, ...typography.number },
+  stockRow2: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2,
+  },
+  stockName: { color: c.textTertiary, ...typography.labelSm, flex: 1, marginRight: spacing.sm },
+  changeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm },
+  changeText: { ...typography.numberSm },
+  probBadge: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 },
+  probBadgeText: { fontSize: 10, fontWeight: '700' },
+  stockRow3: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: c.border,
+  },
+  metricVal: { color: c.textMuted, fontSize: 10 },
+  metricDot: { color: c.border, fontSize: 10 },
 
   emptySignal: {
     width: 260, height: 120, borderRadius: radius.lg, backgroundColor: c.bgCard,
