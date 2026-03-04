@@ -1,0 +1,176 @@
+export interface PeriodStats {
+  samples: number;
+  win_rate: number;
+  avg_return: number;
+  median_return: number;
+  best: number;
+  worst: number;
+  std_dev: number;
+}
+
+export interface CaseRecord {
+  date: string;
+  entry_price: number;
+  returns: Record<string, number>;
+}
+
+export interface ProbabilityData {
+  condition: string;
+  occurrences: number;
+  periods: Record<string, PeriodStats>;
+  cases?: CaseRecord[];
+  warning?: string;
+}
+
+export interface RSIData {
+  value: number | null;
+  window: number;
+  probability?: ProbabilityData;
+}
+
+export interface MACDData {
+  macd: number | null;
+  signal: number | null;
+  histogram: number | null;
+  event?: string;
+  probability?: ProbabilityData;
+}
+
+export interface MAData {
+  sma20: number | null;
+  sma50: number | null;
+  sma200: number | null;
+  price: number;
+  alignment: string;
+  probability?: ProbabilityData;
+}
+
+export interface BBData {
+  upper: number | null;
+  middle: number | null;
+  lower: number | null;
+  width: number | null;
+  position: number | null;
+  price: number;
+  zone?: string;
+  probability?: ProbabilityData;
+}
+
+export interface VolumeData {
+  current: number;
+  avg20: number | null;
+  ratio: number | null;
+  probability?: ProbabilityData;
+}
+
+export interface StochasticData {
+  k: number | null;
+  d: number | null;
+  probability?: ProbabilityData;
+}
+
+// ── NEW indicator types ──
+
+export interface DrawdownData {
+  from_20d_high: number | null;
+  from_60d_high: number | null;
+  from_252d_high: number | null;
+  high_20d: number | null;
+  high_60d: number | null;
+  high_252d: number | null;
+  probability?: ProbabilityData;
+}
+
+export interface ADXData {
+  adx: number | null;
+  plus_di: number | null;
+  minus_di: number | null;
+  trend_strength: string | null;
+  probability?: ProbabilityData;
+}
+
+export interface ATRData {
+  atr: number | null;
+  atr_pct: number | null;
+  probability?: ProbabilityData;
+}
+
+export interface MADistanceData {
+  from_sma20: number | null;
+  from_sma50: number | null;
+  from_sma200: number | null;
+  probability?: ProbabilityData;
+}
+
+export interface ConsecutiveData {
+  days: number;
+  streak_type: string;
+  probability?: ProbabilityData;
+}
+
+export interface Week52Data {
+  position_pct: number | null;
+  high: number | null;
+  low: number | null;
+  probability?: ProbabilityData;
+}
+
+export interface PriceInfo {
+  current: number;
+  change: number;
+  change_pct: number;
+  high_52w?: number;
+  low_52w?: number;
+}
+
+export interface TickerInfo {
+  ticker: string;
+  name: string;
+  sector: string;
+  industry: string;
+  currency: string;
+}
+
+export interface CombinedProbability {
+  conditions: string[];
+  probability: ProbabilityData;
+}
+
+export interface AnalysisResponse {
+  ticker_info: TickerInfo;
+  price: PriceInfo;
+  indicators: {
+    rsi: RSIData;
+    macd: MACDData;
+    ma: MAData;
+    bb: BBData;
+    volume: VolumeData;
+    stochastic: StochasticData;
+    drawdown: DrawdownData;
+    adx: ADXData;
+    atr: ATRData;
+    ma_distance: MADistanceData;
+    consecutive: ConsecutiveData;
+    week52: Week52Data;
+  };
+  combined?: CombinedProbability;
+  analysis_date: string;
+  data_range?: string;
+}
+
+export interface SmartProbabilityResult {
+  tiers: Record<string, ProbabilityData>;
+  best_tier: string;
+  individuals: Record<string, ProbabilityData>;
+  impact: Record<string, ProbabilityData>;
+  selected: string[];
+  data_days: number;
+  current_values: Record<string, number | string | null>;
+}
+
+export interface SearchResult {
+  ticker: string;
+  name: string;
+  exchange: string;
+  type: string;
+}

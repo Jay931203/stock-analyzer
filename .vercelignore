@@ -1,0 +1,10 @@
+mobile/node_modules
+mobile/.expo
+mobile/dist
+__pycache__
+*.pyc
+.venv
+venv
+server/data/cache.db*
+*.apk
+*.aab

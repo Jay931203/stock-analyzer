@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+*.egg
+.venv/
+venv/
+
+# SQLite cache
+server/data/cache.db
+server/data/cache.db-wal
+server/data/cache.db-shm
+
+# Node
+node_modules/
+.expo/
+dist/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# APK builds
+*.apk
+*.aab
+
+# Vercel build output
+public/
