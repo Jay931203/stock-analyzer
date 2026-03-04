@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, LayoutAnimation, Platform, UIManager } from 'react-native';
 import type { AnalysisResponse } from '../types/analysis';
 import ProbabilityCard from './ProbabilityCard';
+import { useTheme } from '../contexts/ThemeContext';
+import { radius, spacing, typography, type ThemeColors } from '../theme';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -13,8 +15,20 @@ interface Props {
   data: AnalysisResponse;
 }
 
+// Module-level style cache to avoid re-creating styles in every sub-component
+let _cachedColors: ThemeColors | null = null;
+let _cachedStyles: ReturnType<typeof makeStyles> | null = null;
+function getStyles(c: ThemeColors) {
+  if (_cachedColors === c && _cachedStyles) return _cachedStyles;
+  _cachedColors = c;
+  _cachedStyles = makeStyles(c);
+  return _cachedStyles;
+}
+
 export default function IndicatorCard({ type, data }: Props) {
-  const [expanded, setExpanded] = useState(true);
+  const { colors } = useTheme();
+  const s = getStyles(colors);
+  const [expanded, setExpanded] = useState(false);
 
   const toggle = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -24,16 +38,16 @@ export default function IndicatorCard({ type, data }: Props) {
   const { title, icon, content } = getCardContent(type, data);
 
   return (
-    <View style={styles.card}>
-      <Pressable style={styles.cardHeader} onPress={toggle}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.icon}>{icon}</Text>
-          <Text style={styles.title}>{title}</Text>
+    <View style={s.card}>
+      <Pressable style={s.cardHeader} onPress={toggle}>
+        <View style={s.headerLeft}>
+          <Text style={s.icon}>{icon}</Text>
+          <Text style={s.title}>{title}</Text>
         </View>
-        <Text style={styles.chevron}>{expanded ? '−' : '+'}</Text>
+        <Text style={s.chevron}>{expanded ? '−' : '+'}</Text>
       </Pressable>
       {expanded && (
-        <View style={styles.cardBody}>
+        <View style={s.cardBody}>
           {content}
         </View>
       )}
@@ -46,77 +60,29 @@ function getCardContent(type: string, data: AnalysisResponse): { title: string; 
 
   switch (type) {
     case 'RSI':
-      return {
-        title: 'RSI (14)',
-        icon: 'R',
-        content: <RSIContent data={indicators.rsi} />,
-      };
+      return { title: 'RSI (14)', icon: 'R', content: <RSIContent data={indicators.rsi} /> };
     case 'MACD':
-      return {
-        title: 'MACD (12,26,9)',
-        icon: 'M',
-        content: <MACDContent data={indicators.macd} />,
-      };
+      return { title: 'MACD (12,26,9)', icon: 'M', content: <MACDContent data={indicators.macd} /> };
     case 'MA':
-      return {
-        title: 'Moving Averages',
-        icon: 'A',
-        content: <MAContent data={indicators.ma} />,
-      };
+      return { title: 'Moving Averages', icon: 'A', content: <MAContent data={indicators.ma} /> };
     case 'BB':
-      return {
-        title: 'Bollinger Bands',
-        icon: 'B',
-        content: <BBContent data={indicators.bb} />,
-      };
+      return { title: 'Bollinger Bands', icon: 'B', content: <BBContent data={indicators.bb} /> };
     case 'Vol':
-      return {
-        title: 'Volume Analysis',
-        icon: 'V',
-        content: <VolContent data={indicators.volume} />,
-      };
+      return { title: 'Volume Analysis', icon: 'V', content: <VolContent data={indicators.volume} /> };
     case 'Stoch':
-      return {
-        title: 'Stochastic (14,3)',
-        icon: 'S',
-        content: <StochContent data={indicators.stochastic} />,
-      };
+      return { title: 'Stochastic (14,3)', icon: 'S', content: <StochContent data={indicators.stochastic} /> };
     case 'Drawdown':
-      return {
-        title: 'Drawdown from High',
-        icon: 'D',
-        content: <DrawdownContent data={indicators.drawdown} />,
-      };
+      return { title: 'Drawdown from High', icon: 'D', content: <DrawdownContent data={indicators.drawdown} /> };
     case 'ADX':
-      return {
-        title: 'ADX (Trend Strength)',
-        icon: 'X',
-        content: <ADXContent data={indicators.adx} />,
-      };
+      return { title: 'ADX (Trend Strength)', icon: 'X', content: <ADXContent data={indicators.adx} /> };
     case 'ATR':
-      return {
-        title: 'ATR (Volatility)',
-        icon: 'T',
-        content: <ATRContent data={indicators.atr} price={indicators.ma.price} />,
-      };
+      return { title: 'ATR (Volatility)', icon: 'T', content: <ATRContent data={indicators.atr} price={indicators.ma.price} /> };
     case 'MADist':
-      return {
-        title: 'MA Distance',
-        icon: 'G',
-        content: <MADistContent data={indicators.ma_distance} />,
-      };
+      return { title: 'MA Distance', icon: 'G', content: <MADistContent data={indicators.ma_distance} /> };
     case 'Consec':
-      return {
-        title: 'Consecutive Days',
-        icon: 'C',
-        content: <ConsecContent data={indicators.consecutive} />,
-      };
+      return { title: 'Consecutive Days', icon: 'C', content: <ConsecContent data={indicators.consecutive} /> };
     case 'W52':
-      return {
-        title: '52-Week Position',
-        icon: 'W',
-        content: <Week52Content data={indicators.week52} />,
-      };
+      return { title: '52-Week Position', icon: 'W', content: <Week52Content data={indicators.week52} /> };
     default:
       return { title: type, icon: '?', content: null };
   }
@@ -124,42 +90,41 @@ function getCardContent(type: string, data: AnalysisResponse): { title: string; 
 
 // --- RSI ---
 function RSIContent({ data }: { data: AnalysisResponse['indicators']['rsi'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const value = data.value;
   const zone = value !== null
     ? value > 70 ? 'Overbought' : value < 30 ? 'Oversold' : 'Neutral'
     : null;
-  const zoneColor = zone === 'Overbought' ? '#f44336' : zone === 'Oversold' ? '#4caf50' : '#888';
+  const zoneColor = zone === 'Overbought' ? colors.bearish : zone === 'Oversold' ? colors.bullish : colors.textMuted;
 
   return (
     <View>
-      {/* Large value display */}
-      <View style={styles.valueDisplay}>
-        <Text style={styles.bigValue}>{value !== null ? value.toFixed(1) : 'N/A'}</Text>
+      <View style={s.valueDisplay}>
+        <Text style={s.bigValue}>{value !== null ? value.toFixed(1) : 'N/A'}</Text>
         {zone && (
-          <View style={[styles.zoneBadge, { backgroundColor: zoneColor + '20', borderColor: zoneColor + '60' }]}>
-            <Text style={[styles.zoneText, { color: zoneColor }]}>{zone}</Text>
+          <View style={[s.zoneBadge, { backgroundColor: zoneColor + '20', borderColor: zoneColor + '60' }]}>
+            <Text style={[s.zoneText, { color: zoneColor }]}>{zone}</Text>
           </View>
         )}
       </View>
 
-      {/* Gauge */}
       {value !== null && (
-        <View style={styles.gaugeContainer}>
-          <View style={styles.gaugeTrack}>
-            <View style={[styles.gaugeSection, { left: '0%', width: '30%', backgroundColor: '#4caf5015' }]} />
-            <View style={[styles.gaugeSection, { left: '70%', width: '30%', backgroundColor: '#f4433615' }]} />
-            <View style={[styles.gaugeMarker, { left: `${Math.min(Math.max(value, 0), 100)}%` }]} />
-            {/* Reference lines */}
-            <View style={[styles.refLine, { left: '30%' }]} />
-            <View style={[styles.refLine, { left: '50%', backgroundColor: '#555' }]} />
-            <View style={[styles.refLine, { left: '70%' }]} />
+        <View style={s.gaugeContainer}>
+          <View style={s.gaugeTrack}>
+            <View style={[s.gaugeSection, { left: '0%', width: '30%', backgroundColor: colors.bullish + '15' }]} />
+            <View style={[s.gaugeSection, { left: '70%', width: '30%', backgroundColor: colors.bearish + '15' }]} />
+            <View style={[s.gaugeMarker, { left: `${Math.min(Math.max(value, 0), 100)}%` }]} />
+            <View style={[s.refLine, { left: '30%' }]} />
+            <View style={[s.refLine, { left: '50%', backgroundColor: colors.textMuted }]} />
+            <View style={[s.refLine, { left: '70%' }]} />
           </View>
-          <View style={styles.gaugeLabels}>
-            <Text style={styles.gaugeLabel}>0</Text>
-            <Text style={[styles.gaugeLabel, { color: '#4caf50' }]}>30</Text>
-            <Text style={styles.gaugeLabel}>50</Text>
-            <Text style={[styles.gaugeLabel, { color: '#f44336' }]}>70</Text>
-            <Text style={styles.gaugeLabel}>100</Text>
+          <View style={s.gaugeLabels}>
+            <Text style={s.gaugeLabel}>0</Text>
+            <Text style={[s.gaugeLabel, { color: colors.bullish }]}>30</Text>
+            <Text style={s.gaugeLabel}>50</Text>
+            <Text style={[s.gaugeLabel, { color: colors.bearish }]}>70</Text>
+            <Text style={s.gaugeLabel}>100</Text>
           </View>
         </View>
       )}
@@ -171,9 +136,11 @@ function RSIContent({ data }: { data: AnalysisResponse['indicators']['rsi'] }) {
 
 // --- MACD ---
 function MACDContent({ data }: { data: AnalysisResponse['indicators']['macd'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const eventLabels: Record<string, { label: string; color: string }> = {
-    golden_cross: { label: 'Golden Cross', color: '#4caf50' },
-    dead_cross: { label: 'Dead Cross', color: '#f44336' },
+    golden_cross: { label: 'Golden Cross', color: colors.bullish },
+    dead_cross: { label: 'Dead Cross', color: colors.bearish },
     positive: { label: 'Positive', color: '#8bc34a' },
     negative: { label: 'Negative', color: '#ff9800' },
   };
@@ -182,20 +149,20 @@ function MACDContent({ data }: { data: AnalysisResponse['indicators']['macd'] })
 
   return (
     <View>
-      <View style={styles.metricsGrid}>
+      <View style={s.metricsGrid}>
         <MetricBox label="MACD" value={data.macd?.toFixed(4) ?? 'N/A'} />
         <MetricBox label="Signal" value={data.signal?.toFixed(4) ?? 'N/A'} />
         <MetricBox
           label="Histogram"
           value={data.histogram?.toFixed(4) ?? 'N/A'}
-          color={data.histogram && data.histogram > 0 ? '#4caf50' : '#f44336'}
+          color={data.histogram && data.histogram > 0 ? colors.bullish : colors.bearish}
         />
       </View>
 
       {event && (
-        <View style={[styles.eventBanner, { backgroundColor: event.color + '15', borderColor: event.color + '40' }]}>
-          <View style={[styles.eventDot, { backgroundColor: event.color }]} />
-          <Text style={[styles.eventLabel, { color: event.color }]}>{event.label}</Text>
+        <View style={[s.eventBanner, { backgroundColor: event.color + '15', borderColor: event.color + '40' }]}>
+          <View style={[s.eventDot, { backgroundColor: event.color }]} />
+          <Text style={[s.eventLabel, { color: event.color }]}>{event.label}</Text>
         </View>
       )}
 
@@ -206,36 +173,37 @@ function MACDContent({ data }: { data: AnalysisResponse['indicators']['macd'] })
 
 // --- MA ---
 function MAContent({ data }: { data: AnalysisResponse['indicators']['ma'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const alignmentLabels: Record<string, { label: string; color: string }> = {
-    bullish: { label: 'Bullish Alignment (20 > 50 > 200)', color: '#4caf50' },
-    bearish: { label: 'Bearish Alignment (20 < 50 < 200)', color: '#f44336' },
-    none: { label: 'No Clear Alignment', color: '#888' },
+    bullish: { label: 'Bullish Alignment (20 > 50 > 200)', color: colors.bullish },
+    bearish: { label: 'Bearish Alignment (20 < 50 < 200)', color: colors.bearish },
+    none: { label: 'No Clear Alignment', color: colors.textMuted },
   };
 
   const alignment = alignmentLabels[data.alignment] ?? alignmentLabels.none;
 
-  // Calculate price position relative to MAs
   const maValues = [
-    { label: 'SMA 20', value: data.sma20, period: 20 },
-    { label: 'SMA 50', value: data.sma50, period: 50 },
-    { label: 'SMA 200', value: data.sma200, period: 200 },
+    { label: 'SMA 20', value: data.sma20 },
+    { label: 'SMA 50', value: data.sma50 },
+    { label: 'SMA 200', value: data.sma200 },
   ];
 
   return (
     <View>
-      <View style={[styles.eventBanner, { backgroundColor: alignment.color + '12', borderColor: alignment.color + '35' }]}>
-        <View style={[styles.eventDot, { backgroundColor: alignment.color }]} />
-        <Text style={[styles.eventLabel, { color: alignment.color }]}>{alignment.label}</Text>
+      <View style={[s.eventBanner, { backgroundColor: alignment.color + '12', borderColor: alignment.color + '35' }]}>
+        <View style={[s.eventDot, { backgroundColor: alignment.color }]} />
+        <Text style={[s.eventLabel, { color: alignment.color }]}>{alignment.label}</Text>
       </View>
 
       {maValues.map(({ label, value }) => {
         const diff = value !== null ? ((data.price - value) / value * 100) : null;
         return (
-          <View key={label} style={styles.maRow}>
-            <Text style={styles.maLabel}>{label}</Text>
-            <Text style={styles.maValue}>${value?.toFixed(2) ?? 'N/A'}</Text>
+          <View key={label} style={s.maRow}>
+            <Text style={s.maLabel}>{label}</Text>
+            <Text style={s.maValue}>${value?.toFixed(2) ?? 'N/A'}</Text>
             {diff !== null && (
-              <Text style={[styles.maDiff, { color: diff >= 0 ? '#4caf50' : '#f44336' }]}>
+              <Text style={[s.maDiff, { color: diff >= 0 ? colors.bullish : colors.bearish }]}>
                 {diff >= 0 ? '+' : ''}{diff.toFixed(1)}%
               </Text>
             )}
@@ -250,6 +218,8 @@ function MAContent({ data }: { data: AnalysisResponse['indicators']['ma'] }) {
 
 // --- BB ---
 function BBContent({ data }: { data: AnalysisResponse['indicators']['bb'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const position = data.position !== null ? data.position * 100 : null;
   const zoneLabels: Record<string, string> = {
     below_lower: 'Below Lower Band',
@@ -262,33 +232,32 @@ function BBContent({ data }: { data: AnalysisResponse['indicators']['bb'] }) {
 
   return (
     <View>
-      <View style={styles.metricsGrid}>
+      <View style={s.metricsGrid}>
         <MetricBox label="Upper" value={`$${data.upper?.toFixed(2) ?? 'N/A'}`} />
         <MetricBox label="Middle" value={`$${data.middle?.toFixed(2) ?? 'N/A'}`} />
         <MetricBox label="Lower" value={`$${data.lower?.toFixed(2) ?? 'N/A'}`} />
       </View>
 
-      {/* BB position visualizer */}
       {position !== null && (
-        <View style={styles.bbVisual}>
-          <View style={styles.bbTrack}>
-            <View style={[styles.bbFill, { height: `${Math.min(Math.max(position, 0), 100)}%` }]} />
-            <View style={styles.bbMiddleLine} />
-            <View style={[styles.bbMarker, { bottom: `${Math.min(Math.max(position, 0), 100)}%` }]}>
-              <Text style={styles.bbMarkerText}>{position.toFixed(0)}%</Text>
+        <View style={s.bbVisual}>
+          <View style={s.bbTrack}>
+            <View style={[s.bbFill, { height: `${Math.min(Math.max(position, 0), 100)}%` }]} />
+            <View style={s.bbMiddleLine} />
+            <View style={[s.bbMarker, { bottom: `${Math.min(Math.max(position, 0), 100)}%` }]}>
+              <Text style={[s.bbMarkerText, { color: colors.accent }]}>{position.toFixed(0)}%</Text>
             </View>
           </View>
-          <View style={styles.bbLabels}>
-            <Text style={styles.bbLabel}>Upper</Text>
-            <Text style={styles.bbLabel}>Middle</Text>
-            <Text style={styles.bbLabel}>Lower</Text>
+          <View style={s.bbLabels}>
+            <Text style={s.bbLabel}>Upper</Text>
+            <Text style={s.bbLabel}>Middle</Text>
+            <Text style={s.bbLabel}>Lower</Text>
           </View>
         </View>
       )}
 
       {data.zone && (
-        <View style={[styles.eventBanner, { backgroundColor: '#6c9bd115', borderColor: '#6c9bd135' }]}>
-          <Text style={[styles.eventLabel, { color: '#6c9bd1' }]}>{zoneLabels[data.zone] ?? data.zone}</Text>
+        <View style={[s.eventBanner, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '35' }]}>
+          <Text style={[s.eventLabel, { color: colors.accent }]}>{zoneLabels[data.zone] ?? data.zone}</Text>
         </View>
       )}
 
@@ -299,39 +268,38 @@ function BBContent({ data }: { data: AnalysisResponse['indicators']['bb'] }) {
 
 // --- Volume ---
 function VolContent({ data }: { data: AnalysisResponse['indicators']['volume'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const ratio = data.ratio ?? 0;
-  const ratioColor = ratio >= 2 ? '#ff9800' : ratio >= 1.2 ? '#8bc34a' : '#888';
+  const ratioColor = ratio >= 2 ? '#ff9800' : ratio >= 1.2 ? '#8bc34a' : colors.textMuted;
 
   return (
     <View>
-      <View style={styles.metricsGrid}>
+      <View style={s.metricsGrid}>
         <MetricBox label="Current" value={formatNumber(data.current)} />
         <MetricBox label="20d Avg" value={formatNumber(data.avg20)} />
         <MetricBox label="Ratio" value={`${ratio.toFixed(2)}x`} color={ratioColor} />
       </View>
 
-      {/* Volume ratio bar */}
-      <View style={styles.volBarContainer}>
-        <View style={styles.volBarTrack}>
+      <View style={s.volBarContainer}>
+        <View style={s.volBarTrack}>
           <View
             style={[
-              styles.volBarFill,
+              s.volBarFill,
               {
                 width: `${Math.min(ratio / 3 * 100, 100)}%`,
                 backgroundColor: ratioColor,
               },
             ]}
           />
-          {/* 1x reference line */}
-          <View style={[styles.refLine, { left: `${(1 / 3) * 100}%` }]} />
-          {/* 2x reference line */}
-          <View style={[styles.refLine, { left: `${(2 / 3) * 100}%` }]} />
+          <View style={[s.refLine, { left: `${(1 / 3) * 100}%` }]} />
+          <View style={[s.refLine, { left: `${(2 / 3) * 100}%` }]} />
         </View>
-        <View style={styles.volBarLabels}>
-          <Text style={styles.gaugeLabel}>0x</Text>
-          <Text style={styles.gaugeLabel}>1x</Text>
-          <Text style={styles.gaugeLabel}>2x</Text>
-          <Text style={styles.gaugeLabel}>3x+</Text>
+        <View style={s.volBarLabels}>
+          <Text style={s.gaugeLabel}>0x</Text>
+          <Text style={s.gaugeLabel}>1x</Text>
+          <Text style={s.gaugeLabel}>2x</Text>
+          <Text style={s.gaugeLabel}>3x+</Text>
         </View>
       </View>
 
@@ -342,45 +310,46 @@ function VolContent({ data }: { data: AnalysisResponse['indicators']['volume'] }
 
 // --- Stochastic ---
 function StochContent({ data }: { data: AnalysisResponse['indicators']['stochastic'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const k = data.k;
   const d = data.d;
   const zone = k !== null
     ? k > 80 ? 'Overbought' : k < 20 ? 'Oversold' : 'Neutral'
     : null;
-  const zoneColor = zone === 'Overbought' ? '#f44336' : zone === 'Oversold' ? '#4caf50' : '#888';
+  const zoneColor = zone === 'Overbought' ? colors.bearish : zone === 'Oversold' ? colors.bullish : colors.textMuted;
 
   return (
     <View>
-      <View style={styles.metricsGrid}>
+      <View style={s.metricsGrid}>
         <MetricBox label="%K" value={k?.toFixed(1) ?? 'N/A'} />
         <MetricBox label="%D" value={d?.toFixed(1) ?? 'N/A'} />
         {zone && (
-          <View style={[styles.metricBox, { backgroundColor: zoneColor + '12' }]}>
-            <Text style={styles.metricLabel}>Zone</Text>
-            <Text style={[styles.metricValue, { color: zoneColor }]}>{zone}</Text>
+          <View style={[s.metricBox, { backgroundColor: zoneColor + '12' }]}>
+            <Text style={s.metricLabel}>Zone</Text>
+            <Text style={[s.metricValue, { color: zoneColor }]}>{zone}</Text>
           </View>
         )}
       </View>
 
-      {/* Gauge similar to RSI */}
       {k !== null && (
-        <View style={styles.gaugeContainer}>
-          <View style={styles.gaugeTrack}>
-            <View style={[styles.gaugeSection, { left: '0%', width: '20%', backgroundColor: '#4caf5015' }]} />
-            <View style={[styles.gaugeSection, { left: '80%', width: '20%', backgroundColor: '#f4433615' }]} />
-            <View style={[styles.gaugeMarker, { left: `${Math.min(Math.max(k, 0), 100)}%` }]} />
+        <View style={s.gaugeContainer}>
+          <View style={s.gaugeTrack}>
+            <View style={[s.gaugeSection, { left: '0%', width: '20%', backgroundColor: colors.bullish + '15' }]} />
+            <View style={[s.gaugeSection, { left: '80%', width: '20%', backgroundColor: colors.bearish + '15' }]} />
+            <View style={[s.gaugeMarker, { left: `${Math.min(Math.max(k, 0), 100)}%` }]} />
             {d !== null && (
-              <View style={[styles.gaugeMarkerD, { left: `${Math.min(Math.max(d, 0), 100)}%` }]} />
+              <View style={[s.gaugeMarkerD, { left: `${Math.min(Math.max(d, 0), 100)}%` }]} />
             )}
-            <View style={[styles.refLine, { left: '20%' }]} />
-            <View style={[styles.refLine, { left: '80%' }]} />
+            <View style={[s.refLine, { left: '20%' }]} />
+            <View style={[s.refLine, { left: '80%' }]} />
           </View>
-          <View style={styles.gaugeLabels}>
-            <Text style={styles.gaugeLabel}>0</Text>
-            <Text style={[styles.gaugeLabel, { color: '#4caf50' }]}>20</Text>
-            <Text style={styles.gaugeLabel}>50</Text>
-            <Text style={[styles.gaugeLabel, { color: '#f44336' }]}>80</Text>
-            <Text style={styles.gaugeLabel}>100</Text>
+          <View style={s.gaugeLabels}>
+            <Text style={s.gaugeLabel}>0</Text>
+            <Text style={[s.gaugeLabel, { color: colors.bullish }]}>20</Text>
+            <Text style={s.gaugeLabel}>50</Text>
+            <Text style={[s.gaugeLabel, { color: colors.bearish }]}>80</Text>
+            <Text style={s.gaugeLabel}>100</Text>
           </View>
         </View>
       )}
@@ -392,23 +361,25 @@ function StochContent({ data }: { data: AnalysisResponse['indicators']['stochast
 
 // --- Drawdown ---
 function DrawdownContent({ data }: { data: AnalysisResponse['indicators']['drawdown'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const dd60 = data.from_60d_high;
   const ddColor = dd60 !== null
-    ? dd60 <= -20 ? '#f44336' : dd60 <= -10 ? '#ff9800' : dd60 <= -5 ? '#ffc107' : '#4caf50'
-    : '#888';
+    ? dd60 <= -20 ? colors.bearish : dd60 <= -10 ? '#ff9800' : dd60 <= -5 ? '#ffc107' : colors.bullish
+    : colors.textMuted;
 
   return (
     <View>
-      <View style={styles.valueDisplay}>
-        <Text style={[styles.bigValue, { color: ddColor }]}>
+      <View style={s.valueDisplay}>
+        <Text style={[s.bigValue, { color: ddColor }]}>
           {dd60 !== null ? `${dd60.toFixed(1)}%` : 'N/A'}
         </Text>
-        <View style={[styles.zoneBadge, { backgroundColor: ddColor + '20', borderColor: ddColor + '60' }]}>
-          <Text style={[styles.zoneText, { color: ddColor }]}>from 60d high</Text>
+        <View style={[s.zoneBadge, { backgroundColor: ddColor + '20', borderColor: ddColor + '60' }]}>
+          <Text style={[s.zoneText, { color: ddColor }]}>from 60d high</Text>
         </View>
       </View>
 
-      <View style={styles.metricsGrid}>
+      <View style={s.metricsGrid}>
         <MetricBox
           label="20d High"
           value={data.from_20d_high !== null ? `${data.from_20d_high.toFixed(1)}%` : 'N/A'}
@@ -422,7 +393,7 @@ function DrawdownContent({ data }: { data: AnalysisResponse['indicators']['drawd
         <MetricBox
           label="1yr High"
           value={data.from_252d_high !== null ? `${data.from_252d_high.toFixed(1)}%` : 'N/A'}
-          color={data.from_252d_high !== null && data.from_252d_high < -10 ? '#f44336' : undefined}
+          color={data.from_252d_high !== null && data.from_252d_high < -10 ? colors.bearish : undefined}
         />
       </View>
 
@@ -433,45 +404,46 @@ function DrawdownContent({ data }: { data: AnalysisResponse['indicators']['drawd
 
 // --- ADX ---
 function ADXContent({ data }: { data: AnalysisResponse['indicators']['adx'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const adx = data.adx;
   const trendLabel = data.trend_strength === 'very_strong_trend' ? 'Very Strong Trend'
     : data.trend_strength === 'strong_trend' ? 'Strong Trend'
     : data.trend_strength === 'weak_trend' ? 'Weak Trend'
     : 'No Trend';
   const trendColor = adx !== null
-    ? adx >= 40 ? '#4caf50' : adx >= 25 ? '#8bc34a' : adx >= 20 ? '#ff9800' : '#f44336'
-    : '#888';
+    ? adx >= 40 ? colors.bullish : adx >= 25 ? '#8bc34a' : adx >= 20 ? '#ff9800' : colors.bearish
+    : colors.textMuted;
 
   return (
     <View>
-      <View style={styles.metricsGrid}>
+      <View style={s.metricsGrid}>
         <MetricBox label="ADX" value={adx?.toFixed(1) ?? 'N/A'} color={trendColor} />
-        <MetricBox label="+DI" value={data.plus_di?.toFixed(1) ?? 'N/A'} color="#4caf50" />
-        <MetricBox label="-DI" value={data.minus_di?.toFixed(1) ?? 'N/A'} color="#f44336" />
+        <MetricBox label="+DI" value={data.plus_di?.toFixed(1) ?? 'N/A'} color={colors.bullish} />
+        <MetricBox label="-DI" value={data.minus_di?.toFixed(1) ?? 'N/A'} color={colors.bearish} />
       </View>
 
-      <View style={[styles.eventBanner, { backgroundColor: trendColor + '15', borderColor: trendColor + '40' }]}>
-        <View style={[styles.eventDot, { backgroundColor: trendColor }]} />
-        <Text style={[styles.eventLabel, { color: trendColor }]}>{trendLabel}</Text>
+      <View style={[s.eventBanner, { backgroundColor: trendColor + '15', borderColor: trendColor + '40' }]}>
+        <View style={[s.eventDot, { backgroundColor: trendColor }]} />
+        <Text style={[s.eventLabel, { color: trendColor }]}>{trendLabel}</Text>
       </View>
 
-      {/* ADX gauge */}
       {adx !== null && (
-        <View style={styles.gaugeContainer}>
-          <View style={styles.gaugeTrack}>
-            <View style={[styles.gaugeSection, { left: '0%', width: '40%', backgroundColor: '#f4433610' }]} />
-            <View style={[styles.gaugeSection, { left: '50%', width: '50%', backgroundColor: '#4caf5010' }]} />
-            <View style={[styles.gaugeMarker, { left: `${Math.min(adx, 60) / 60 * 100}%` }]} />
-            <View style={[styles.refLine, { left: `${20 / 60 * 100}%` }]} />
-            <View style={[styles.refLine, { left: `${25 / 60 * 100}%` }]} />
-            <View style={[styles.refLine, { left: `${40 / 60 * 100}%` }]} />
+        <View style={s.gaugeContainer}>
+          <View style={s.gaugeTrack}>
+            <View style={[s.gaugeSection, { left: '0%', width: '40%', backgroundColor: colors.bearish + '10' }]} />
+            <View style={[s.gaugeSection, { left: '50%', width: '50%', backgroundColor: colors.bullish + '10' }]} />
+            <View style={[s.gaugeMarker, { left: `${Math.min(adx, 60) / 60 * 100}%` }]} />
+            <View style={[s.refLine, { left: `${20 / 60 * 100}%` }]} />
+            <View style={[s.refLine, { left: `${25 / 60 * 100}%` }]} />
+            <View style={[s.refLine, { left: `${40 / 60 * 100}%` }]} />
           </View>
-          <View style={styles.gaugeLabels}>
-            <Text style={styles.gaugeLabel}>0</Text>
-            <Text style={[styles.gaugeLabel, { color: '#ff9800' }]}>20</Text>
-            <Text style={[styles.gaugeLabel, { color: '#8bc34a' }]}>25</Text>
-            <Text style={[styles.gaugeLabel, { color: '#4caf50' }]}>40</Text>
-            <Text style={styles.gaugeLabel}>60</Text>
+          <View style={s.gaugeLabels}>
+            <Text style={s.gaugeLabel}>0</Text>
+            <Text style={[s.gaugeLabel, { color: '#ff9800' }]}>20</Text>
+            <Text style={[s.gaugeLabel, { color: '#8bc34a' }]}>25</Text>
+            <Text style={[s.gaugeLabel, { color: colors.bullish }]}>40</Text>
+            <Text style={s.gaugeLabel}>60</Text>
           </View>
         </View>
       )}
@@ -483,15 +455,17 @@ function ADXContent({ data }: { data: AnalysisResponse['indicators']['adx'] }) {
 
 // --- ATR ---
 function ATRContent({ data, price }: { data: AnalysisResponse['indicators']['atr']; price: number }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   return (
     <View>
-      <View style={styles.metricsGrid}>
+      <View style={s.metricsGrid}>
         <MetricBox label="ATR" value={data.atr !== null ? `$${data.atr.toFixed(2)}` : 'N/A'} />
         <MetricBox label="ATR %" value={data.atr_pct !== null ? `${data.atr_pct.toFixed(2)}%` : 'N/A'} />
         <MetricBox label="Price" value={`$${price.toFixed(2)}`} />
       </View>
-      <View style={[styles.eventBanner, { backgroundColor: '#6c9bd115', borderColor: '#6c9bd135' }]}>
-        <Text style={[styles.eventLabel, { color: '#999' }]}>
+      <View style={[s.eventBanner, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '35' }]}>
+        <Text style={[s.eventLabel, { color: colors.textSecondary }]}>
           Daily avg movement: ${data.atr?.toFixed(2) ?? '?'} ({data.atr_pct?.toFixed(1) ?? '?'}% of price)
         </Text>
       </View>
@@ -501,6 +475,8 @@ function ATRContent({ data, price }: { data: AnalysisResponse['indicators']['atr
 
 // --- MA Distance ---
 function MADistContent({ data }: { data: AnalysisResponse['indicators']['ma_distance'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const items = [
     { label: 'SMA 20', value: data.from_sma20 },
     { label: 'SMA 50', value: data.from_sma50 },
@@ -509,13 +485,13 @@ function MADistContent({ data }: { data: AnalysisResponse['indicators']['ma_dist
 
   return (
     <View>
-      <View style={styles.metricsGrid}>
+      <View style={s.metricsGrid}>
         {items.map(({ label, value }) => (
           <MetricBox
             key={label}
             label={label}
             value={value !== null ? `${value > 0 ? '+' : ''}${value.toFixed(1)}%` : 'N/A'}
-            color={value !== null ? (value > 0 ? '#4caf50' : '#f44336') : undefined}
+            color={value !== null ? (value > 0 ? colors.bullish : colors.bearish) : undefined}
           />
         ))}
       </View>
@@ -524,13 +500,13 @@ function MADistContent({ data }: { data: AnalysisResponse['indicators']['ma_dist
         if (value === null) return null;
         const absVal = Math.abs(value);
         const barWidth = Math.min(absVal / 10 * 100, 100);
-        const color = value > 0 ? '#4caf50' : '#f44336';
+        const color = value > 0 ? colors.bullish : colors.bearish;
         return (
           <View key={label} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8 }}>
-            <Text style={{ color: '#777', fontSize: 12, width: 55 }}>{label}</Text>
-            <View style={{ flex: 1, height: 10, backgroundColor: '#222244', borderRadius: 5, overflow: 'hidden' }}>
+            <Text style={{ color: colors.textMuted, fontSize: 12, width: 55 }}>{label}</Text>
+            <View style={{ flex: 1, height: 10, backgroundColor: colors.bgElevated, borderRadius: 5, overflow: 'hidden' }}>
               <View style={{
-                position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, backgroundColor: '#444',
+                position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, backgroundColor: colors.border,
               }} />
               <View style={{
                 position: 'absolute',
@@ -556,22 +532,24 @@ function MADistContent({ data }: { data: AnalysisResponse['indicators']['ma_dist
 
 // --- Consecutive Days ---
 function ConsecContent({ data }: { data: AnalysisResponse['indicators']['consecutive'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const days = data.days;
   const isUp = days > 0;
   const color = Math.abs(days) >= 5
-    ? (isUp ? '#ff9800' : '#4caf50')
+    ? (isUp ? '#ff9800' : colors.bullish)
     : Math.abs(days) >= 3
     ? (isUp ? '#ffc107' : '#8bc34a')
-    : '#888';
+    : colors.textMuted;
 
   return (
     <View>
-      <View style={styles.valueDisplay}>
-        <Text style={[styles.bigValue, { color }]}>
+      <View style={s.valueDisplay}>
+        <Text style={[s.bigValue, { color }]}>
           {days > 0 ? '+' : ''}{days}
         </Text>
-        <View style={[styles.zoneBadge, { backgroundColor: color + '20', borderColor: color + '60' }]}>
-          <Text style={[styles.zoneText, { color }]}>
+        <View style={[s.zoneBadge, { backgroundColor: color + '20', borderColor: color + '60' }]}>
+          <Text style={[s.zoneText, { color }]}>
             {data.streak_type === 'up' ? 'Consecutive Up' : data.streak_type === 'down' ? 'Consecutive Down' : 'Flat'}
           </Text>
         </View>
@@ -579,8 +557,8 @@ function ConsecContent({ data }: { data: AnalysisResponse['indicators']['consecu
 
       {data.probability && <ProbabilityCard data={data.probability} />}
       {!data.probability && Math.abs(days) < 3 && (
-        <View style={[styles.eventBanner, { backgroundColor: '#88888815', borderColor: '#88888835' }]}>
-          <Text style={[styles.eventLabel, { color: '#666' }]}>
+        <View style={[s.eventBanner, { backgroundColor: colors.textMuted + '15', borderColor: colors.textMuted + '35' }]}>
+          <Text style={[s.eventLabel, { color: colors.textMuted }]}>
             Probability data available when streak reaches 3+ days
           </Text>
         </View>
@@ -591,38 +569,39 @@ function ConsecContent({ data }: { data: AnalysisResponse['indicators']['consecu
 
 // --- 52-Week Position ---
 function Week52Content({ data }: { data: AnalysisResponse['indicators']['week52'] }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   const pos = data.position_pct;
   const posColor = pos !== null
-    ? pos >= 90 ? '#f44336' : pos >= 70 ? '#ff9800' : pos <= 10 ? '#4caf50' : pos <= 30 ? '#8bc34a' : '#888'
-    : '#888';
+    ? pos >= 90 ? colors.bearish : pos >= 70 ? '#ff9800' : pos <= 10 ? colors.bullish : pos <= 30 ? '#8bc34a' : colors.textMuted
+    : colors.textMuted;
 
   return (
     <View>
-      <View style={styles.valueDisplay}>
-        <Text style={[styles.bigValue, { color: posColor }]}>
+      <View style={s.valueDisplay}>
+        <Text style={[s.bigValue, { color: posColor }]}>
           {pos !== null ? `${pos.toFixed(0)}%` : 'N/A'}
         </Text>
       </View>
 
-      <View style={styles.metricsGrid}>
+      <View style={s.metricsGrid}>
         <MetricBox label="52W Low" value={data.low !== null ? `$${data.low.toFixed(2)}` : 'N/A'} />
         <MetricBox label="52W High" value={data.high !== null ? `$${data.high.toFixed(2)}` : 'N/A'} />
       </View>
 
-      {/* Position bar */}
       {pos !== null && (
-        <View style={styles.gaugeContainer}>
-          <View style={styles.gaugeTrack}>
-            <View style={[styles.gaugeSection, { left: '0%', width: '10%', backgroundColor: '#4caf5015' }]} />
-            <View style={[styles.gaugeSection, { left: '90%', width: '10%', backgroundColor: '#f4433615' }]} />
-            <View style={[styles.gaugeMarker, { left: `${Math.min(Math.max(pos, 0), 100)}%` }]} />
+        <View style={s.gaugeContainer}>
+          <View style={s.gaugeTrack}>
+            <View style={[s.gaugeSection, { left: '0%', width: '10%', backgroundColor: colors.bullish + '15' }]} />
+            <View style={[s.gaugeSection, { left: '90%', width: '10%', backgroundColor: colors.bearish + '15' }]} />
+            <View style={[s.gaugeMarker, { left: `${Math.min(Math.max(pos, 0), 100)}%` }]} />
           </View>
-          <View style={styles.gaugeLabels}>
-            <Text style={[styles.gaugeLabel, { color: '#4caf50' }]}>Low</Text>
-            <Text style={styles.gaugeLabel}>25%</Text>
-            <Text style={styles.gaugeLabel}>50%</Text>
-            <Text style={styles.gaugeLabel}>75%</Text>
-            <Text style={[styles.gaugeLabel, { color: '#f44336' }]}>High</Text>
+          <View style={s.gaugeLabels}>
+            <Text style={[s.gaugeLabel, { color: colors.bullish }]}>Low</Text>
+            <Text style={s.gaugeLabel}>25%</Text>
+            <Text style={s.gaugeLabel}>50%</Text>
+            <Text style={s.gaugeLabel}>75%</Text>
+            <Text style={[s.gaugeLabel, { color: colors.bearish }]}>High</Text>
           </View>
         </View>
       )}
@@ -634,10 +613,12 @@ function Week52Content({ data }: { data: AnalysisResponse['indicators']['week52'
 
 // --- Shared sub-components ---
 function MetricBox({ label, value, color }: { label: string; value: string; color?: string }) {
+  const { colors } = useTheme();
+  const s = getStyles(colors);
   return (
-    <View style={styles.metricBox}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={[styles.metricValue, color ? { color } : {}]}>{value}</Text>
+    <View style={s.metricBox}>
+      <Text style={s.metricLabel}>{label}</Text>
+      <Text style={[s.metricValue, color ? { color } : {}]}>{value}</Text>
     </View>
   );
 }
@@ -650,23 +631,23 @@ function formatNumber(n: number | null | undefined): string {
   return n.toFixed(0);
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // Card container
   card: {
-    backgroundColor: '#12122a',
-    borderRadius: 16,
-    marginBottom: 12,
+    backgroundColor: c.bgCard,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: '#1e1e3e',
+    borderColor: c.border,
     overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
-    backgroundColor: '#16163a',
+    backgroundColor: c.bgElevated,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -674,29 +655,27 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   icon: {
-    color: '#6c9bd1',
-    fontSize: 16,
-    fontWeight: '800',
+    color: c.accent,
+    ...typography.bodyBold,
     width: 24,
     height: 24,
     textAlign: 'center',
     lineHeight: 24,
-    backgroundColor: '#6c9bd118',
+    backgroundColor: c.accentDim,
     borderRadius: 6,
     overflow: 'hidden',
   },
   title: {
-    color: '#e0e0e0',
-    fontSize: 15,
-    fontWeight: '600',
+    color: c.textPrimary,
+    ...typography.bodyBold,
   },
   chevron: {
-    color: '#666',
+    color: c.textMuted,
     fontSize: 18,
     fontWeight: '300',
   },
   cardBody: {
-    padding: 16,
+    padding: spacing.lg,
   },
 
   // Value display
@@ -707,7 +686,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   bigValue: {
-    color: '#fff',
+    color: c.textPrimary,
     fontSize: 32,
     fontWeight: '700',
   },
@@ -728,7 +707,7 @@ const styles = StyleSheet.create({
   },
   gaugeTrack: {
     height: 10,
-    backgroundColor: '#222244',
+    backgroundColor: c.bgElevated,
     borderRadius: 5,
     position: 'relative',
     overflow: 'hidden',
@@ -743,7 +722,7 @@ const styles = StyleSheet.create({
     top: -3,
     width: 4,
     height: 16,
-    backgroundColor: '#fff',
+    backgroundColor: c.textPrimary,
     borderRadius: 2,
     marginLeft: -2,
   },
@@ -761,7 +740,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: '#333355',
+    backgroundColor: c.border,
   },
   gaugeLabels: {
     flexDirection: 'row',
@@ -769,7 +748,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   gaugeLabel: {
-    color: '#555',
+    color: c.textMuted,
     fontSize: 10,
   },
 
@@ -781,19 +760,19 @@ const styles = StyleSheet.create({
   },
   metricBox: {
     flex: 1,
-    backgroundColor: '#1a1a3a',
+    backgroundColor: c.bgElevated,
     borderRadius: 10,
     padding: 10,
     alignItems: 'center',
   },
   metricLabel: {
-    color: '#777',
+    color: c.textMuted,
     fontSize: 11,
     fontWeight: '500',
     marginBottom: 4,
   },
   metricValue: {
-    color: '#e0e0e0',
+    color: c.textPrimary,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -825,15 +804,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1e1e3e',
+    borderBottomColor: c.border,
   },
   maLabel: {
-    color: '#888',
+    color: c.textMuted,
     fontSize: 13,
     width: 70,
   },
   maValue: {
-    color: '#e0e0e0',
+    color: c.textPrimary,
     fontSize: 14,
     fontWeight: '600',
     flex: 1,
@@ -855,7 +834,7 @@ const styles = StyleSheet.create({
   bbTrack: {
     width: 24,
     height: 80,
-    backgroundColor: '#222244',
+    backgroundColor: c.bgElevated,
     borderRadius: 4,
     position: 'relative',
     overflow: 'visible',
@@ -865,7 +844,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#6c9bd120',
+    backgroundColor: c.accent + '20',
     borderRadius: 4,
   },
   bbMiddleLine: {
@@ -874,7 +853,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: '50%',
     height: 1,
-    backgroundColor: '#555',
+    backgroundColor: c.textMuted,
   },
   bbMarker: {
     position: 'absolute',
@@ -882,7 +861,6 @@ const styles = StyleSheet.create({
     marginBottom: -8,
   },
   bbMarkerText: {
-    color: '#6c9bd1',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -891,7 +869,7 @@ const styles = StyleSheet.create({
     height: 80,
   },
   bbLabel: {
-    color: '#555',
+    color: c.textMuted,
     fontSize: 10,
   },
 
@@ -901,7 +879,7 @@ const styles = StyleSheet.create({
   },
   volBarTrack: {
     height: 12,
-    backgroundColor: '#222244',
+    backgroundColor: c.bgElevated,
     borderRadius: 6,
     position: 'relative',
     overflow: 'hidden',

@@ -1,17 +1,20 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import ErrorBoundary from '../src/components/ErrorBoundary';
+import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
 
-export default function RootLayout() {
+function InnerLayout() {
+  const { colors, isDark } = useTheme();
+
   return (
-    <ErrorBoundary>
-      <StatusBar style="light" />
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: '#0e0e22' },
-          headerTintColor: '#e0e0e0',
+          headerStyle: { backgroundColor: colors.bgCard },
+          headerTintColor: colors.textPrimary,
           headerTitleStyle: { fontWeight: '600', fontSize: 16 },
-          contentStyle: { backgroundColor: '#0a0a0a' },
+          contentStyle: { backgroundColor: colors.bg },
           headerShadowVisible: false,
         }}
       >
@@ -28,6 +31,16 @@ export default function RootLayout() {
           options={{ title: 'Settings' }}
         />
       </Stack>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ErrorBoundary>
+      <ThemeProvider>
+        <InnerLayout />
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

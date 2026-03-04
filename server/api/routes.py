@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from ..core.analyzer import compute_all_indicators, get_indicator_state
 from ..core.backtester import calc_combined_probability, calc_probability
-from ..core.fetcher import fetch_price_history, get_ticker_info, search_tickers
+from ..core.fetcher import fetch_batch_quotes, fetch_price_history, get_ticker_info, search_tickers
 from ..core.presets import get_preset, list_presets, PRESETS
 from ..core.smart_matcher import calc_adaptive_combined
 from .schemas import (
@@ -387,6 +387,100 @@ async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: s
         "current_values": {k: round(v, 4) if isinstance(v, float) else v
                           for k, v in current_values.items()},
     }
+
+
+# Selection criteria:
+# - US-listed equities with market cap > $50B
+# - Top representatives from each GICS sector
+# - High trading volume and retail investor interest
+POPULAR_TICKERS = [
+    # Technology (mega-cap + key semis + enterprise)
+    "AAPL", "MSFT", "GOOGL", "NVDA", "META", "AVGO", "AMD",
+    "CRM", "ORCL", "ADBE", "PLTR", "INTC", "QCOM", "AMAT",
+    # Consumer (e-commerce + EV + retail)
+    "AMZN", "TSLA", "COST", "WMT", "HD", "NKE", "SBUX", "MCD",
+    # Financial Services (banks + payments + insurance)
+    "BRK-B", "JPM", "V", "MA", "GS", "BAC", "MS",
+    # Healthcare (pharma + biotech + devices)
+    "LLY", "UNH", "JNJ", "ABBV", "PFE", "MRK", "TMO",
+    # Communication / Media
+    "NFLX", "DIS", "CMCSA",
+    # Energy
+    "XOM", "CVX", "COP",
+    # Industrials / Defense
+    "CAT", "BA", "LMT", "UNP", "GE",
+]
+
+SECTOR_MAP = {
+    "Technology": [
+        "AAPL", "MSFT", "GOOGL", "NVDA", "META", "AVGO", "AMD",
+        "CRM", "ORCL", "ADBE", "PLTR", "INTC", "QCOM", "AMAT",
+    ],
+    "Consumer": [
+        "AMZN", "TSLA", "COST", "WMT", "HD", "NKE", "SBUX", "MCD",
+    ],
+    "Financial": [
+        "BRK-B", "JPM", "V", "MA", "GS", "BAC", "MS",
+    ],
+    "Healthcare": [
+        "LLY", "UNH", "JNJ", "ABBV", "PFE", "MRK", "TMO",
+    ],
+    "Media": [
+        "NFLX", "DIS", "CMCSA",
+    ],
+    "Energy": [
+        "XOM", "CVX", "COP",
+    ],
+    "Industrial": [
+        "CAT", "BA", "LMT", "UNP", "GE",
+    ],
+}
+
+AVAILABLE_SECTORS = ["All"] + sorted(SECTOR_MAP.keys())
+
+
+@router.get("/sectors")
+async def get_sectors():
+    """List available sector filters."""
+    return {"sectors": AVAILABLE_SECTORS}
+
+
+@router.get("/trending")
+async def trending_stocks(
+    sort: str = Query("change_pct", description="Sort by: change_pct, volume, market_cap, week_return, month_return"),
+    limit: int = Query(10, ge=1, le=20),
+    sector: str = Query("All", description="Filter by sector"),
+    order: str = Query("desc", description="Sort order: asc or desc"),
+):
+    """Get popular stocks with price, volume, returns data."""
+    tickers = POPULAR_TICKERS
+    if sector != "All" and sector in SECTOR_MAP:
+        tickers = SECTOR_MAP[sector]
+
+    quotes = fetch_batch_quotes(tickers[:limit])
+
+    # Enrich with sector info from our map for tickers missing sector
+    sector_lookup = {}
+    for sec, sec_tickers in SECTOR_MAP.items():
+        for t in sec_tickers:
+            sector_lookup[t] = sec
+    for q in quotes:
+        if not q.get("sector"):
+            q["sector"] = sector_lookup.get(q["ticker"], "")
+
+    reverse = order != "asc"
+    if sort == "volume":
+        quotes.sort(key=lambda x: x.get("volume", 0), reverse=reverse)
+    elif sort == "market_cap":
+        quotes.sort(key=lambda x: x.get("market_cap", 0), reverse=reverse)
+    elif sort == "week_return":
+        quotes.sort(key=lambda x: x.get("week_return", 0), reverse=reverse)
+    elif sort == "month_return":
+        quotes.sort(key=lambda x: x.get("month_return", 0), reverse=reverse)
+    else:  # change_pct
+        quotes.sort(key=lambda x: x.get("change_pct", 0), reverse=reverse)
+
+    return {"stocks": quotes, "updated": datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 
 @router.get("/search/{query}", response_model=SearchResponse)

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,40 +11,91 @@ import {
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import api from '../../src/api/client';
 import type { AnalysisResponse } from '../../src/types/analysis';
-import DashboardSummary from '../../src/components/DashboardSummary';
 import IndicatorCard from '../../src/components/IndicatorCard';
 import CombinedTab from '../../src/components/CombinedTab';
 import SmartCombinedView from '../../src/components/SmartCombinedView';
+import Week52Gauge from '../../src/components/Week52Gauge';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../../src/store/watchlist';
+import { useTheme } from '../../src/contexts/ThemeContext';
+import { spacing, radius, typography, formatVolume, getDirectionColor, type ThemeColors } from '../../src/theme';
 
-const ALL_INDICATORS = ['RSI', 'MACD', 'MA', 'Drawdown', 'ADX', 'BB', 'MADist', 'Consec', 'Vol', 'W52', 'Stoch', 'ATR', 'Combined'];
+const INDICATOR_META: Record<string, { label: string; short: string }> = {
+  RSI: { label: 'RSI', short: 'Momentum' },
+  MACD: { label: 'MACD', short: 'Trend' },
+  MA: { label: 'MA', short: 'Moving Avg' },
+  BB: { label: 'BB', short: 'Bollinger' },
+  Vol: { label: 'Volume', short: 'Volume' },
+  Stoch: { label: 'Stoch', short: 'Stochastic' },
+  Drawdown: { label: 'DD', short: 'Drawdown' },
+  ADX: { label: 'ADX', short: 'Trend Str' },
+  MADist: { label: 'MA Dist', short: 'MA Gap' },
+  Consec: { label: 'Consec', short: 'Streak' },
+  W52: { label: '52W', short: '52-Week' },
+  ATR: { label: 'ATR', short: 'Volatility' },
+};
+
+const ALL_INDICATORS = Object.keys(INDICATOR_META);
+
+function getIndicatorPreview(key: string, data: AnalysisResponse): { value: string; winRate: number | null } {
+  const ind = data.indicators;
+  switch (key) {
+    case 'RSI':
+      return { value: ind.rsi.value?.toFixed(1) ?? '-', winRate: ind.rsi.probability?.periods?.['20']?.win_rate ?? null };
+    case 'MACD':
+      return { value: ind.macd.event ?? 'Neutral', winRate: ind.macd.probability?.periods?.['20']?.win_rate ?? null };
+    case 'MA':
+      return { value: ind.ma.alignment ?? '-', winRate: ind.ma.probability?.periods?.['20']?.win_rate ?? null };
+    case 'BB':
+      return { value: ind.bb.zone ?? '-', winRate: ind.bb.probability?.periods?.['20']?.win_rate ?? null };
+    case 'Vol':
+      return { value: (ind.volume.ratio?.toFixed(1) ?? '-') + 'x', winRate: ind.volume.probability?.periods?.['20']?.win_rate ?? null };
+    case 'Stoch':
+      return { value: ind.stochastic.k?.toFixed(0) ?? '-', winRate: ind.stochastic.probability?.periods?.['20']?.win_rate ?? null };
+    case 'Drawdown':
+      return { value: (ind.drawdown.from_60d_high?.toFixed(1) ?? '-') + '%', winRate: ind.drawdown.probability?.periods?.['20']?.win_rate ?? null };
+    case 'ADX':
+      return { value: ind.adx.adx?.toFixed(0) ?? '-', winRate: ind.adx.probability?.periods?.['20']?.win_rate ?? null };
+    case 'MADist':
+      return { value: (ind.ma_distance.from_sma20?.toFixed(1) ?? '-') + '%', winRate: ind.ma_distance.probability?.periods?.['20']?.win_rate ?? null };
+    case 'Consec':
+      return { value: (ind.consecutive.days > 0 ? '+' : '') + ind.consecutive.days + 'd', winRate: ind.consecutive.probability?.periods?.['20']?.win_rate ?? null };
+    case 'W52':
+      return { value: (ind.week52.position_pct?.toFixed(0) ?? '-') + '%', winRate: ind.week52.probability?.periods?.['20']?.win_rate ?? null };
+    case 'ATR':
+      return { value: (ind.atr.atr_pct?.toFixed(1) ?? '-') + '%', winRate: null };
+    default:
+      return { value: '-', winRate: null };
+  }
+}
 
 export default function AnalyzeScreen() {
+  const { colors } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
+
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const navigation = useNavigation();
   const [data, setData] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeIndicators, setActiveIndicators] = useState<Set<string>>(new Set(['RSI', 'MACD']));
+  const [selectedIndicators, setSelectedIndicators] = useState<Set<string>>(new Set(['RSI', 'MACD', 'MA', 'Vol']));
+  const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(isInWatchlist(ticker ?? ''));
+  const [period, setPeriod] = useState<string>('2y');
+  const [showCombined, setShowCombined] = useState(true);
 
   useEffect(() => {
     navigation.setOptions({ title: ticker?.toUpperCase() ?? 'Analysis' });
     loadData();
-
     const interval = setInterval(() => refreshData(), 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [ticker]);
+  }, [ticker, period]);
 
   const loadData = async () => {
     if (!ticker) return;
     setLoading(true);
     setError(null);
-    try {
-      const result = await api.analyze(ticker);
-      setData(result);
-    } catch (e: any) {
+    try { setData(await api.analyze(ticker, period)); } catch (e: any) {
       setError(e.response?.data?.detail ?? e.message ?? 'Analysis failed');
     }
     setLoading(false);
@@ -52,528 +103,273 @@ export default function AnalyzeScreen() {
 
   const refreshData = async () => {
     if (!ticker) return;
-    try {
-      const result = await api.analyze(ticker);
-      setData(result);
-    } catch {}
+    try { setData(await api.analyze(ticker, period)); } catch {}
   };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refreshData();
     setRefreshing(false);
-  }, [ticker]);
+  }, [ticker, period]);
 
   const toggleIndicator = (key: string) => {
-    setActiveIndicators(prev => {
+    setSelectedIndicators(prev => {
       const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
-  const selectAll = () => {
-    setActiveIndicators(new Set(ALL_INDICATORS));
-  };
-
-  const clearAll = () => {
-    setActiveIndicators(new Set());
+  const toggleExpand = (key: string) => {
+    setExpandedIndicator(prev => prev === key ? null : key);
   };
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <View style={styles.loadingCard}>
-          <ActivityIndicator size="large" color="#6c9bd1" />
-          <Text style={styles.loadingText}>Analyzing {ticker?.toUpperCase()}</Text>
-          <Text style={styles.loadingSub}>Computing indicators & historical probabilities...</Text>
-        </View>
+      <View style={s.center}>
+        <ActivityIndicator size="large" color={colors.accent} />
+        <Text style={s.loadingText}>Analyzing {ticker?.toUpperCase()}</Text>
+        <Text style={s.loadingSub}>Computing indicators...</Text>
       </View>
     );
   }
 
   if (error || !data) {
     return (
-      <View style={styles.center}>
-        <View style={styles.errorCard}>
-          <Text style={styles.errorIcon}>!</Text>
-          <Text style={styles.errorText}>{error ?? 'Unknown error'}</Text>
-          <Pressable style={styles.retryBtn} onPress={loadData}>
-            <Text style={styles.retryText}>Retry</Text>
-          </Pressable>
-        </View>
+      <View style={s.center}>
+        <Text style={s.errorText}>{error ?? 'Unknown error'}</Text>
+        <Pressable style={s.retryBtn} onPress={loadData}>
+          <Text style={s.retryBtnText}>Retry</Text>
+        </Pressable>
       </View>
     );
   }
 
-  const { ticker_info, price } = data;
+  const { ticker_info, price, indicators } = data;
+  const activeForCombined = ALL_INDICATORS.filter(k => selectedIndicators.has(k));
 
   return (
-    <View style={styles.container}>
+    <View style={s.container}>
       <ScrollView
-        style={styles.scroll}
+        style={s.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#6c9bd1"
-            colors={['#6c9bd1']}
-            progressBackgroundColor="#1a1a2e"
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh}
+            tintColor={colors.accent} colors={[colors.accent]} progressBackgroundColor={colors.bgCard}
           />
         }
       >
-        {/* Price Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
+        {/* HEADER */}
+        <View style={s.header}>
+          <View style={s.headerTop}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.tickerLabel}>{ticker_info.ticker}</Text>
-              <Text style={styles.tickerName} numberOfLines={1}>{ticker_info.name}</Text>
+              <Text style={s.tickerLabel}>{ticker_info.ticker}</Text>
+              <Text style={s.tickerName} numberOfLines={1}>{ticker_info.name}</Text>
             </View>
             <Pressable
-              style={[styles.saveBtn, inWatchlist && styles.saveBtnActive]}
-              onPress={() => {
-                if (inWatchlist) {
-                  removeFromWatchlist(ticker!);
-                } else {
-                  addToWatchlist(ticker!);
-                }
-                setInWatchlist(!inWatchlist);
-              }}
+              style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
+              onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
             >
-              <Text style={[styles.saveBtnText, inWatchlist && styles.saveBtnTextActive]}>
+              <Text style={[s.saveBtnText, inWatchlist && s.saveBtnTextActive]}>
                 {inWatchlist ? 'Saved' : 'Save'}
               </Text>
             </Pressable>
           </View>
 
-          <View style={styles.priceRow}>
-            <Text style={styles.priceValue}>${price.current.toFixed(2)}</Text>
-            <View style={[styles.changeBadge, { backgroundColor: price.change >= 0 ? '#4caf5018' : '#f4433618' }]}>
-              <Text
-                style={[styles.changeText, { color: price.change >= 0 ? '#4caf50' : '#f44336' }]}
-              >
+          <View style={s.priceRow}>
+            <Text style={s.priceValue}>${price.current.toFixed(2)}</Text>
+            <View style={[s.changeBadge, { backgroundColor: price.change >= 0 ? colors.bullishBg : colors.bearishBg }]}>
+              <Text style={[s.changeValue, { color: getDirectionColor(price.change, colors) }]}>
                 {price.change >= 0 ? '+' : ''}{price.change.toFixed(2)} ({price.change_pct >= 0 ? '+' : ''}{price.change_pct.toFixed(2)}%)
               </Text>
             </View>
           </View>
 
-          {price.high_52w && price.low_52w && (
-            <View style={styles.rangeContainer}>
-              <Text style={styles.rangeLabel}>52W Range</Text>
-              <View style={styles.rangeBar}>
-                <View style={styles.rangeTrack}>
-                  <View
-                    style={[
-                      styles.rangeFill,
-                      {
-                        left: '0%',
-                        width: `${Math.min(
-                          ((price.current - price.low_52w) / (price.high_52w - price.low_52w)) * 100,
-                          100
-                        )}%`,
-                      },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.rangeMarker,
-                      {
-                        left: `${Math.min(
-                          ((price.current - price.low_52w) / (price.high_52w - price.low_52w)) * 100,
-                          100
-                        )}%`,
-                      },
-                    ]}
-                  />
-                </View>
-                <View style={styles.rangeValues}>
-                  <Text style={styles.rangeValue}>${price.low_52w.toFixed(0)}</Text>
-                  <Text style={styles.rangeValue}>${price.high_52w.toFixed(0)}</Text>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {ticker_info.sector && (
-            <Text style={styles.sectorText}>
-              {ticker_info.sector}{ticker_info.industry ? ` / ${ticker_info.industry}` : ''}
-            </Text>
-          )}
-        </View>
-
-        {/* Dashboard Summary - always visible */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Indicators Overview</Text>
-            <View style={styles.quickActions}>
-              <Pressable onPress={selectAll} style={styles.quickBtn}>
-                <Text style={styles.quickBtnText}>All</Text>
-              </Pressable>
-              <Pressable onPress={clearAll} style={styles.quickBtn}>
-                <Text style={styles.quickBtnText}>None</Text>
-              </Pressable>
-            </View>
-          </View>
-          <DashboardSummary
-            data={data}
-            activeIndicators={activeIndicators}
-            onToggle={toggleIndicator}
-          />
-        </View>
-
-        {/* Smart Combined View - shows when 2+ non-Combined indicators selected */}
-        {(() => {
-          const nonCombined = ALL_INDICATORS.filter(k => k !== 'Combined' && activeIndicators.has(k));
-          if (nonCombined.length >= 2) {
-            return (
-              <View style={styles.section}>
-                <SmartCombinedView
-                  ticker={ticker!}
-                  selectedIndicators={nonCombined}
-                />
-              </View>
-            );
-          }
-          return null;
-        })()}
-
-        {/* Active indicator detail cards */}
-        {activeIndicators.size > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Individual Details ({activeIndicators.size} selected)
-            </Text>
-
-            {ALL_INDICATORS.filter(k => activeIndicators.has(k) && k !== 'Combined').map(key => (
-              <IndicatorCard key={key} type={key} data={data} />
-            ))}
-
-            {activeIndicators.has('Combined') && (
-              <View style={styles.combinedCard}>
-                <View style={styles.combinedHeader}>
-                  <Text style={styles.combinedIcon}>C</Text>
-                  <Text style={styles.combinedTitle}>Custom Combinations</Text>
-                </View>
-                <CombinedTab data={data} />
-              </View>
+          <View style={s.metricsRow}>
+            {indicators.volume.ratio !== null && (
+              <Text style={s.metricText}>Vol {indicators.volume.ratio.toFixed(1)}x</Text>
             )}
+            {indicators.atr.atr_pct !== null && (
+              <Text style={s.metricText}>ATR {indicators.atr.atr_pct.toFixed(1)}%</Text>
+            )}
+            {ticker_info.sector ? <Text style={s.metricText}>{ticker_info.sector}</Text> : null}
+          </View>
+
+          {price.high_52w && price.low_52w && (
+            <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} />
+          )}
+
+          <View style={s.periodRow}>
+            <Text style={s.periodLabel}>Backtest</Text>
+            {['3m', '6m', '1y', '2y', '5y', '10y'].map((p) => (
+              <Pressable key={p} style={[s.periodPill, period === p && s.periodPillActive]} onPress={() => setPeriod(p)}>
+                <Text style={[s.periodPillText, period === p && s.periodPillTextActive]}>{p.toUpperCase()}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* COMBINED ANALYSIS (PRIMARY - shown by default) */}
+        <View style={s.section}>
+          <Pressable style={s.combinedHeader} onPress={() => setShowCombined(!showCombined)}>
+            <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
+            <Text style={s.chevron}>{showCombined ? 'Hide' : 'Show'}</Text>
+          </Pressable>
+
+          {showCombined && activeForCombined.length >= 2 && (
+            <SmartCombinedView ticker={ticker!} selectedIndicators={activeForCombined} />
+          )}
+
+          {showCombined && activeForCombined.length < 2 && (
+            <Text style={s.hintText}>Select at least 2 indicators below to run combined analysis</Text>
+          )}
+
+          {showCombined && (
+            <View style={{ marginTop: spacing.md }}>
+              <CombinedTab data={data} />
+            </View>
+          )}
+        </View>
+
+        {/* INDICATOR CARDS GRID */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>INDICATORS</Text>
+          <Text style={s.hintText}>Tap to toggle for combined. Long press for details.</Text>
+
+          <View style={s.cardGrid}>
+            {ALL_INDICATORS.map(key => {
+              const { value, winRate } = getIndicatorPreview(key, data);
+              const selected = selectedIndicators.has(key);
+              const meta = INDICATOR_META[key];
+
+              return (
+                <View key={key} style={{ width: '32%', marginBottom: 6 }}>
+                  <Pressable
+                    style={[s.indicatorCard, selected && s.indicatorCardSelected]}
+                    onPress={() => toggleIndicator(key)}
+                    onLongPress={() => toggleExpand(key)}
+                  >
+                    <Text style={[s.cardLabel, selected && s.cardLabelSelected]}>{meta.label}</Text>
+                    <Text style={s.cardValue}>{value}</Text>
+                    {winRate !== null && (
+                      <Text style={[s.cardWinRate, { color: winRate >= 50 ? colors.bullish : colors.bearish }]}>
+                        {winRate.toFixed(0)}% win
+                      </Text>
+                    )}
+                    {selected && <View style={s.selectedDot} />}
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* EXPANDED INDICATOR DETAIL */}
+        {expandedIndicator && (
+          <View style={s.section}>
+            <View style={s.expandedHeader}>
+              <Text style={s.sectionTitle}>{INDICATOR_META[expandedIndicator]?.label} DETAIL</Text>
+              <Pressable onPress={() => setExpandedIndicator(null)}>
+                <Text style={s.closeBtn}>Close</Text>
+              </Pressable>
+            </View>
+            <IndicatorCard type={expandedIndicator} data={data} />
           </View>
         )}
 
-        {activeIndicators.size === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>^</Text>
-            <Text style={styles.emptyText}>
-              Tap the indicators above to view details
-            </Text>
-          </View>
-        )}
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Updated: {data.analysis_date} | Auto-refresh every 5 min
-          </Text>
-          <Text style={styles.footerHint}>Pull down to refresh</Text>
+        <View style={s.footer}>
+          <Text style={s.footerText}>{data.data_range}</Text>
+          <Text style={s.footerText}>Updated: {data.analysis_date}</Text>
         </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  scroll: {
-    flex: 1,
-  },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
+  scroll: { flex: 1 },
   center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0a0a0a',
-    padding: 20,
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: c.bg, padding: spacing.xl,
   },
-
-  // Loading
-  loadingCard: {
-    backgroundColor: '#12122a',
-    borderRadius: 20,
-    padding: 40,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1e1e3e',
-    width: '80%',
-  },
-  loadingText: {
-    color: '#e0e0e0',
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 20,
-  },
-  loadingSub: {
-    color: '#666',
-    fontSize: 13,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-
-  // Error
-  errorCard: {
-    backgroundColor: '#12122a',
-    borderRadius: 20,
-    padding: 32,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#f4433630',
-    width: '80%',
-  },
-  errorIcon: {
-    color: '#f44336',
-    fontSize: 32,
-    fontWeight: '700',
-    width: 48,
-    height: 48,
-    textAlign: 'center',
-    lineHeight: 48,
-    backgroundColor: '#f4433618',
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  errorText: {
-    color: '#f44336',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
+  loadingText: { color: c.textPrimary, ...typography.h3, marginTop: spacing.lg },
+  loadingSub: { color: c.textTertiary, ...typography.bodySm, marginTop: spacing.xs },
+  errorText: { color: c.bearish, ...typography.bodySm, textAlign: 'center', marginBottom: spacing.lg },
   retryBtn: {
-    backgroundColor: '#1a1a2e',
-    paddingHorizontal: 28,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#333',
+    backgroundColor: c.bgCard, paddingHorizontal: 28, paddingVertical: 12,
+    borderRadius: radius.sm, borderWidth: 1, borderColor: c.borderLight,
   },
-  retryText: {
-    color: '#6c9bd1',
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  retryBtnText: { color: c.accent, ...typography.bodyBold },
 
-  // Header
   header: {
-    padding: 16,
-    paddingBottom: 12,
-    backgroundColor: '#0e0e22',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a30',
+    padding: spacing.lg, paddingBottom: spacing.sm,
+    backgroundColor: c.bgCard, borderBottomWidth: 1, borderBottomColor: c.border,
   },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  tickerLabel: {
-    color: '#6c9bd1',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  tickerName: {
-    color: '#999',
-    fontSize: 14,
-    marginTop: 2,
-    maxWidth: 250,
-  },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.xs },
+  tickerLabel: { color: c.accent, ...typography.label, letterSpacing: 1 },
+  tickerName: { color: c.textTertiary, ...typography.labelSm, marginTop: 1, maxWidth: 250 },
   saveBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
-    backgroundColor: '#1a1a2e',
+    paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.sm,
+    borderWidth: 1, borderColor: c.borderLight, backgroundColor: c.bgElevated,
   },
-  saveBtnActive: {
-    backgroundColor: '#1a2a3e',
-    borderColor: '#6c9bd160',
-  },
-  saveBtnText: {
-    color: '#888',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  saveBtnTextActive: {
-    color: '#6c9bd1',
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 10,
-  },
-  priceValue: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  changeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  changeText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  rangeContainer: {
-    marginBottom: 8,
-  },
-  rangeLabel: {
-    color: '#555',
-    fontSize: 11,
-    marginBottom: 4,
-  },
-  rangeBar: {},
-  rangeTrack: {
-    height: 4,
-    backgroundColor: '#222244',
-    borderRadius: 2,
-    position: 'relative',
-  },
-  rangeFill: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    backgroundColor: '#6c9bd130',
-    borderRadius: 2,
-  },
-  rangeMarker: {
-    position: 'absolute',
-    top: -3,
-    width: 4,
-    height: 10,
-    backgroundColor: '#6c9bd1',
-    borderRadius: 2,
-    marginLeft: -2,
-  },
-  rangeValues: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 2,
-  },
-  rangeValue: {
-    color: '#555',
-    fontSize: 10,
-  },
-  sectorText: {
-    color: '#555',
-    fontSize: 12,
-    marginTop: 4,
+  saveBtnActive: { backgroundColor: c.accentDim, borderColor: c.accent },
+  saveBtnText: { color: c.textTertiary, ...typography.labelSm },
+  saveBtnTextActive: { color: c.accent },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  priceValue: { color: c.textPrimary, ...typography.numberLg },
+  changeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm },
+  changeValue: { ...typography.numberSm },
+
+  metricsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
+  metricText: {
+    color: c.textMuted, fontSize: 11, backgroundColor: c.bgElevated,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden',
   },
 
-  // Sections
-  section: {
-    padding: 16,
+  periodRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.sm },
+  periodLabel: { color: c.textMuted, fontSize: 10, marginRight: 2 },
+  periodPill: {
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4,
+    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: 'transparent',
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    color: '#999',
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  quickBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#1a1a2e',
-  },
-  quickBtnText: {
-    color: '#6c9bd1',
-    fontSize: 12,
-    fontWeight: '500',
-  },
+  periodPillActive: { borderColor: c.accent, backgroundColor: c.accentDim },
+  periodPillText: { color: c.textMuted, fontSize: 10, fontWeight: '600' },
+  periodPillTextActive: { color: c.accent },
 
-  // Combined card wrapper
-  combinedCard: {
-    backgroundColor: '#12122a',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#1e1e3e',
-  },
+  section: { padding: spacing.lg, paddingTop: spacing.md },
+  sectionTitle: { color: c.textTertiary, ...typography.label, marginBottom: spacing.sm },
+  hintText: { color: c.textMuted, fontSize: 11, marginBottom: spacing.sm },
+
   combinedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: spacing.sm,
   },
-  combinedIcon: {
-    color: '#6c9bd1',
-    fontSize: 16,
-    fontWeight: '800',
-    width: 24,
-    height: 24,
-    textAlign: 'center',
-    lineHeight: 24,
-    backgroundColor: '#6c9bd118',
-    borderRadius: 6,
-    overflow: 'hidden',
+  chevron: { color: c.accent, fontSize: 12, fontWeight: '600' },
+
+  cardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  indicatorCard: {
+    backgroundColor: c.bgCard, borderRadius: radius.md, padding: spacing.sm,
+    borderWidth: 1, borderColor: c.border, alignItems: 'center',
+    minHeight: 72, justifyContent: 'center', position: 'relative',
   },
-  combinedTitle: {
-    color: '#e0e0e0',
-    fontSize: 15,
-    fontWeight: '600',
+  indicatorCardSelected: { borderColor: c.accent, backgroundColor: c.accentDim },
+  cardLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '600', marginBottom: 2 },
+  cardLabelSelected: { color: c.accent },
+  cardValue: { color: c.textPrimary, fontSize: 14, fontWeight: '700' },
+  cardWinRate: { fontSize: 10, fontWeight: '600', marginTop: 2 },
+  selectedDot: {
+    position: 'absolute', top: 4, right: 4,
+    width: 6, height: 6, borderRadius: 3, backgroundColor: c.accent,
   },
 
-  // Empty state
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
+  expandedHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: spacing.sm,
   },
-  emptyIcon: {
-    color: '#333',
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  emptyText: {
-    color: '#555',
-    fontSize: 14,
-  },
+  closeBtn: { color: c.accent, fontSize: 12, fontWeight: '600' },
 
-  // Footer
-  footer: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    paddingBottom: 40,
-    gap: 4,
-  },
-  footerText: {
-    color: '#444',
-    fontSize: 11,
-  },
-  footerHint: {
-    color: '#333',
-    fontSize: 10,
-  },
+  footer: { alignItems: 'center', paddingVertical: 20, paddingBottom: 40, gap: 2 },
+  footerText: { color: c.textMuted, fontSize: 10 },
 });

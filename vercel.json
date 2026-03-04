@@ -1,25 +1,26 @@
 {
   "version": 2,
-  "buildCommand": "cd mobile && npm install && npx expo export --platform web && cd .. && rm -rf public && cp -r mobile/dist public",
-  "outputDirectory": "public",
   "builds": [
     {
       "src": "api/index.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "50mb"
+        "maxLambdaSize": "50mb",
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "mobile/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
       }
     }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.py" },
     { "src": "/health", "dest": "/api/index.py" },
-    { "src": "/(.*\\.[a-z]+)$", "dest": "/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ],
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 60
-    }
-  }
+    { "src": "/(.*\\.[a-z]+)$", "dest": "/mobile/$1" },
+    { "src": "/(.*)", "dest": "/mobile/index.html" }
+  ]
 }

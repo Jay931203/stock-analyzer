@@ -174,3 +174,16 @@ export interface SearchResult {
   exchange: string;
   type: string;
 }
+
+export interface TrendingStock {
+  ticker: string;
+  name: string;
+  price: number;
+  change: number;
+  change_pct: number;
+  volume: number;
+  market_cap: number;
+  week_return: number;
+  month_return: number;
+  sector: string;
+}

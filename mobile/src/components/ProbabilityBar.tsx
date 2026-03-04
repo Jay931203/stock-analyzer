@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import type { PeriodStats } from '../types/analysis';
+import { useTheme } from '../contexts/ThemeContext';
+import { typography, spacing, getWinRateColor, type ThemeColors } from '../theme';
 
 interface Props {
   label?: string;
@@ -8,57 +10,31 @@ interface Props {
 }
 
 const PERIOD_LABELS: Record<string, string> = {
-  '5': '5D',
-  '10': '10D',
-  '20': '1M',
-  '60': '3M',
-  '120': '6M',
-  '252': '1Y',
+  '5': '5D', '10': '10D', '20': '1M', '60': '3M', '120': '6M', '252': '1Y',
 };
 
 export default function ProbabilityBar({ label, periods }: Props) {
-  const sorted = Object.entries(periods).sort(
-    ([a], [b]) => Number(a) - Number(b)
-  );
+  const { colors } = useTheme();
+  const s = useMemo(() => makeStyles(colors), [colors]);
+  const sorted = Object.entries(periods).sort(([a], [b]) => Number(a) - Number(b));
 
   return (
-    <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+    <View style={s.container}>
+      {label && <Text style={s.label}>{label}</Text>}
       {sorted.map(([period, stats]) => {
-        const winColor = getWinColor(stats.win_rate);
+        const winColor = getWinRateColor(stats.win_rate);
         const barWidth = Math.min(Math.max(stats.win_rate, 0), 100);
         return (
-          <View key={period} style={styles.row}>
-            <Text style={styles.period}>
-              {PERIOD_LABELS[period] ?? `${period}d`}
-            </Text>
-
-            {/* Win rate bar */}
-            <View style={styles.barContainer}>
-              <View style={styles.barTrack}>
-                <View style={styles.centerLine} />
-                <View
-                  style={[
-                    styles.barFill,
-                    {
-                      width: `${barWidth}%`,
-                      backgroundColor: winColor,
-                    },
-                  ]}
-                />
+          <View key={period} style={s.row}>
+            <Text style={s.period}>{PERIOD_LABELS[period] ?? `${period}d`}</Text>
+            <View style={s.barContainer}>
+              <View style={s.barTrack}>
+                <View style={s.centerLine} />
+                <View style={[s.barFill, { width: `${barWidth}%`, backgroundColor: winColor }]} />
               </View>
             </View>
-
-            <Text style={[styles.value, { color: winColor }]}>
-              {stats.win_rate.toFixed(0)}%
-            </Text>
-
-            <Text
-              style={[
-                styles.returnValue,
-                { color: stats.avg_return >= 0 ? '#4caf50' : '#f44336' },
-              ]}
-            >
+            <Text style={[s.value, { color: winColor }]}>{stats.win_rate.toFixed(0)}%</Text>
+            <Text style={[s.returnValue, { color: stats.avg_return >= 0 ? colors.bullish : colors.bearish }]}>
               {stats.avg_return >= 0 ? '+' : ''}{stats.avg_return.toFixed(1)}%
             </Text>
           </View>
@@ -68,23 +44,12 @@ export default function ProbabilityBar({ label, periods }: Props) {
   );
 }
 
-function getWinColor(value: number): string {
-  if (value >= 60) return '#4caf50';
-  if (value >= 55) return '#8bc34a';
-  if (value >= 50) return '#9e9e9e';
-  if (value >= 45) return '#ff9800';
-  return '#f44336';
-}
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 4,
-  },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { marginBottom: spacing.xs },
   label: {
-    color: '#777',
-    fontSize: 11,
+    color: c.textTertiary,
+    ...typography.labelSm,
     marginBottom: 6,
-    fontWeight: '500',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -92,21 +57,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 5,
-    gap: 8,
+    gap: spacing.sm,
   },
   period: {
-    color: '#888',
-    fontSize: 11,
+    color: c.textTertiary,
+    ...typography.labelSm,
     width: 24,
     textAlign: 'right',
     fontWeight: '600',
   },
-  barContainer: {
-    flex: 1,
-  },
+  barContainer: { flex: 1 },
   barTrack: {
     height: 16,
-    backgroundColor: '#0e0e20',
+    backgroundColor: c.bgElevated,
     borderRadius: 4,
     overflow: 'hidden',
     position: 'relative',
@@ -117,7 +80,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: '#ffffff15',
+    backgroundColor: `${c.textPrimary}10`,
   },
   barFill: {
     position: 'absolute',
@@ -128,14 +91,12 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   value: {
-    fontSize: 13,
-    fontWeight: '700',
+    ...typography.numberSm,
     width: 36,
     textAlign: 'right',
   },
   returnValue: {
-    fontSize: 11,
-    fontWeight: '500',
+    ...typography.labelSm,
     width: 46,
     textAlign: 'right',
   },
