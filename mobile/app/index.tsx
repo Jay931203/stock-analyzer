@@ -216,8 +216,7 @@ export default function HomeScreen() {
 
       {/* Title */}
       <View style={s.titleArea}>
-        <Text style={s.title}>Signal Scanner</Text>
-        <Text style={s.subtitle}>Probability-based technical signals</Text>
+        <Text style={s.title}>Stock Scanner</Text>
       </View>
 
       {/* Search with dropdown */}
@@ -297,7 +296,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
 
   titleArea: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   title: { color: c.textPrimary, ...typography.h1 },
-  subtitle: { color: c.textTertiary, ...typography.bodySm, marginTop: 2 },
 
   searchWrapper: { zIndex: 10, position: 'relative', marginHorizontal: spacing.lg, marginBottom: spacing.md },
   searchContainer: {
