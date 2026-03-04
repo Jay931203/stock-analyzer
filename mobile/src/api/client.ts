@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AnalysisResponse, ProbabilityData, SearchResult, SmartProbabilityResult, TrendingStock } from '../types/analysis';
+import type { AnalysisResponse, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TrendingStock } from '../types/analysis';
 
 const STORAGE_KEY = 'stock_analyzer_server_url';
 
@@ -93,6 +93,14 @@ const api = {
 
   async sectors(): Promise<{ sectors: string[] }> {
     const res = await axios.get(`${BASE_URL}/api/sectors`, { timeout: 10000 });
+    return res.data;
+  },
+
+  async signals(limit = 8): Promise<SignalsResponse> {
+    const res = await axios.get(`${BASE_URL}/api/signals`, {
+      params: { limit },
+      timeout: 60000,
+    });
     return res.data;
   },
 

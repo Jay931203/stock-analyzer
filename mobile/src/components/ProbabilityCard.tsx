@@ -13,6 +13,38 @@ const PERIOD_LABELS: Record<string, string> = {
   '5': '5D', '10': '10D', '20': '1M', '60': '3M', '120': '6M', '252': '1Y',
 };
 
+// Make raw condition strings more human-readable
+function friendlyCondition(raw: string): string {
+  return raw
+    .replace(/RSI (\d+)-(\d+)/g, (_, lo, hi) => {
+      const mid = (Number(lo) + Number(hi)) / 2;
+      const zone = mid < 30 ? 'Low' : mid < 50 ? 'Moderate' : mid < 70 ? 'High' : 'Very High';
+      return `RSI ${zone} (${lo}-${hi})`;
+    })
+    .replace(/BB Zone: below_lower/g, 'Below support band')
+    .replace(/BB Zone: above_upper/g, 'Above resistance band')
+    .replace(/BB Zone: lower_quarter/g, 'Near support')
+    .replace(/BB Zone: upper_quarter/g, 'Near resistance')
+    .replace(/BB Zone: mid_lower/g, 'Lower range')
+    .replace(/BB Zone: mid_upper/g, 'Upper range')
+    .replace(/MACD Golden Cross/g, 'Momentum turning up')
+    .replace(/MACD Dead Cross/g, 'Momentum turning down')
+    .replace(/MA Bullish Alignment Entry/g, 'Moving averages: Uptrend')
+    .replace(/MA Bearish Alignment Entry/g, 'Moving averages: Downtrend')
+    .replace(/Volume Spike \(>2x avg\)/g, 'Unusually high volume')
+    .replace(/Stochastic %K (\d+)-(\d+)/g, (_, lo) => {
+      const v = Number(lo);
+      const zone = v < 20 ? 'Oversold' : v < 80 ? 'Neutral' : 'Overbought';
+      return `Stochastic: ${zone}`;
+    })
+    .replace(/Drawdown (\d+)-(\d+)% from 60d high/g, 'Pullback from recent high')
+    .replace(/Near 60d high \(within 2%\)/g, 'Near recent high')
+    .replace(/ADX <20 \(No Trend\)/g, 'No clear trend')
+    .replace(/ADX (\d+)-(\d+) \((\w+ Trend)\)/g, '$3')
+    .replace(/ADX >40 \(Very Strong Trend\)/g, 'Very strong trend')
+    .replace(/ AND /g, ' + ');
+}
+
 export default function ProbabilityCard({ data }: Props) {
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
@@ -22,7 +54,7 @@ export default function ProbabilityCard({ data }: Props) {
   if (data.occurrences === 0) {
     return (
       <View style={s.container}>
-        <Text style={s.condition}>{data.condition}</Text>
+        <Text style={s.condition}>{friendlyCondition(data.condition)}</Text>
         <Text style={s.noData}>No historical data available</Text>
       </View>
     );
@@ -41,7 +73,7 @@ export default function ProbabilityCard({ data }: Props) {
     <View style={s.container}>
       <View style={s.header}>
         <View style={{ flex: 1 }}>
-          <Text style={s.condition}>{data.condition}</Text>
+          <Text style={s.condition}>{friendlyCondition(data.condition)}</Text>
           <Text style={s.occurrences}>{data.occurrences} historical cases</Text>
         </View>
         <View style={[s.signalBadge, { backgroundColor: `${signalColor}15` }]}>

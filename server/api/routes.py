@@ -443,6 +443,10 @@ AVAILABLE_SECTORS = ["All"] + sorted(SECTOR_MAP.keys())
 _trending_cache: dict = {"data": None, "ts": 0}
 _TRENDING_TTL = 300  # 5 minutes
 
+# Signal scanning cache (10 min TTL)
+_signals_cache: dict = {"data": None, "ts": 0}
+_SIGNALS_TTL = 600  # 10 minutes
+
 
 @router.get("/similar/{ticker}")
 async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
@@ -465,6 +469,62 @@ async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
     except Exception:
         pass
     return {"ticker": upper, "sector": "", "similar": []}
+
+
+@router.get("/signals")
+async def get_signals(limit: int = Query(8, ge=1, le=20)):
+    """
+    Scan popular stocks for strongest technical signals.
+    Returns bullish (high win rate) and bearish (low win rate) signals.
+    Cached for 10 minutes.
+    """
+    now = time.time()
+
+    if _signals_cache["data"] and now - _signals_cache["ts"] < _SIGNALS_TTL:
+        cached = _signals_cache["data"]
+        return {
+            "bullish": cached["bullish"][:limit],
+            "bearish": cached["bearish"][:limit],
+            "scanned": cached["scanned"],
+            "updated": cached["updated"],
+        }
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    all_signals = []
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {executor.submit(_scan_ticker_signals, t): t for t in POPULAR_TICKERS}
+        for future in as_completed(futures):
+            try:
+                signals = future.result()
+                all_signals.extend(signals)
+            except Exception:
+                pass
+
+    # Split into bullish / bearish based on actual win rate
+    bullish = [s for s in all_signals if s["win_rate_20d"] > 55 and s["samples"] >= 8]
+    bearish = [s for s in all_signals if s["win_rate_20d"] < 45 and s["samples"] >= 8]
+
+    # Sort by strength (deviation from 50%)
+    bullish.sort(key=lambda x: x["strength"], reverse=True)
+    bearish.sort(key=lambda x: x["strength"], reverse=True)
+
+    result = {
+        "bullish": bullish,
+        "bearish": bearish,
+        "scanned": len(POPULAR_TICKERS),
+        "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+    _signals_cache["data"] = result
+    _signals_cache["ts"] = now
+
+    return {
+        "bullish": bullish[:limit],
+        "bearish": bearish[:limit],
+        "scanned": len(POPULAR_TICKERS),
+        "updated": result["updated"],
+    }
 
 
 @router.get("/sectors")
@@ -636,6 +696,108 @@ def _calc_combined(df, states: dict) -> CombinedProbability | None:
         conditions=[c["indicator"] + ":" + c["state"] for c in conditions],
         probability=prob_data,
     )
+
+
+def _scan_ticker_signals(ticker: str) -> list[dict]:
+    """Scan a single ticker for notable technical signals."""
+    try:
+        df = fetch_price_history(ticker, period="10y")
+        if len(df) < 200:
+            return []
+    except Exception:
+        return []
+
+    indicators = compute_all_indicators(df)
+    states = get_indicator_state(indicators)
+
+    signals = []
+    close = df["Close"]
+    current_price = float(close.iloc[-1])
+    prev_price = float(close.iloc[-2]) if len(close) > 1 else current_price
+    change_pct = round((current_price - prev_price) / prev_price * 100, 2) if prev_price else 0
+
+    # Sector lookup
+    sector = ""
+    for sec, sec_tickers in SECTOR_MAP.items():
+        if ticker in sec_tickers:
+            sector = sec
+            break
+
+    base = {"ticker": ticker, "price": current_price, "change_pct": change_pct, "sector": sector}
+
+    # RSI extremes
+    rsi_val = indicators["rsi"]["value"]
+    if rsi_val is not None and (rsi_val <= 30 or rsi_val >= 70):
+        prob = calc_probability(df, "rsi", rsi_val)
+        tag = "Oversold" if rsi_val <= 30 else "Overbought"
+        signals.append(_build_signal(
+            base, f"RSI {tag}", f"RSI {rsi_val:.1f}", prob,
+        ))
+
+    # MACD cross
+    macd_event = states.get("macd_event")
+    if macd_event in ("golden_cross", "dead_cross"):
+        prob = calc_probability(df, f"macd_{macd_event}", "")
+        label = "Golden Cross" if macd_event == "golden_cross" else "Dead Cross"
+        signals.append(_build_signal(base, f"MACD {label}", "Histogram crossed zero", prob))
+
+    # BB extremes
+    bb_zone = states.get("bb_zone")
+    if bb_zone in ("below_lower", "above_upper"):
+        prob = calc_probability(df, "bb_zone", bb_zone)
+        label = "Below Lower Band" if bb_zone == "below_lower" else "Above Upper Band"
+        signals.append(_build_signal(base, f"BB {label}", f"BB zone: {bb_zone}", prob))
+
+    # Volume spike
+    vol = indicators["volume"]
+    if vol["ratio"] is not None and vol["ratio"] >= 2.0:
+        prob = calc_probability(df, "volume_spike", "")
+        signals.append(_build_signal(
+            base, "Volume Spike", f"{vol['ratio']:.1f}x avg volume", prob,
+        ))
+
+    # Deep drawdown (potential bounce)
+    dd = indicators.get("drawdown", {})
+    dd_60 = dd.get("from_60d_high")
+    if dd_60 is not None and dd_60 <= -10:
+        prob = calc_probability(df, "drawdown", dd_60)
+        signals.append(_build_signal(
+            base, "Deep Pullback", f"{dd_60:.1f}% from 60d high", prob,
+        ))
+
+    # Consecutive streak (3+ days)
+    consec = indicators.get("consecutive", {})
+    consec_days = consec.get("days", 0)
+    if abs(consec_days) >= 3:
+        prob = calc_probability(df, "consecutive", consec_days)
+        d = "up" if consec_days > 0 else "down"
+        signals.append(_build_signal(
+            base, f"Streak: {abs(consec_days)}d {d}", f"{abs(consec_days)} consecutive {d} days", prob,
+        ))
+
+    return signals
+
+
+def _build_signal(base: dict, signal_type: str, description: str, prob_result) -> dict:
+    """Build a signal dict from probability result."""
+    p5 = prob_result.periods.get(5, {})
+    p20 = prob_result.periods.get(20, {})
+    wr5 = p5.get("win_rate", 50)
+    wr20 = p20.get("win_rate", 50)
+    # Strength = how far the win rates deviate from 50%
+    strength = round(abs(wr20 - 50) + abs(wr5 - 50), 1)
+
+    return {
+        **base,
+        "signal_type": signal_type,
+        "description": description,
+        "win_rate_5d": wr5,
+        "win_rate_20d": wr20,
+        "avg_return_5d": p5.get("avg_return", 0),
+        "avg_return_20d": p20.get("avg_return", 0),
+        "samples": prob_result.occurrences,
+        "strength": strength,
+    }
 
 
 def _parse_conditions(conditions_str: str) -> list[dict]:

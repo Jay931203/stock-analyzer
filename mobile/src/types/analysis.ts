@@ -188,3 +188,25 @@ export interface TrendingStock {
   sector: string;
   market_state?: string;
 }
+
+export interface SignalItem {
+  ticker: string;
+  price: number;
+  change_pct: number;
+  sector: string;
+  signal_type: string;
+  description: string;
+  win_rate_5d: number;
+  win_rate_20d: number;
+  avg_return_5d: number;
+  avg_return_20d: number;
+  samples: number;
+  strength: number;
+}
+
+export interface SignalsResponse {
+  bullish: SignalItem[];
+  bearish: SignalItem[];
+  scanned: number;
+  updated: string;
+}

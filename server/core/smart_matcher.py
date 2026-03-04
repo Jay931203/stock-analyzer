@@ -205,7 +205,8 @@ def _build_mask(
         half_w = 5 * width_mult  # base ±5, expands with multiplier
         lo, hi = val - half_w, val + half_w
         mask = (cache["rsi"] >= lo) & (cache["rsi"] < hi)
-        return mask, f"RSI {lo:.0f}-{hi:.0f}"
+        zone = "Low" if val < 30 else "Moderate" if val < 50 else "High" if val < 70 else "Very High"
+        return mask, f"RSI {zone} ({val:.0f})"
 
     elif ind_key == "macd":
         hist = current_values.get("macd_histogram")
@@ -216,17 +217,17 @@ def _build_mask(
         if event in ("golden_cross", "dead_cross"):
             if event == "golden_cross":
                 mask = (macd_hist > 0) & (macd_hist.shift(1) <= 0)
+                return mask, "Momentum turning up"
             else:
                 mask = (macd_hist < 0) & (macd_hist.shift(1) >= 0)
-            return mask, f"MACD {event}"
+                return mask, "Momentum turning down"
         else:
-            # Use histogram sign as condition
             if hist > 0:
                 mask = macd_hist > 0
-                return mask, "MACD positive"
+                return mask, "Positive momentum"
             else:
                 mask = macd_hist < 0
-                return mask, "MACD negative"
+                return mask, "Negative momentum"
 
     elif ind_key == "ma":
         alignment = current_values.get("ma_alignment")
@@ -235,9 +236,10 @@ def _build_mask(
         sma20, sma50, sma200 = cache["sma20"], cache["sma50"], cache["sma200"]
         if alignment == "bullish":
             mask = (sma20 > sma50) & (sma50 > sma200)
+            return mask, "Uptrend"
         else:
             mask = (sma20 < sma50) & (sma50 < sma200)
-        return mask, f"MA {alignment}"
+            return mask, "Downtrend"
 
     elif ind_key == "drawdown":
         val = current_values.get("drawdown_60d")
@@ -247,7 +249,8 @@ def _build_mask(
         lo, hi = val - half_w, val + half_w
         hi = min(hi, 1)  # cap at +1%
         mask = (cache["dd_60"] >= lo) & (cache["dd_60"] < hi)
-        return mask, f"DD60 {lo:.0f}~{hi:.0f}%"
+        zone = "Near high" if val > -2 else "Small dip" if val > -5 else "Pullback" if val > -10 else "Deep drop"
+        return mask, f"{zone} ({val:.0f}%)"
 
     elif ind_key == "adx":
         val = current_values.get("adx")
@@ -256,7 +259,8 @@ def _build_mask(
         half_w = 5 * width_mult
         lo, hi = max(val - half_w, 0), val + half_w
         mask = (cache["adx"] >= lo) & (cache["adx"] < hi)
-        return mask, f"ADX {lo:.0f}-{hi:.0f}"
+        zone = "No trend" if val < 20 else "Weak trend" if val < 25 else "Strong trend" if val < 40 else "Very strong"
+        return mask, f"Trend: {zone}"
 
     elif ind_key == "bb":
         bb_upper = cache["bb_upper"]
@@ -269,7 +273,8 @@ def _build_mask(
         half_w = 0.15 * width_mult
         lo, hi = val - half_w, val + half_w
         mask = (bb_pos >= lo) & (bb_pos < hi)
-        return mask, f"BB pos {lo:.0f}-{hi:.0f}"
+        zone = "Below support" if val < 0 else "Near support" if val < 0.25 else "Lower range" if val < 0.5 else "Upper range" if val < 0.75 else "Near resistance" if val <= 1 else "Above resistance"
+        return mask, f"Price: {zone}"
 
     elif ind_key == "volume":
         vol_ratio = volume / cache["vol_sma"].replace(0, np.nan)
@@ -279,7 +284,8 @@ def _build_mask(
         half_w = 0.3 * width_mult
         lo, hi = max(val - half_w, 0), val + half_w
         mask = (vol_ratio >= lo) & (vol_ratio < hi)
-        return mask, f"Vol {lo:.1f}-{hi:.1f}x"
+        zone = "Low volume" if val < 0.8 else "Normal volume" if val < 1.5 else "High volume" if val < 2.5 else "Very high volume"
+        return mask, zone
 
     elif ind_key == "stoch":
         val = current_values.get("stoch_k")
@@ -288,7 +294,8 @@ def _build_mask(
         half_w = 10 * width_mult
         lo, hi = max(val - half_w, 0), min(val + half_w, 100)
         mask = (cache["stoch_k"] >= lo) & (cache["stoch_k"] < hi)
-        return mask, f"Stoch {lo:.0f}-{hi:.0f}"
+        zone = "Oversold" if val < 20 else "Low" if val < 40 else "Neutral" if val < 60 else "High" if val < 80 else "Overbought"
+        return mask, f"Stoch: {zone}"
 
     elif ind_key == "ma_distance":
         val = current_values.get("ma20_distance")
@@ -297,7 +304,8 @@ def _build_mask(
         half_w = 2 * width_mult
         lo, hi = val - half_w, val + half_w
         mask = (cache["ma20_dist"] >= lo) & (cache["ma20_dist"] < hi)
-        return mask, f"MA20dist {lo:.0f}~{hi:.0f}%"
+        zone = "Far below avg" if val < -5 else "Below avg" if val < -2 else "Near average" if val < 2 else "Above avg" if val < 5 else "Far above avg"
+        return mask, zone
 
     elif ind_key == "consecutive":
         val = current_values.get("consecutive_days", 0)
@@ -307,11 +315,11 @@ def _build_mask(
         if val > 0:
             lo = max(val - int(width_mult), 1)
             mask = consec >= lo
-            return mask, f"Consec up {lo}+"
+            return mask, f"{lo}+ days rising"
         else:
             hi = min(val + int(width_mult), -1)
             mask = consec <= hi
-            return mask, f"Consec down {hi}-"
+            return mask, f"{abs(hi)}+ days falling"
 
     elif ind_key == "week52":
         val = current_values.get("w52_position")
@@ -320,7 +328,8 @@ def _build_mask(
         half_w = 10 * width_mult
         lo, hi = max(val - half_w, 0), min(val + half_w, 100)
         mask = (cache["w52_pos"] >= lo) & (cache["w52_pos"] < hi)
-        return mask, f"52W {lo:.0f}-{hi:.0f}%"
+        zone = "Near 52w low" if val < 20 else "Lower range" if val < 40 else "Mid range" if val < 60 else "Upper range" if val < 80 else "Near 52w high"
+        return mask, zone
 
     return None, None
 
