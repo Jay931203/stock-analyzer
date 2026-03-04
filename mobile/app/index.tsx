@@ -229,8 +229,8 @@ export default function HomeScreen() {
             </View>
           ) : null}
         </View>
-        <Pressable onPress={toggleTheme} style={[s.themeToggleTrack, isDark && s.themeToggleTrackDark]}>
-          <View style={[s.themeToggleThumb, isDark && s.themeToggleThumbDark]} />
+        <Pressable onPress={toggleTheme} style={s.themeBtn}>
+          <Text style={s.themeBtnIcon}>{isDark ? '\u2600' : '\u263D'}</Text>
         </Pressable>
       </View>
 
@@ -298,20 +298,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statusText: { color: c.textTertiary, ...typography.labelSm },
   marketBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 },
   marketBadgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
-  themeToggleTrack: {
-    width: 48, height: 26, borderRadius: 13,
-    backgroundColor: c.border, justifyContent: 'center',
-    paddingHorizontal: 3,
+  themeBtn: {
+    padding: 6, borderRadius: 8,
   },
-  themeToggleTrackDark: {
-    backgroundColor: c.accent,
-  },
-  themeToggleThumb: {
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#fff',
-  },
-  themeToggleThumbDark: {
-    marginLeft: 22,
+  themeBtnIcon: {
+    fontSize: 18, color: c.textSecondary,
   },
 
   titleArea: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },

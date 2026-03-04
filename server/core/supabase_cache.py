@@ -1,8 +1,10 @@
 """Supabase-backed signal cache for fast home screen loading."""
+from __future__ import annotations
 
 import os
 import json
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 # Try to import supabase, gracefully handle if not available
 try:
@@ -21,7 +23,7 @@ except ImportError:
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-_client: Client | None = None
+_client: Optional[Client] = None
 
 # Cache TTL in minutes
 CACHE_TTL_MINUTES = 30
@@ -40,7 +42,7 @@ def _get_client() -> Client | None:
 
 
 def read_cached_signals() -> dict | None:
-    """Read signals from Supabase cache. Returns None if cache miss or stale."""
+    """Read signals from Supabase cache. Returns None only if no data exists."""
     client = _get_client()
     if not client:
         return None
@@ -50,13 +52,8 @@ def read_cached_signals() -> dict | None:
         if not result.data:
             return None
 
-        # Check freshness using the most recent updated_at
+        # Get the update timestamp for display
         latest = result.data[0].get("updated_at", "")
-        if latest:
-            updated = datetime.fromisoformat(latest.replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            if (now - updated).total_seconds() > CACHE_TTL_MINUTES * 60:
-                return None  # Stale
 
         signals = []
         for row in result.data:
@@ -76,10 +73,18 @@ def read_cached_signals() -> dict | None:
                 "tier": row.get("tier", "normal"),
             })
 
+        updated_str = ""
+        if latest:
+            try:
+                updated = datetime.fromisoformat(latest.replace("Z", "+00:00"))
+                updated_str = updated.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                updated_str = latest[:16].replace("T", " ")
+
         return {
             "signals": signals,
             "scanned": len(signals),
-            "updated": latest[:16].replace("T", " ") if latest else "",
+            "updated": updated_str,
         }
     except Exception as e:
         print(f"Supabase read error: {e}")

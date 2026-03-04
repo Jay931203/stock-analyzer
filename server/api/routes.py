@@ -474,6 +474,38 @@ async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
     return {"ticker": upper, "sector": "", "similar": []}
 
 
+@router.get("/signals/refresh")
+async def refresh_signals():
+    """
+    Force recompute signals and update Supabase cache.
+    Called by Vercel Cron every 15 minutes.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
+    valid = [r for r in results if r is not None]
+    valid.sort(key=lambda x: x["strength"], reverse=True)
+
+    result = {
+        "signals": valid,
+        "scanned": len(POPULAR_TICKERS),
+        "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+    # Update both caches
+    _signals_cache["data"] = result
+    _signals_cache["ts"] = time.time()
+    write_cached_signals(valid)
+
+    return {
+        "status": "ok",
+        "signals_count": len(valid),
+        "scanned": len(POPULAR_TICKERS),
+        "updated": result["updated"],
+    }
+
+
 @router.get("/signals")
 async def get_signals(limit: int = Query(20, ge=1, le=50)):
     """
