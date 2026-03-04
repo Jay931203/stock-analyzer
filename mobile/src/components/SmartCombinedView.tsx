@@ -25,9 +25,9 @@ interface Props {
 }
 
 const TIER_LABELS: Record<string, { label: string; desc: string }> = {
-  strict: { label: 'Strict', desc: 'Tight range match' },
-  normal: { label: 'Normal', desc: 'Moderately widened' },
-  relaxed: { label: 'Relaxed', desc: 'Wide range match' },
+  strict: { label: 'Precise', desc: 'Fewer but closer matches' },
+  normal: { label: 'Balanced', desc: 'Recommended' },
+  relaxed: { label: 'Wide', desc: 'More historical data' },
 };
 
 const INDICATOR_LABELS: Record<string, string> = {
@@ -116,7 +116,7 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
     <View style={s.container}>
       {/* Summary line */}
       <Text style={s.summaryText}>
-        {selectedIndicators.length} indicators | {result.data_days} days of data
+        Analyzing {selectedIndicators.length} indicators
       </Text>
 
       {/* Tier selector */}
@@ -142,13 +142,7 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
         </View>
       )}
 
-      {result.best_tier === activeTier && (
-        <View style={s.bestBanner}>
-          <Text style={s.bestBannerText}>Best balance of precision & sample size</Text>
-        </View>
-      )}
-
-      {tierData && <ProbabilityCard data={tierData} />}
+      {tierData && <ProbabilityCard data={tierData} compact />}
 
       {!tierData && <Text style={s.noDataText}>No matching historical cases found for this tier.</Text>}
 
@@ -158,7 +152,7 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
           onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowImpact(!showImpact); }}
         >
           <View style={s.sectionToggle}>
-            <Text style={s.sectionTitle}>Indicator Impact</Text>
+            <Text style={s.sectionTitle}>Without each indicator</Text>
             <Text style={s.toggleArrow}>{showImpact ? '▾' : '▸'}</Text>
           </View>
 
@@ -169,13 +163,20 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
                 const wr20 = prob.periods?.['20']?.win_rate ?? 50;
                 const combinedWr = tierData?.periods?.['20']?.win_rate ?? 50;
                 const diff = wr20 - combinedWr;
+                const helping = diff < -2;
+                const hurting = diff > 2;
                 return (
                   <View key={key} style={s.impactChip}>
                     <Text style={s.impactChipLabel}>{label}</Text>
                     <Text style={[s.impactChipDiff, {
-                      color: diff > 2 ? colors.bearish : diff < -2 ? colors.bullish : colors.textMuted,
+                      color: helping ? colors.bullish : hurting ? colors.bearish : colors.textMuted,
                     }]}>
                       {diff > 0 ? '+' : ''}{diff.toFixed(0)}%
+                    </Text>
+                    <Text style={[s.impactChipHint, {
+                      color: helping ? colors.bullish : hurting ? colors.bearish : colors.textMuted,
+                    }]}>
+                      {helping ? 'Helps' : hurting ? 'Hurts' : '—'}
                     </Text>
                   </View>
                 );
@@ -202,9 +203,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   bestDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: c.bullish },
   tierSamples: { color: c.textMuted, fontSize: 11, marginTop: 2 },
 
-  bestBanner: { backgroundColor: `${c.bullish}10`, borderRadius: 8, padding: 8, marginBottom: 12, borderWidth: 1, borderColor: `${c.bullish}20` },
-  bestBannerText: { color: c.bullish, fontSize: 11, textAlign: 'center', fontWeight: '500' },
-
   noDataText: { color: c.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: 20 },
 
   section: { marginTop: 12, backgroundColor: c.bgCard, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
@@ -220,6 +218,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   impactChipLabel: { color: c.textMuted, fontSize: 10, fontWeight: '500', marginBottom: 2 },
   impactChipDiff: { fontSize: 14, fontWeight: '700' },
+  impactChipHint: { fontSize: 9, fontWeight: '500', marginTop: 1 },
 
   loadingCard: { backgroundColor: c.bgCard, borderRadius: 12, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: c.border },
   loadingText: { color: c.textSecondary, fontSize: 13, flex: 1 },

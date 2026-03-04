@@ -25,18 +25,18 @@ import { spacing, radius, typography, getDirectionColor, type ThemeColors } from
 const { height: SCREEN_H } = Dimensions.get('window');
 
 const INDICATOR_META: Record<string, { label: string; icon: string }> = {
-  RSI: { label: 'RSI', icon: '📊' },
-  MACD: { label: 'MACD', icon: '📈' },
-  MA: { label: 'MA', icon: '〰️' },
-  BB: { label: 'BB', icon: '🔔' },
-  Vol: { label: 'Vol', icon: '📉' },
-  Stoch: { label: 'Stoch', icon: '⚡' },
-  Drawdown: { label: 'DD', icon: '📉' },
-  ADX: { label: 'ADX', icon: '💪' },
-  MADist: { label: 'MADist', icon: '↔️' },
-  Consec: { label: 'Streak', icon: '🔥' },
-  W52: { label: '52W', icon: '📅' },
-  ATR: { label: 'ATR', icon: '📐' },
+  RSI: { label: 'RSI', icon: '' },
+  MACD: { label: 'MACD', icon: '' },
+  MA: { label: 'MA', icon: '' },
+  BB: { label: 'BB', icon: '' },
+  Vol: { label: 'Vol', icon: '' },
+  Stoch: { label: 'Stoch', icon: '' },
+  Drawdown: { label: 'DD', icon: '' },
+  ADX: { label: 'ADX', icon: '' },
+  MADist: { label: 'MADist', icon: '' },
+  Consec: { label: 'Streak', icon: '' },
+  W52: { label: '52W', icon: '' },
+  ATR: { label: 'ATR', icon: '' },
 };
 
 const ALL_INDICATORS = Object.keys(INDICATOR_META);
@@ -78,7 +78,7 @@ export default function AnalyzeScreen() {
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
-  const slideAnim = useRef(new Animated.Value(SCREEN_H)).current;
+  const scaleAnim = useRef(new Animated.Value(0)).current;
 
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const [data, setData] = useState<AnalysisResponse | null>(null);
@@ -130,18 +130,18 @@ export default function AnalyzeScreen() {
 
   const openModal = (key: string) => {
     setModalIndicator(key);
-    Animated.spring(slideAnim, {
-      toValue: 0,
+    Animated.spring(scaleAnim, {
+      toValue: 1,
       useNativeDriver: true,
       tension: 65,
-      friction: 11,
+      friction: 8,
     }).start();
   };
 
   const closeModal = () => {
-    Animated.timing(slideAnim, {
-      toValue: SCREEN_H,
-      duration: 250,
+    Animated.timing(scaleAnim, {
+      toValue: 0,
+      duration: 200,
       useNativeDriver: true,
     }).start(() => setModalIndicator(null));
   };
@@ -265,7 +265,7 @@ export default function AnalyzeScreen() {
         {/* INDICATORS - tap to open modal */}
         <View style={s.indicatorsSection}>
           <Text style={s.sectionTitle}>INDICATORS</Text>
-          <Text style={s.hintText}>Tap any indicator for detailed analysis</Text>
+          <Text style={s.hintText}>Tap any indicator for details</Text>
 
           <View style={s.cardGrid}>
             {ALL_INDICATORS.map(key => {
@@ -281,7 +281,6 @@ export default function AnalyzeScreen() {
                   ]}
                   onPress={() => openModal(key)}
                 >
-                  <Text style={s.cardIcon}>{meta.icon}</Text>
                   <Text style={s.cardLabel}>{meta.label}</Text>
                   <Text style={s.cardValue}>{value}</Text>
                   {winRate !== null && (
@@ -303,7 +302,7 @@ export default function AnalyzeScreen() {
         </View>
       </ScrollView>
 
-      {/* BOTTOM SHEET MODAL */}
+      {/* CENTERED POPUP MODAL */}
       <Modal
         visible={modalIndicator !== null}
         transparent
@@ -317,18 +316,12 @@ export default function AnalyzeScreen() {
             style={[
               s.modalSheet,
               { paddingBottom: insets.bottom + 16 },
-              { transform: [{ translateY: slideAnim }] },
+              { transform: [{ scale: scaleAnim }], opacity: scaleAnim },
             ]}
           >
-            {/* Handle bar */}
-            <View style={s.modalHandleWrap}>
-              <View style={s.modalHandle} />
-            </View>
-
             {/* Modal header */}
             <View style={s.modalHeader}>
               <View style={s.modalTitleRow}>
-                <Text style={s.modalIcon}>{modalIndicator ? INDICATOR_META[modalIndicator]?.icon : ''}</Text>
                 <Text style={s.modalTitle}>
                   {modalIndicator ? INDICATOR_META[modalIndicator]?.label : ''} Detail
                 </Text>
@@ -442,7 +435,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     minHeight: 90, justifyContent: 'center',
   },
   indicatorCardPressed: { transform: [{ scale: 0.95 }], backgroundColor: c.bgElevated },
-  cardIcon: { fontSize: 16, marginBottom: 2 },
   cardLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '600', marginBottom: 2 },
   cardValue: { color: c.textPrimary, fontSize: 15, fontWeight: '700' },
   winBadge: { marginTop: 4, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
@@ -453,27 +445,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   footerText: { color: c.textMuted, fontSize: 10 },
 
   // Modal
-  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalSheet: {
-    backgroundColor: c.bg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: SCREEN_H * 0.8,
-    minHeight: SCREEN_H * 0.4,
+    backgroundColor: c.bg, borderRadius: 16, width: '100%',
+    maxHeight: SCREEN_H * 0.75, overflow: 'hidden',
   },
-  modalHandleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
-  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: c.border },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: spacing.lg, paddingBottom: spacing.sm,
     borderBottomWidth: 1, borderBottomColor: c.border,
   },
   modalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  modalIcon: { fontSize: 20 },
   modalTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '700' },
   modalCloseBtn: {
     width: 32, height: 32, borderRadius: 16,

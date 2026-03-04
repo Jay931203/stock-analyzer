@@ -96,10 +96,10 @@ const api = {
     return res.data;
   },
 
-  async signals(limit = 8): Promise<SignalsResponse> {
+  async signals(limit = 20): Promise<SignalsResponse> {
     const res = await axios.get(`${BASE_URL}/api/signals`, {
       params: { limit },
-      timeout: 60000,
+      timeout: 120000,
     });
     return res.data;
   },

@@ -7,6 +7,7 @@ import { typography, spacing, radius, getWinRateColor, type ThemeColors } from '
 
 interface Props {
   data: ProbabilityData;
+  compact?: boolean;
 }
 
 const PERIOD_LABELS: Record<string, string> = {
@@ -45,7 +46,7 @@ function friendlyCondition(raw: string): string {
     .replace(/ AND /g, ' + ');
 }
 
-export default function ProbabilityCard({ data }: Props) {
+export default function ProbabilityCard({ data, compact }: Props) {
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const [showCases, setShowCases] = useState(false);
@@ -54,7 +55,7 @@ export default function ProbabilityCard({ data }: Props) {
   if (data.occurrences === 0) {
     return (
       <View style={s.container}>
-        <Text style={s.condition}>{friendlyCondition(data.condition)}</Text>
+        {!compact && <Text style={s.condition}>{friendlyCondition(data.condition)}</Text>}
         <Text style={s.noData}>No historical data available</Text>
       </View>
     );
@@ -71,15 +72,19 @@ export default function ProbabilityCard({ data }: Props) {
 
   return (
     <View style={s.container}>
-      <View style={s.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.condition}>{friendlyCondition(data.condition)}</Text>
-          <Text style={s.occurrences}>{data.occurrences} historical cases</Text>
+      {compact ? (
+        <Text style={s.compactHeader}>{data.occurrences} historical matches</Text>
+      ) : (
+        <View style={s.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.condition}>{friendlyCondition(data.condition)}</Text>
+            <Text style={s.occurrences}>{data.occurrences} historical cases</Text>
+          </View>
+          <View style={[s.signalBadge, { backgroundColor: `${signalColor}15` }]}>
+            <Text style={[s.signalText, { color: signalColor }]}>{signalLabel}</Text>
+          </View>
         </View>
-        <View style={[s.signalBadge, { backgroundColor: `${signalColor}15` }]}>
-          <Text style={[s.signalText, { color: signalColor }]}>{signalLabel}</Text>
-        </View>
-      </View>
+      )}
 
       {data.warning && <Text style={s.warning}>{data.warning}</Text>}
 
@@ -200,6 +205,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   condition: { color: c.textPrimary, ...typography.bodyBold },
   occurrences: { color: c.textMuted, ...typography.labelSm, marginTop: 2 },
+  compactHeader: { color: c.textPrimary, ...typography.bodyBold, marginBottom: spacing.xs },
   signalBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.sm },
   signalText: { ...typography.labelSm, fontWeight: '700' },
   warning: { color: c.warning, ...typography.labelSm, marginTop: spacing.xs, marginBottom: spacing.xs },

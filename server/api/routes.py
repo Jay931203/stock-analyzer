@@ -472,46 +472,31 @@ async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
 
 
 @router.get("/signals")
-async def get_signals(limit: int = Query(8, ge=1, le=20)):
+async def get_signals(limit: int = Query(20, ge=1, le=50)):
     """
-    Scan popular stocks for strongest technical signals.
-    Returns bullish (high win rate) and bearish (low win rate) signals.
-    Cached for 10 minutes.
+    Combined probability for popular stocks.
+    One entry per company, sorted by signal strength.
     """
     now = time.time()
 
     if _signals_cache["data"] and now - _signals_cache["ts"] < _SIGNALS_TTL:
         cached = _signals_cache["data"]
         return {
-            "bullish": cached["bullish"][:limit],
-            "bearish": cached["bearish"][:limit],
+            "signals": cached["signals"][:limit],
             "scanned": cached["scanned"],
             "updated": cached["updated"],
+            "market_state": _get_market_state(),
         }
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor
 
-    all_signals = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = {executor.submit(_scan_ticker_signals, t): t for t in POPULAR_TICKERS}
-        for future in as_completed(futures):
-            try:
-                signals = future.result()
-                all_signals.extend(signals)
-            except Exception:
-                pass
-
-    # Split into bullish / bearish based on actual win rate
-    bullish = [s for s in all_signals if s["win_rate_20d"] > 55 and s["samples"] >= 8]
-    bearish = [s for s in all_signals if s["win_rate_20d"] < 45 and s["samples"] >= 8]
-
-    # Sort by strength (deviation from 50%)
-    bullish.sort(key=lambda x: x["strength"], reverse=True)
-    bearish.sort(key=lambda x: x["strength"], reverse=True)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
+    valid = [r for r in results if r is not None]
+    valid.sort(key=lambda x: x["strength"], reverse=True)
 
     result = {
-        "bullish": bullish,
-        "bearish": bearish,
+        "signals": valid,
         "scanned": len(POPULAR_TICKERS),
         "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
@@ -520,10 +505,10 @@ async def get_signals(limit: int = Query(8, ge=1, le=20)):
     _signals_cache["ts"] = now
 
     return {
-        "bullish": bullish[:limit],
-        "bearish": bearish[:limit],
+        "signals": valid[:limit],
         "scanned": len(POPULAR_TICKERS),
         "updated": result["updated"],
+        "market_state": _get_market_state(),
     }
 
 
@@ -643,6 +628,27 @@ async def available_conditions():
 # ── Helpers ──
 
 
+def _get_market_state() -> str:
+    """Get current US market state based on ET time."""
+    from datetime import timezone, timedelta
+    et = datetime.now(timezone(timedelta(hours=-5)))
+    # Weekend
+    if et.weekday() >= 5:
+        return "CLOSED"
+    hour, minute = et.hour, et.minute
+    t = hour * 60 + minute
+    if t < 240:       # before 4:00 AM
+        return "CLOSED"
+    elif t < 570:     # 4:00 AM - 9:30 AM
+        return "PRE"
+    elif t < 960:     # 9:30 AM - 4:00 PM
+        return "OPEN"
+    elif t < 1200:    # 4:00 PM - 8:00 PM
+        return "AFTER"
+    else:
+        return "CLOSED"
+
+
 def _to_prob_data(result) -> ProbabilityData:
     periods = {}
     for k, v in result.periods.items():
@@ -698,105 +704,118 @@ def _calc_combined(df, states: dict) -> CombinedProbability | None:
     )
 
 
-def _scan_ticker_signals(ticker: str) -> list[dict]:
-    """Scan a single ticker for notable technical signals."""
+def _scan_ticker_combo(ticker: str) -> dict | None:
+    """Get combined probability for a ticker across all available indicators."""
     try:
         df = fetch_price_history(ticker, period="10y")
         if len(df) < 200:
-            return []
+            return None
     except Exception:
-        return []
+        return None
 
     indicators = compute_all_indicators(df)
     states = get_indicator_state(indicators)
 
-    signals = []
     close = df["Close"]
     current_price = float(close.iloc[-1])
     prev_price = float(close.iloc[-2]) if len(close) > 1 else current_price
     change_pct = round((current_price - prev_price) / prev_price * 100, 2) if prev_price else 0
 
-    # Sector lookup
     sector = ""
     for sec, sec_tickers in SECTOR_MAP.items():
         if ticker in sec_tickers:
             sector = sec
             break
 
-    base = {"ticker": ticker, "price": current_price, "change_pct": change_pct, "sector": sector}
-
-    # RSI extremes
+    # Build current_values for smart_matcher
+    current_values = {}
     rsi_val = indicators["rsi"]["value"]
-    if rsi_val is not None and (rsi_val <= 30 or rsi_val >= 70):
-        prob = calc_probability(df, "rsi", rsi_val)
-        tag = "Oversold" if rsi_val <= 30 else "Overbought"
-        signals.append(_build_signal(
-            base, f"RSI {tag}", f"RSI {rsi_val:.1f}", prob,
-        ))
+    if rsi_val is not None:
+        current_values["rsi"] = rsi_val
 
-    # MACD cross
-    macd_event = states.get("macd_event")
-    if macd_event in ("golden_cross", "dead_cross"):
-        prob = calc_probability(df, f"macd_{macd_event}", "")
-        label = "Golden Cross" if macd_event == "golden_cross" else "Dead Cross"
-        signals.append(_build_signal(base, f"MACD {label}", "Histogram crossed zero", prob))
+    macd = indicators["macd"]
+    if macd["histogram"] is not None:
+        current_values["macd_histogram"] = macd["histogram"]
+    current_values["macd_event"] = states.get("macd_event")
 
-    # BB extremes
-    bb_zone = states.get("bb_zone")
-    if bb_zone in ("below_lower", "above_upper"):
-        prob = calc_probability(df, "bb_zone", bb_zone)
-        label = "Below Lower Band" if bb_zone == "below_lower" else "Above Upper Band"
-        signals.append(_build_signal(base, f"BB {label}", f"BB zone: {bb_zone}", prob))
+    current_values["ma_alignment"] = indicators["ma"]["alignment"]
 
-    # Volume spike
-    vol = indicators["volume"]
-    if vol["ratio"] is not None and vol["ratio"] >= 2.0:
-        prob = calc_probability(df, "volume_spike", "")
-        signals.append(_build_signal(
-            base, "Volume Spike", f"{vol['ratio']:.1f}x avg volume", prob,
-        ))
-
-    # Deep drawdown (potential bounce)
     dd = indicators.get("drawdown", {})
-    dd_60 = dd.get("from_60d_high")
-    if dd_60 is not None and dd_60 <= -10:
-        prob = calc_probability(df, "drawdown", dd_60)
-        signals.append(_build_signal(
-            base, "Deep Pullback", f"{dd_60:.1f}% from 60d high", prob,
-        ))
+    if dd.get("from_60d_high") is not None:
+        current_values["drawdown_60d"] = dd["from_60d_high"]
 
-    # Consecutive streak (3+ days)
+    adx_data = indicators.get("adx", {})
+    if adx_data.get("adx") is not None:
+        current_values["adx"] = adx_data["adx"]
+
+    bb = indicators.get("bb", {})
+    if bb.get("position") is not None:
+        current_values["bb_position"] = bb["position"]
+
+    vol = indicators.get("volume", {})
+    if vol.get("ratio") is not None:
+        current_values["volume_ratio"] = vol["ratio"]
+
+    stoch = indicators.get("stochastic", {})
+    if stoch.get("k") is not None:
+        current_values["stoch_k"] = stoch["k"]
+
+    ma_dist = indicators.get("ma_distance", {})
+    if ma_dist.get("from_sma20") is not None:
+        current_values["ma20_distance"] = ma_dist["from_sma20"]
+
     consec = indicators.get("consecutive", {})
-    consec_days = consec.get("days", 0)
-    if abs(consec_days) >= 3:
-        prob = calc_probability(df, "consecutive", consec_days)
-        d = "up" if consec_days > 0 else "down"
-        signals.append(_build_signal(
-            base, f"Streak: {abs(consec_days)}d {d}", f"{abs(consec_days)} consecutive {d} days", prob,
-        ))
+    current_values["consecutive_days"] = consec.get("days", 0)
 
-    return signals
+    w52 = indicators.get("week52_position", {})
+    if w52.get("position_pct") is not None:
+        current_values["w52_position"] = w52["position_pct"]
 
+    # Select all indicators that have valid values
+    selected = []
+    checks = {
+        "rsi": current_values.get("rsi") is not None,
+        "macd": current_values.get("macd_histogram") is not None,
+        "ma": current_values.get("ma_alignment") in ("bullish", "bearish"),
+        "drawdown": current_values.get("drawdown_60d") is not None,
+        "adx": current_values.get("adx") is not None,
+        "bb": current_values.get("bb_position") is not None,
+        "volume": current_values.get("volume_ratio") is not None,
+        "stoch": current_values.get("stoch_k") is not None,
+        "ma_distance": current_values.get("ma20_distance") is not None,
+        "consecutive": abs(current_values.get("consecutive_days", 0)) >= 2,
+        "week52": current_values.get("w52_position") is not None,
+    }
+    selected = [k for k, v in checks.items() if v]
 
-def _build_signal(base: dict, signal_type: str, description: str, prob_result) -> dict:
-    """Build a signal dict from probability result."""
-    p5 = prob_result.periods.get(5, {})
-    p20 = prob_result.periods.get(20, {})
-    wr5 = p5.get("win_rate", 50)
-    wr20 = p20.get("win_rate", 50)
-    # Strength = how far the win rates deviate from 50%
-    strength = round(abs(wr20 - 50) + abs(wr5 - 50), 1)
+    if len(selected) < 2:
+        return None
+
+    result = calc_adaptive_combined(df, selected, current_values)
+    best_tier = result["best_tier"]
+    best = result["tiers"].get(best_tier)
+
+    if not best or best.occurrences < 15:
+        return None
+
+    p5 = best.periods.get(5, {})
+    p20 = best.periods.get(20, {})
+    p60 = best.periods.get(60, {})
 
     return {
-        **base,
-        "signal_type": signal_type,
-        "description": description,
-        "win_rate_5d": wr5,
-        "win_rate_20d": wr20,
-        "avg_return_5d": p5.get("avg_return", 0),
-        "avg_return_20d": p20.get("avg_return", 0),
-        "samples": prob_result.occurrences,
-        "strength": strength,
+        "ticker": ticker,
+        "price": round(current_price, 2),
+        "change_pct": change_pct,
+        "sector": sector,
+        "win_rate_5d": round(p5.get("win_rate", 50), 1),
+        "win_rate_20d": round(p20.get("win_rate", 50), 1),
+        "win_rate_60d": round(p60.get("win_rate", 50), 1),
+        "avg_return_20d": round(p20.get("avg_return", 0), 2),
+        "occurrences": best.occurrences,
+        "condition": best.condition,
+        "indicators_used": len(selected),
+        "strength": round(abs(p20.get("win_rate", 50) - 50) + abs(p5.get("win_rate", 50) - 50), 1),
+        "tier": best_tier,
     }
 
 

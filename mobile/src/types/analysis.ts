@@ -194,19 +194,20 @@ export interface SignalItem {
   price: number;
   change_pct: number;
   sector: string;
-  signal_type: string;
-  description: string;
   win_rate_5d: number;
   win_rate_20d: number;
-  avg_return_5d: number;
+  win_rate_60d: number;
   avg_return_20d: number;
-  samples: number;
+  occurrences: number;
+  condition: string;
+  indicators_used: number;
   strength: number;
+  tier: string;
 }
 
 export interface SignalsResponse {
-  bullish: SignalItem[];
-  bearish: SignalItem[];
+  signals: SignalItem[];
   scanned: number;
   updated: string;
+  market_state: string;
 }
