@@ -73,8 +73,56 @@ function getIndicatorPreview(key: string, data: AnalysisResponse): { value: stri
   }
 }
 
+type IndicatorHighlight = { text: string; type: 'bullish' | 'bearish' };
+
+function getIndicatorHighlights(data: AnalysisResponse): IndicatorHighlight[] {
+  const highlights: IndicatorHighlight[] = [];
+  const ind = data.indicators;
+
+  // RSI
+  if (ind.rsi.value !== null && ind.rsi.value !== undefined) {
+    if (ind.rsi.value > 70) highlights.push({ text: `Overbought (RSI ${ind.rsi.value.toFixed(0)})`, type: 'bearish' });
+    else if (ind.rsi.value < 30) highlights.push({ text: `Oversold (RSI ${ind.rsi.value.toFixed(0)})`, type: 'bullish' });
+  }
+
+  // MACD
+  if (ind.macd.event === 'golden_cross') highlights.push({ text: 'MACD Golden Cross', type: 'bullish' });
+  else if (ind.macd.event === 'dead_cross') highlights.push({ text: 'MACD Dead Cross', type: 'bearish' });
+
+  // MA alignment
+  if (ind.ma.alignment === 'bullish') highlights.push({ text: 'Uptrend (MA aligned)', type: 'bullish' });
+  else if (ind.ma.alignment === 'bearish') highlights.push({ text: 'Downtrend (MA aligned)', type: 'bearish' });
+
+  // Volume spike
+  if (ind.volume.ratio !== null && ind.volume.ratio !== undefined && ind.volume.ratio > 2.0) {
+    highlights.push({ text: `Volume Spike (${ind.volume.ratio.toFixed(1)}x)`, type: 'bullish' });
+  }
+
+  // Drawdown
+  if (ind.drawdown.from_60d_high !== null && ind.drawdown.from_60d_high !== undefined && ind.drawdown.from_60d_high < -20) {
+    highlights.push({ text: `Deep Pullback (${ind.drawdown.from_60d_high.toFixed(0)}%)`, type: 'bearish' });
+  }
+
+  // Consecutive days
+  if (ind.consecutive.days >= 5) highlights.push({ text: `${ind.consecutive.days}-day winning streak`, type: 'bullish' });
+  else if (ind.consecutive.days <= -5) highlights.push({ text: `${Math.abs(ind.consecutive.days)}-day losing streak`, type: 'bearish' });
+
+  // ADX
+  if (ind.adx.adx !== null && ind.adx.adx !== undefined && ind.adx.adx > 40) {
+    highlights.push({ text: 'Very Strong Trend', type: 'bullish' });
+  }
+
+  // Stochastic
+  if (ind.stochastic.k !== null && ind.stochastic.k !== undefined) {
+    if (ind.stochastic.k < 20) highlights.push({ text: 'Stoch Oversold', type: 'bullish' });
+    else if (ind.stochastic.k > 80) highlights.push({ text: 'Stoch Overbought', type: 'bearish' });
+  }
+
+  return highlights.slice(0, 3);
+}
+
 export default function AnalyzeScreen() {
-  const { colors } = useTheme();
+  const { colors, themeMode, cycleTheme } = useTheme();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
@@ -187,14 +235,21 @@ export default function AnalyzeScreen() {
             <Pressable style={s.backBtn} onPress={() => router.back()}>
               <Text style={s.backBtnText}>← Home</Text>
             </Pressable>
-            <Pressable
-              style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
-              onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
-            >
-              <Text style={[s.saveBtnText, inWatchlist && s.saveBtnTextActive]}>
-                {inWatchlist ? '★ Saved' : '☆ Save'}
-              </Text>
-            </Pressable>
+            <View style={s.navRight}>
+              <Pressable onPress={cycleTheme} style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}>
+                <Text style={s.themeBtnIcon}>
+                  {themeMode === 'light' ? '\u2600\uFE0E' : themeMode === 'dark' ? '\u263D' : '\u25A3'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
+                onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
+              >
+                <Text style={[s.saveBtnText, inWatchlist && s.saveBtnTextActive]}>
+                  {inWatchlist ? '★ Saved' : '☆ Save'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
           <Text style={s.tickerLabel}>{ticker_info.ticker}</Text>
@@ -267,6 +322,23 @@ export default function AnalyzeScreen() {
           <Text style={s.sectionTitle}>INDICATORS</Text>
           <Text style={s.hintText}>Tap any indicator for details</Text>
 
+          {/* Indicator highlight pills */}
+          {(() => {
+            const highlights = getIndicatorHighlights(data);
+            if (highlights.length === 0) return null;
+            return (
+              <View style={s.highlightRow}>
+                {highlights.map((h, i) => (
+                  <View key={i} style={[s.highlightPill, { backgroundColor: h.type === 'bullish' ? `${colors.bullish}18` : `${colors.bearish}18` }]}>
+                    <Text style={[s.highlightPillText, { color: h.type === 'bullish' ? colors.bullish : colors.bearish }]}>
+                      {h.text}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
+
           <View style={s.cardGrid}>
             {ALL_INDICATORS.map(key => {
               const { value, winRate } = getIndicatorPreview(key, data);
@@ -297,7 +369,6 @@ export default function AnalyzeScreen() {
         </View>
 
         <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
-          <Text style={s.footerText}>{data.data_range}</Text>
           <Text style={s.footerText}>Updated: {data.analysis_date}</Text>
         </View>
       </ScrollView>
@@ -383,6 +454,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   saveBtnActive: { backgroundColor: c.accentDim, borderColor: c.accent },
   saveBtnText: { color: c.textTertiary, ...typography.labelSm },
   saveBtnTextActive: { color: c.accent },
+  navRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  themeBtn: {
+    paddingVertical: 6, paddingHorizontal: 8, borderRadius: 6,
+  },
+  themeBtnPressed: { backgroundColor: c.bgElevated },
+  themeBtnIcon: { fontSize: 14, color: c.textSecondary },
 
   tickerLabel: { color: c.accent, ...typography.label, letterSpacing: 1 },
   tickerName: { color: c.textTertiary, ...typography.labelSm, marginTop: 1, maxWidth: 280, marginBottom: spacing.xs },
@@ -439,6 +516,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cardValue: { color: c.textPrimary, fontSize: 15, fontWeight: '700' },
   winBadge: { marginTop: 4, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
   cardWinRate: { fontSize: 10, fontWeight: '700' },
+
+  // Highlight pills
+  highlightRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.md },
+  highlightPill: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full,
+  },
+  highlightPillText: { fontSize: 11, fontWeight: '600' },
 
   // Footer
   footer: { alignItems: 'center', paddingVertical: 20, gap: 2 },

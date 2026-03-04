@@ -63,7 +63,7 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
       const res = await api.smartProbability(ticker, selectedIndicators);
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setResult(res);
-      setActiveTier(res.best_tier);
+      setActiveTier('normal');
     } catch (e: any) {
       setError(e.response?.data?.detail ?? e.message ?? 'Failed');
     }

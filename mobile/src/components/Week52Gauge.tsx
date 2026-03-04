@@ -25,6 +25,39 @@ export default function Week52Gauge({ current, low, high, width = 280, distribut
   const positionPct = (clampedPos * 100).toFixed(0);
   const fromHigh = ((1 - clampedPos) * 100).toFixed(0);
 
+  // Distribution histogram computed in the same coordinate space as the position bar.
+  // The usable track spans from markerR to (width - markerR), matching the gauge bar exactly.
+  const distHistogram = useMemo(() => {
+    if (!distribution || distribution.length === 0) return null;
+
+    const trackStart = markerR;
+    const trackWidth = width - markerR * 2;
+    const maxHistHeight = 40; // px, tallest bar height
+    const histGap = 1;       // px gap between bars
+    const maxDays = Math.max(...distribution.map(b => b.days));
+    if (maxDays === 0) return null;
+
+    // Each bin maps its [price_low, price_high] into the track coordinate space.
+    // We clip bins to [low, high] so out-of-range data doesn't overflow.
+    return distribution.map((bin, i) => {
+      // Map prices to x-axis fractions within the 52w range
+      const binLowFrac = range > 0 ? Math.min(Math.max((bin.price_low - low) / range, 0), 1) : 0;
+      const binHighFrac = range > 0 ? Math.min(Math.max((bin.price_high - low) / range, 0), 1) : 1;
+
+      const x = trackStart + binLowFrac * trackWidth;
+      const binWidth = Math.max((binHighFrac - binLowFrac) * trackWidth - histGap, 1);
+      const barH = Math.max((bin.days / maxDays) * maxHistHeight, 2);
+
+      const isCurrentBin =
+        current >= bin.price_low &&
+        (i === distribution.length - 1 ? current <= bin.price_high : current < bin.price_high);
+
+      return { x, binWidth, barH, isCurrentBin, key: i };
+    });
+  }, [distribution, low, high, range, width, current, markerR]);
+
+  const distSvgHeight = 48; // label + histogram bars
+
   return (
     <View style={s.container}>
       <View style={s.header}>
@@ -70,28 +103,25 @@ export default function Week52Gauge({ current, low, high, width = 280, distribut
         </View>
       </View>
 
-      {distribution && distribution.length > 0 && (() => {
-        const maxDays = Math.max(...distribution.map(b => b.days));
-        return (
-          <View style={s.distContainer}>
-            <Text style={s.distLabel}>Price distribution (252d)</Text>
-            <View style={s.distRow}>
-              {distribution.map((bin, i) => {
-                const height = maxDays > 0 ? (bin.days / maxDays) * 36 : 0;
-                const isCurrentBin = current >= bin.price_low && current < bin.price_high;
-                // Include the last bin's upper bound for the highest price
-                const isLastBinCurrent = i === distribution.length - 1 && current === bin.price_high;
-                return (
-                  <View key={i} style={[s.distBar, {
-                    height: Math.max(height, 2),
-                    backgroundColor: (isCurrentBin || isLastBinCurrent) ? colors.accent : `${colors.textMuted}40`,
-                  }]} />
-                );
-              })}
-            </View>
-          </View>
-        );
-      })()}
+      {distHistogram && (
+        <View style={s.distContainer}>
+          <Text style={s.distLabel}>Price distribution (252d)</Text>
+          {/* SVG shares the same width as the gauge so bars line up perfectly */}
+          <Svg width={width} height={distSvgHeight}>
+            {distHistogram.map(({ x, binWidth, barH, isCurrentBin, key }) => (
+              <Rect
+                key={key}
+                x={x}
+                y={distSvgHeight - barH}
+                width={binWidth}
+                height={barH}
+                rx={1}
+                fill={isCurrentBin ? colors.accent : `${colors.textMuted}40`}
+              />
+            ))}
+          </Svg>
+        </View>
+      )}
     </View>
   );
 }
@@ -112,8 +142,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   labelText: { color: c.textMuted, ...typography.labelSm, marginTop: 1 },
   centerLabel: { alignItems: 'center' },
   currentValue: { ...typography.bodyBold },
-  distContainer: { marginTop: 8 },
-  distLabel: { color: c.textMuted, fontSize: 9, marginBottom: 4 },
-  distRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 1, height: 40 },
-  distBar: { flex: 1, borderRadius: 1, minHeight: 2 },
+  distContainer: { marginTop: 8, alignItems: 'center' },
+  distLabel: { color: c.textMuted, fontSize: 9, marginBottom: 4, alignSelf: 'flex-start' },
 });

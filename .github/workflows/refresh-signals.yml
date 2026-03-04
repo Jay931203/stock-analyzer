@@ -1,0 +1,28 @@
+name: Refresh Signals
+
+on:
+  schedule:
+    # Market hours: Mon-Fri 14:00-01:30 UTC (9:00 AM - 8:30 PM ET), every 15 minutes
+    - cron: '0,15,30,45 14-23 * * 1-5'
+    - cron: '0,15,30,45 0 * * 2-6'
+    # 01:15 UTC (last 15-min slot before 01:30 ET close)
+    - cron: '15 1 * * 2-6'
+
+    # Off-hours: Mon-Fri, every hour
+    # Before market (00:00-13:00 UTC)
+    - cron: '0 0-13 * * 1-5'
+    # After market (02:00-23:00 UTC next day boundary handled by 1-5)
+    - cron: '0 2-23 * * 2-6'
+
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Refresh signals
+        run: |
+          curl -sf --max-time 90 \
+            https://stock-analyzer-phi-ten.vercel.app/api/signals/refresh
