@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api, { initServerUrl } from '../src/api/client';
 import type { SearchResult, TrendingStock } from '../src/types/analysis';
 import { getWatchlist, removeFromWatchlist, subscribe, initWatchlist } from '../src/store/watchlist';
@@ -18,12 +19,6 @@ import { spacing, radius, typography, formatNumber, formatVolume, getDirectionCo
 
 type ReturnPeriod = '1D' | '1W' | '1M';
 type SortKey = 'return' | 'volume' | 'market_cap';
-
-const RETURN_PERIOD_SORT: Record<ReturnPeriod, string> = {
-  '1D': 'change_pct',
-  '1W': 'week_return',
-  '1M': 'month_return',
-};
 
 function getReturnValue(stock: TrendingStock, period: ReturnPeriod): number {
   if (period === '1W') return stock.week_return ?? 0;
@@ -96,8 +91,15 @@ function getSimilarTickers(ticker: string): string[] {
   return SIMILAR_TICKERS[upper] ?? [];
 }
 
+function getMarketLabel(state?: string): string {
+  if (state === 'PRE') return 'PRE';
+  if (state === 'POST' || state === 'POSTPOST') return 'AFTER';
+  return '';
+}
+
 export default function HomeScreen() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -105,7 +107,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [serverOk, setServerOk] = useState<boolean | null>(null);
   const [watchlist, setWatchlist] = useState(getWatchlist());
-  const [trending, setTrending] = useState<TrendingStock[]>([]);
+  const [allStocks, setAllStocks] = useState<TrendingStock[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(false);
   const [returnPeriod, setReturnPeriod] = useState<ReturnPeriod>('1D');
   const [sortKey, setSortKey] = useState<SortKey>('return');
@@ -113,6 +115,25 @@ export default function HomeScreen() {
   const [sectorFilter, setSectorFilter] = useState('All');
   const [sectors, setSectors] = useState<string[]>(['All']);
   const debounce = useRef<ReturnType<typeof setTimeout>>(null);
+
+  // Client-side sort + filter (instant, no API call)
+  const trending = useMemo(() => {
+    let list = sectorFilter === 'All'
+      ? allStocks
+      : allStocks.filter(s => s.sector === sectorFilter);
+
+    const getSortVal = (s: TrendingStock) => {
+      if (sortKey === 'volume') return s.volume ?? 0;
+      if (sortKey === 'market_cap') return s.market_cap ?? 0;
+      return getReturnValue(s, returnPeriod);
+    };
+
+    list = [...list].sort((a, b) => {
+      const diff = getSortVal(a) - getSortVal(b);
+      return sortAsc ? diff : -diff;
+    });
+    return list.slice(0, 15);
+  }, [allStocks, sectorFilter, sortKey, sortAsc, returnPeriod]);
 
   useEffect(() => {
     async function init() {
@@ -130,43 +151,23 @@ export default function HomeScreen() {
     return subscribe(() => setWatchlist(getWatchlist()));
   }, []);
 
-  const loadTrending = async (
-    period = returnPeriod,
-    key = sortKey,
-    asc = sortAsc,
-    sector = sectorFilter,
-  ) => {
+  const loadTrending = async () => {
     setTrendingLoading(true);
     try {
-      const sort = key === 'return' ? RETURN_PERIOD_SORT[period] : key;
-      const res = await api.trending(sort, 15, sector, asc ? 'asc' : 'desc');
-      setTrending(res.stocks);
+      const res = await api.trending('change_pct', 50, 'All', 'desc');
+      setAllStocks(res.stocks);
     } catch {}
     setTrendingLoading(false);
   };
 
-  // Fix: single function for period + sort to avoid double API call
   const changeReturnPeriod = (p: ReturnPeriod) => {
     setReturnPeriod(p);
     setSortKey('return');
-    loadTrending(p, 'return', sortAsc, sectorFilter);
   };
 
-  const changeSortKey = (key: SortKey) => {
-    setSortKey(key);
-    loadTrending(returnPeriod, key, sortAsc, sectorFilter);
-  };
-
-  const toggleSortOrder = () => {
-    const newAsc = !sortAsc;
-    setSortAsc(newAsc);
-    loadTrending(returnPeriod, sortKey, newAsc, sectorFilter);
-  };
-
-  const changeSector = (sector: string) => {
-    setSectorFilter(sector);
-    loadTrending(returnPeriod, sortKey, sortAsc, sector);
-  };
+  const changeSortKey = (key: SortKey) => setSortKey(key);
+  const toggleSortOrder = () => setSortAsc(prev => !prev);
+  const changeSector = (sector: string) => setSectorFilter(sector);
 
   const handleSearch = useCallback((text: string) => {
     setQuery(text);
@@ -307,6 +308,7 @@ export default function HomeScreen() {
         {/* Stock list */}
         {trending.map((stock, i) => {
           const ret = getReturnValue(stock, returnPeriod);
+          const mktLabel = getMarketLabel(stock.market_state);
           return (
             <Pressable key={stock.ticker} style={s.stockCard} onPress={() => goToAnalysis(stock.ticker)}>
               <View style={s.stockRank}>
@@ -318,7 +320,10 @@ export default function HomeScreen() {
                     <Text style={s.stockTicker}>{stock.ticker}</Text>
                     {stock.sector ? <Text style={s.sectorTag}>{stock.sector}</Text> : null}
                   </View>
-                  <Text style={s.stockPrice}>${stock.price.toFixed(2)}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {mktLabel ? <Text style={s.marketTag}>{mktLabel}</Text> : null}
+                    <Text style={s.stockPrice}>${stock.price.toFixed(2)}</Text>
+                  </View>
                 </View>
                 <View style={s.stockRow2}>
                   <Text style={s.stockName} numberOfLines={1}>{stock.name}</Text>
@@ -360,7 +365,7 @@ export default function HomeScreen() {
   return (
     <View style={s.container}>
       {/* Top bar */}
-      <View style={s.topBar}>
+      <View style={[s.topBar, { paddingTop: insets.top + 4 }]}>
         <View style={s.topBarLeft}>
           <View style={[s.statusDot, { backgroundColor: serverOk === true ? colors.success : serverOk === false ? colors.error : colors.textMuted }]} />
           <Text style={s.statusText}>
@@ -511,6 +516,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   stockRow1: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   stockTicker: { color: c.textPrimary, ...typography.bodyBold },
   sectorTag: { color: c.textMuted, fontSize: 9, fontStyle: 'italic' },
+  marketTag: { color: c.warning, fontSize: 8, fontWeight: '700', backgroundColor: `${c.warning}15`, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, overflow: 'hidden' },
   stockPrice: { color: c.textPrimary, ...typography.number },
   stockRow2: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2,

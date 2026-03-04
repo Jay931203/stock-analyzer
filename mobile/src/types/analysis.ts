@@ -186,4 +186,5 @@ export interface TrendingStock {
   week_return: number;
   month_return: number;
   sector: string;
+  market_state?: string;
 }

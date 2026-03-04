@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
 
@@ -24,7 +25,7 @@ function InnerLayout() {
         />
         <Stack.Screen
           name="analyze/[ticker]"
-          options={{ title: 'Analysis' }}
+          options={{ title: 'Analysis', headerShown: false }}
         />
         <Stack.Screen
           name="settings"
@@ -38,9 +39,11 @@ function InnerLayout() {
 export default function RootLayout() {
   return (
     <ErrorBoundary>
-      <ThemeProvider>
-        <InnerLayout />
-      </ThemeProvider>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <InnerLayout />
+        </ThemeProvider>
+      </SafeAreaProvider>
     </ErrorBoundary>
   );
 }

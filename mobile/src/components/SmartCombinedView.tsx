@@ -10,7 +10,7 @@ import {
   UIManager,
 } from 'react-native';
 import api from '../api/client';
-import type { SmartProbabilityResult, ProbabilityData } from '../types/analysis';
+import type { SmartProbabilityResult } from '../types/analysis';
 import ProbabilityCard from './ProbabilityCard';
 import { useTheme } from '../contexts/ThemeContext';
 import { spacing, radius, typography, type ThemeColors } from '../theme';
@@ -30,13 +30,6 @@ const TIER_LABELS: Record<string, { label: string; desc: string }> = {
   relaxed: { label: 'Relaxed', desc: 'Wide range match' },
 };
 
-const COMP_PERIODS = [
-  { key: '5', label: '5D' },
-  { key: '20', label: '1M' },
-  { key: '60', label: '3M' },
-  { key: '252', label: '1Y' },
-];
-
 const INDICATOR_LABELS: Record<string, string> = {
   rsi: 'RSI', macd: 'MACD', ma: 'MA', drawdown: 'Drawdown', adx: 'ADX',
   bb: 'Bollinger', volume: 'Volume', stoch: 'Stochastic',
@@ -52,7 +45,6 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
   const [error, setError] = useState<string | null>(null);
   const [activeTier, setActiveTier] = useState<string>('');
   const [showImpact, setShowImpact] = useState(false);
-  const [showIndividuals, setShowIndividuals] = useState(false);
   const prevKey = useRef('');
 
   const selectionKey = selectedIndicators.sort().join(',');
@@ -122,27 +114,10 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
 
   return (
     <View style={s.container}>
-      {/* Header */}
-      <View style={s.header}>
-        <View style={s.headerLeft}>
-          <Text style={s.headerTitle}>Combined Analysis</Text>
-          <Text style={s.headerSub}>
-            {selectedIndicators.length} indicators | {result.data_days} days of data
-          </Text>
-        </View>
-        <Pressable style={s.refreshBtn} onPress={loadSmartProbability}>
-          <Text style={s.refreshText}>Refresh</Text>
-        </Pressable>
-      </View>
-
-      {/* Active conditions */}
-      <View style={s.conditionsRow}>
-        {result.selected.map(key => (
-          <View key={key} style={s.conditionChip}>
-            <Text style={s.conditionText}>{INDICATOR_LABELS[key] ?? key}</Text>
-          </View>
-        ))}
-      </View>
+      {/* Summary line */}
+      <Text style={s.summaryText}>
+        {selectedIndicators.length} indicators | {result.data_days} days of data
+      </Text>
 
       {/* Tier selector */}
       {availableTiers.length > 1 && (
@@ -230,84 +205,13 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
         </View>
       )}
 
-      {/* Individual Comparison */}
-      {Object.keys(result.individuals).length > 0 && (
-        <View style={s.section}>
-          <Pressable style={s.sectionToggle}
-            onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowIndividuals(!showIndividuals); }}
-          >
-            <Text style={s.sectionTitle}>Individual vs Combined</Text>
-            <Text style={s.toggleArrow}>{showIndividuals ? 'v' : '>'}</Text>
-          </Pressable>
-
-          {showIndividuals && (
-            <View style={s.comparisonGrid}>
-              {tierData && (
-                <View style={[s.comparisonRow, s.comparisonBaseline]}>
-                  <Text style={s.compLabel}>Combined</Text>
-                  <View style={s.compStats}>
-                    {COMP_PERIODS.map(({ key, label }) => {
-                      const stats = tierData.periods?.[key];
-                      if (!stats) return null;
-                      return (
-                        <View key={key} style={s.compPeriod}>
-                          <Text style={s.compPeriodLabel}>{label}</Text>
-                          <Text style={[s.compWinRate, { color: stats.win_rate >= 55 ? colors.bullish : stats.win_rate <= 45 ? colors.bearish : colors.textSecondary }]}>
-                            {stats.win_rate.toFixed(0)}%
-                          </Text>
-                          <Text style={[s.compAvgReturn, { color: stats.avg_return >= 0 ? colors.bullish : colors.bearish }]}>
-                            {stats.avg_return >= 0 ? '+' : ''}{stats.avg_return.toFixed(1)}%
-                          </Text>
-                        </View>
-                      );
-                    })}
-                    <Text style={s.compSamples}>n={tierData.occurrences}</Text>
-                  </View>
-                </View>
-              )}
-
-              {Object.entries(result.individuals).map(([key, prob]) => (
-                <View key={key} style={s.comparisonRow}>
-                  <Text style={s.compLabel}>{INDICATOR_LABELS[key] ?? key}</Text>
-                  <View style={s.compStats}>
-                    {COMP_PERIODS.map(({ key: pKey, label }) => {
-                      const stats = prob.periods?.[pKey];
-                      if (!stats) return null;
-                      return (
-                        <View key={pKey} style={s.compPeriod}>
-                          <Text style={s.compPeriodLabel}>{label}</Text>
-                          <Text style={[s.compWinRate, { color: stats.win_rate >= 55 ? colors.bullish : stats.win_rate <= 45 ? colors.bearish : colors.textSecondary }]}>
-                            {stats.win_rate.toFixed(0)}%
-                          </Text>
-                          <Text style={[s.compAvgReturn, { color: stats.avg_return >= 0 ? colors.bullish : colors.bearish }]}>
-                            {stats.avg_return >= 0 ? '+' : ''}{stats.avg_return.toFixed(1)}%
-                          </Text>
-                        </View>
-                      );
-                    })}
-                    <Text style={s.compSamples}>n={prob.occurrences}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
     </View>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   container: { marginBottom: 16 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  headerLeft: {},
-  headerTitle: { color: c.textPrimary, fontSize: 16, fontWeight: '700' },
-  headerSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
-  refreshBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: c.bgCard, borderWidth: 1, borderColor: c.border },
-  refreshText: { color: c.accent, fontSize: 12, fontWeight: '500' },
-  conditionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
-  conditionChip: { backgroundColor: c.accentDim, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
-  conditionText: { color: c.accent, fontSize: 12, fontWeight: '500' },
+  summaryText: { color: c.textMuted, fontSize: 11, marginBottom: 10 },
 
   tierSelector: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   tierBtn: { flex: 1, backgroundColor: c.bgCard, borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: c.border },
@@ -339,18 +243,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   impactWinRate: { fontSize: 13, fontWeight: '700' },
   impactAvg: { fontSize: 10, marginTop: 1 },
   impactDiff: { fontSize: 9, fontWeight: '600', marginTop: 1 },
-
-  // Comparison
-  comparisonGrid: { paddingHorizontal: 14, paddingBottom: 14, gap: 6 },
-  comparisonRow: { backgroundColor: c.bg, borderRadius: 8, padding: 10 },
-  comparisonBaseline: { backgroundColor: `${c.accent}08`, borderWidth: 1, borderColor: `${c.accent}20` },
-  compLabel: { color: c.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 },
-  compStats: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  compPeriod: { alignItems: 'center' },
-  compPeriodLabel: { color: c.textMuted, fontSize: 10, fontWeight: '500' },
-  compWinRate: { fontSize: 14, fontWeight: '700' },
-  compAvgReturn: { color: c.textSecondary, fontSize: 10 },
-  compSamples: { color: c.textMuted, fontSize: 10, marginLeft: 'auto' },
 
   loadingCard: { backgroundColor: c.bgCard, borderRadius: 12, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: c.border },
   loadingText: { color: c.textSecondary, fontSize: 13, flex: 1 },

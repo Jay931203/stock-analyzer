@@ -8,30 +8,30 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../src/api/client';
 import type { AnalysisResponse } from '../../src/types/analysis';
 import IndicatorCard from '../../src/components/IndicatorCard';
-import CombinedTab from '../../src/components/CombinedTab';
 import SmartCombinedView from '../../src/components/SmartCombinedView';
 import Week52Gauge from '../../src/components/Week52Gauge';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../../src/store/watchlist';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../../src/theme';
 
-const INDICATOR_META: Record<string, { label: string; short: string }> = {
-  RSI: { label: 'RSI', short: 'Momentum' },
-  MACD: { label: 'MACD', short: 'Trend' },
-  MA: { label: 'MA', short: 'Moving Avg' },
-  BB: { label: 'BB', short: 'Bollinger' },
-  Vol: { label: 'Volume', short: 'Volume' },
-  Stoch: { label: 'Stoch', short: 'Stochastic' },
-  Drawdown: { label: 'DD', short: 'Drawdown' },
-  ADX: { label: 'ADX', short: 'Trend Str' },
-  MADist: { label: 'MA Dist', short: 'MA Gap' },
-  Consec: { label: 'Consec', short: 'Streak' },
-  W52: { label: '52W', short: '52-Week' },
-  ATR: { label: 'ATR', short: 'Volatility' },
+const INDICATOR_META: Record<string, { label: string }> = {
+  RSI: { label: 'RSI' },
+  MACD: { label: 'MACD' },
+  MA: { label: 'MA' },
+  BB: { label: 'BB' },
+  Vol: { label: 'Vol' },
+  Stoch: { label: 'Stoch' },
+  Drawdown: { label: 'DD' },
+  ADX: { label: 'ADX' },
+  MADist: { label: 'MADist' },
+  Consec: { label: 'Streak' },
+  W52: { label: '52W' },
+  ATR: { label: 'ATR' },
 };
 
 const ALL_INDICATORS = Object.keys(INDICATOR_META);
@@ -70,20 +70,23 @@ function getIndicatorPreview(key: string, data: AnalysisResponse): { value: stri
 
 export default function AnalyzeScreen() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
+  const router = useRouter();
 
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
-  const navigation = useNavigation();
   const [data, setData] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [combinedIndicators, setCombinedIndicators] = useState<Set<string>>(
+    new Set(['RSI', 'MACD', 'MA', 'BB', 'Vol']),
+  );
   const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(isInWatchlist(ticker ?? ''));
-  const [period, setPeriod] = useState<string>('2y');
+  const [period, setPeriod] = useState<string>('10y');
 
   useEffect(() => {
-    navigation.setOptions({ title: ticker?.toUpperCase() ?? 'Analysis' });
     loadData();
     const interval = setInterval(() => refreshData(), 5 * 60 * 1000);
     return () => clearInterval(interval);
@@ -109,6 +112,15 @@ export default function AnalyzeScreen() {
     await refreshData();
     setRefreshing(false);
   }, [ticker, period]);
+
+  const toggleCombinedIndicator = (key: string) => {
+    setCombinedIndicators(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const toggleExpand = (key: string) => {
     setExpandedIndicator(prev => prev === key ? null : key);
@@ -136,6 +148,7 @@ export default function AnalyzeScreen() {
   }
 
   const { ticker_info, price, indicators } = data;
+  const activeForCombined = ALL_INDICATORS.filter(k => combinedIndicators.has(k) && k !== 'ATR');
 
   return (
     <View style={s.container}>
@@ -148,14 +161,13 @@ export default function AnalyzeScreen() {
           />
         }
       >
-        {/* HEADER + COMBINED ANALYSIS (same background) */}
-        <View style={s.headerBlock}>
-          {/* Price info */}
-          <View style={s.headerTop}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.tickerLabel}>{ticker_info.ticker}</Text>
-              <Text style={s.tickerName} numberOfLines={1}>{ticker_info.name}</Text>
-            </View>
+        {/* HEADER + COMBINED (one block) */}
+        <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
+          {/* Back button + ticker */}
+          <View style={s.navRow}>
+            <Pressable style={s.backBtn} onPress={() => router.back()}>
+              <Text style={s.backBtnText}>← Home</Text>
+            </Pressable>
             <Pressable
               style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
               onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
@@ -165,6 +177,10 @@ export default function AnalyzeScreen() {
               </Text>
             </Pressable>
           </View>
+
+          {/* Ticker + price */}
+          <Text style={s.tickerLabel}>{ticker_info.ticker}</Text>
+          <Text style={s.tickerName} numberOfLines={1}>{ticker_info.name}</Text>
 
           <View style={s.priceRow}>
             <Text style={s.priceValue}>${price.current.toFixed(2)}</Text>
@@ -189,29 +205,52 @@ export default function AnalyzeScreen() {
             <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} />
           )}
 
+          {/* Backtest period */}
           <View style={s.periodRow}>
             <Text style={s.periodLabel}>Backtest</Text>
-            {['3m', '6m', '1y', '2y', '5y', '10y'].map((p) => (
+            {['6m', '1y', '2y', '5y', '10y'].map((p) => (
               <Pressable key={p} style={[s.periodPill, period === p && s.periodPillActive]} onPress={() => setPeriod(p)}>
                 <Text style={[s.periodPillText, period === p && s.periodPillTextActive]}>{p.toUpperCase()}</Text>
               </Pressable>
             ))}
           </View>
 
-          {/* COMBINED ANALYSIS - always visible, same background */}
+          {/* COMBINED ANALYSIS */}
           <View style={s.combinedSection}>
             <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
-            <SmartCombinedView ticker={ticker!} selectedIndicators={ALL_INDICATORS} />
-            <View style={{ marginTop: spacing.md }}>
-              <CombinedTab data={data} />
+            <Text style={s.hintText}>Toggle indicators to include/exclude from combined analysis</Text>
+
+            {/* Indicator toggle chips */}
+            <View style={s.toggleRow}>
+              {ALL_INDICATORS.filter(k => k !== 'ATR').map(key => {
+                const active = combinedIndicators.has(key);
+                return (
+                  <Pressable
+                    key={key}
+                    style={[s.toggleChip, active && s.toggleChipActive]}
+                    onPress={() => toggleCombinedIndicator(key)}
+                  >
+                    <Text style={[s.toggleChipText, active && s.toggleChipTextActive]}>
+                      {INDICATOR_META[key].label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
+
+            {/* Smart combined result */}
+            {activeForCombined.length >= 2 ? (
+              <SmartCombinedView ticker={ticker!} selectedIndicators={activeForCombined} />
+            ) : (
+              <Text style={s.hintText}>Enable at least 2 indicators for combined analysis</Text>
+            )}
           </View>
         </View>
 
-        {/* INDICATORS - separate section with different background */}
+        {/* INDICATORS - separate section */}
         <View style={s.indicatorsSection}>
-          <Text style={s.sectionTitle}>INDICATORS</Text>
-          <Text style={s.hintText}>Tap any indicator for detailed analysis</Text>
+          <Text style={s.sectionTitle}>INDICATOR DETAILS</Text>
+          <Text style={s.hintText}>Tap for detailed analysis with historical probability</Text>
 
           <View style={s.cardGrid}>
             {ALL_INDICATORS.map(key => {
@@ -277,14 +316,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   retryBtnText: { color: c.accent, ...typography.bodyBold },
 
-  // Header + Combined = one block with bgCard
+  // Header block
   headerBlock: {
-    backgroundColor: c.bgCard, paddingHorizontal: spacing.lg, paddingTop: spacing.lg,
-    paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: c.border,
+    backgroundColor: c.bgCard, paddingHorizontal: spacing.lg, paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.xs },
-  tickerLabel: { color: c.accent, ...typography.label, letterSpacing: 1 },
-  tickerName: { color: c.textTertiary, ...typography.labelSm, marginTop: 1, maxWidth: 250 },
+  navRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  backBtn: { paddingVertical: 4 },
+  backBtnText: { color: c.accent, fontSize: 14, fontWeight: '600' },
   saveBtn: {
     paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.sm,
     borderWidth: 1, borderColor: c.borderLight, backgroundColor: c.bgElevated,
@@ -292,6 +334,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   saveBtnActive: { backgroundColor: c.accentDim, borderColor: c.accent },
   saveBtnText: { color: c.textTertiary, ...typography.labelSm },
   saveBtnTextActive: { color: c.accent },
+
+  tickerLabel: { color: c.accent, ...typography.label, letterSpacing: 1 },
+  tickerName: { color: c.textTertiary, ...typography.labelSm, marginTop: 1, maxWidth: 280, marginBottom: spacing.xs },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   priceValue: { color: c.textPrimary, ...typography.numberLg },
   changeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm },
@@ -306,26 +351,32 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   periodRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.sm, marginBottom: spacing.md },
   periodLabel: { color: c.textMuted, fontSize: 10, marginRight: 2 },
   periodPill: {
-    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: 'transparent',
   },
   periodPillActive: { borderColor: c.accent, backgroundColor: c.accentDim },
   periodPillText: { color: c.textMuted, fontSize: 10, fontWeight: '600' },
   periodPillTextActive: { color: c.accent },
 
-  // Combined section inside headerBlock
+  // Combined section
   combinedSection: {
-    marginTop: spacing.sm, paddingTop: spacing.md,
-    borderTopWidth: 1, borderTopColor: c.border,
+    paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: c.border,
   },
-
-  sectionTitle: { color: c.textTertiary, ...typography.label, marginBottom: spacing.sm },
+  sectionTitle: { color: c.textTertiary, ...typography.label, marginBottom: spacing.xs },
   hintText: { color: c.textMuted, fontSize: 11, marginBottom: spacing.sm },
 
-  // Indicators - separate section on bg (not bgCard)
-  indicatorsSection: {
-    padding: spacing.lg, paddingTop: spacing.lg,
+  // Indicator toggle chips
+  toggleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: spacing.md },
+  toggleChip: {
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.full,
+    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
   },
+  toggleChipActive: { backgroundColor: c.accentDim, borderColor: c.accent },
+  toggleChipText: { color: c.textMuted, fontSize: 11, fontWeight: '500' },
+  toggleChipTextActive: { color: c.accent, fontWeight: '600' },
+
+  // Indicators section
+  indicatorsSection: { padding: spacing.lg, paddingTop: spacing.lg },
 
   cardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   indicatorCard: {
@@ -347,6 +398,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   closeBtn: { color: c.accent, fontSize: 12, fontWeight: '600' },
 
-  footer: { alignItems: 'center', paddingVertical: 20, paddingBottom: 40, gap: 2 },
+  footer: { alignItems: 'center', paddingVertical: 20, paddingBottom: 50, gap: 2 },
   footerText: { color: c.textMuted, fontSize: 10 },
 });

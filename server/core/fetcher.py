@@ -136,8 +136,18 @@ def _yahoo_direct_quote(ticker: str) -> dict | None:
     if not closes:
         return None
 
-    close = closes[-1]
-    prev_close = closes[-2] if len(closes) > 1 else close
+    reg_close = closes[-1]
+    prev_close = closes[-2] if len(closes) > 1 else reg_close
+
+    # Use pre/post market price when available
+    market_state = meta.get("marketState", "REGULAR")
+    if market_state == "PRE" and meta.get("preMarketPrice"):
+        close = meta["preMarketPrice"]
+    elif market_state in ("POST", "POSTPOST") and meta.get("postMarketPrice"):
+        close = meta["postMarketPrice"]
+    else:
+        close = meta.get("regularMarketPrice") or reg_close
+
     change = close - prev_close
     change_pct = (change / prev_close * 100) if prev_close else 0
 
@@ -160,6 +170,7 @@ def _yahoo_direct_quote(ticker: str) -> dict | None:
         "week_return": round(week_return, 2),
         "month_return": round(month_return, 2),
         "sector": "",
+        "market_state": market_state,
     }
 
 
@@ -254,8 +265,18 @@ def fetch_quick_quote(ticker: str) -> dict | None:
         hist = stock.history(period="1mo", interval="1d")
 
         if not hist.empty:
-            close = float(hist["Close"].iloc[-1])
-            prev_close = float(hist["Close"].iloc[-2]) if len(hist) > 1 else close
+            reg_close = float(hist["Close"].iloc[-1])
+            prev_close = float(hist["Close"].iloc[-2]) if len(hist) > 1 else reg_close
+
+            # Use pre/post market price when available
+            market_state = info.get("marketState", "REGULAR")
+            if market_state == "PRE" and info.get("preMarketPrice"):
+                close = float(info["preMarketPrice"])
+            elif market_state in ("POST", "POSTPOST") and info.get("postMarketPrice"):
+                close = float(info["postMarketPrice"])
+            else:
+                close = float(info.get("regularMarketPrice") or reg_close)
+
             change = close - prev_close
             change_pct = (change / prev_close * 100) if prev_close else 0
 
@@ -278,6 +299,7 @@ def fetch_quick_quote(ticker: str) -> dict | None:
                 "week_return": round(week_return, 2),
                 "month_return": round(month_return, 2),
                 "sector": info.get("sector", ""),
+                "market_state": market_state,
             }
     except Exception:
         pass

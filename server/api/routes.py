@@ -453,7 +453,7 @@ async def get_sectors():
 @router.get("/trending")
 async def trending_stocks(
     sort: str = Query("change_pct", description="Sort by: change_pct, volume, market_cap, week_return, month_return"),
-    limit: int = Query(10, ge=1, le=20),
+    limit: int = Query(10, ge=1, le=50),
     sector: str = Query("All", description="Filter by sector"),
     order: str = Query("desc", description="Sort order: asc or desc"),
 ):
