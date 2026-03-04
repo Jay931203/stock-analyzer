@@ -26,6 +26,9 @@ Thumbs.db
 *.apk
 *.aab
 
+# Environment variables
+server/.env
+
 # Vercel build output
 public/
 .github/

@@ -11,6 +11,7 @@ from ..core.backtester import calc_combined_probability, calc_probability
 from ..core.fetcher import fetch_batch_quotes, fetch_price_history, get_ticker_info, search_tickers
 from ..core.presets import get_preset, list_presets, PRESETS
 from ..core.smart_matcher import calc_adaptive_combined
+from ..core.supabase_cache import read_cached_signals, write_cached_signals
 from .schemas import (
     ADXData,
     ATRData,
@@ -475,10 +476,11 @@ async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
 async def get_signals(limit: int = Query(20, ge=1, le=50)):
     """
     Combined probability for popular stocks.
-    One entry per company, sorted by signal strength.
+    Uses Supabase cache for fast loading, falls back to computation.
     """
     now = time.time()
 
+    # 1. Try in-memory cache first (fastest)
     if _signals_cache["data"] and now - _signals_cache["ts"] < _SIGNALS_TTL:
         cached = _signals_cache["data"]
         return {
@@ -488,6 +490,20 @@ async def get_signals(limit: int = Query(20, ge=1, le=50)):
             "market_state": _get_market_state(),
         }
 
+    # 2. Try Supabase cache (fast, survives cold starts)
+    supabase_data = read_cached_signals()
+    if supabase_data:
+        # Populate in-memory cache too
+        _signals_cache["data"] = supabase_data
+        _signals_cache["ts"] = now
+        return {
+            "signals": supabase_data["signals"][:limit],
+            "scanned": supabase_data["scanned"],
+            "updated": supabase_data["updated"],
+            "market_state": _get_market_state(),
+        }
+
+    # 3. Full computation (slow, only on cache miss)
     from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor(max_workers=6) as pool:
@@ -501,8 +517,10 @@ async def get_signals(limit: int = Query(20, ge=1, le=50)):
         "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
 
+    # Save to both caches
     _signals_cache["data"] = result
     _signals_cache["ts"] = now
+    write_cached_signals(valid)  # Persist to Supabase
 
     return {
         "signals": valid[:limit],

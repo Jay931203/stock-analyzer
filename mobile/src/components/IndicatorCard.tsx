@@ -28,7 +28,7 @@ function getStyles(c: ThemeColors) {
 export default function IndicatorCard({ type, data }: Props) {
   const { colors } = useTheme();
   const s = getStyles(colors);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   const toggle = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

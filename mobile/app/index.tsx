@@ -114,62 +114,82 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Signal Rankings */}
-      <View style={s.sectionContainer}>
-        <View style={s.sectionHeader}>
-          <Text style={s.sectionLabel}>SIGNAL RANKINGS</Text>
-          {signalsLoading && <ActivityIndicator size="small" color={colors.accent} />}
+      {/* Loading skeleton */}
+      {signalsLoading && signals.length === 0 && (
+        <View style={s.sectionContainer}>
+          <Text style={s.sectionLabel}>LOADING...</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {[0,1,2,3].map(i => (
+              <View key={i} style={[s.signalCard, { opacity: 0.4 }]}>
+                <View style={{ width: 50, height: 14, borderRadius: 4, backgroundColor: colors.bgElevated, marginBottom: 8 }} />
+                <View style={{ width: 70, height: 24, borderRadius: 4, backgroundColor: colors.bgElevated }} />
+              </View>
+            ))}
+          </ScrollView>
         </View>
-        <Text style={s.sectionSubtitle}>
-          {scannedCount} stocks analyzed
-        </Text>
+      )}
 
-        {signalsLoading && signals.length === 0 && (
-          [0,1,2,3,4].map(i => (
-            <View key={i} style={[s.signalRow, { opacity: 0.5 }]}>
-              <View style={{ width: '40%', height: 12, borderRadius: 4, backgroundColor: colors.bgElevated }} />
+      {/* Bullish Signals */}
+      {(() => {
+        const bullish = signals.filter(s => s.win_rate_20d >= 55)
+          .sort((a, b) => b.win_rate_20d - a.win_rate_20d);
+        if (bullish.length === 0) return null;
+        return (
+          <View style={s.sectionContainer}>
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionLabel}>BULLISH</Text>
+              <Text style={s.sectionCount}>{bullish.length}</Text>
             </View>
-          ))
-        )}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
+              {bullish.map((sig) => (
+                <Pressable key={sig.ticker} style={({ pressed }) => [s.signalCard, pressed && { transform: [{ scale: 0.96 }] }]} onPress={() => goToAnalysis(sig.ticker)}>
+                  <Text style={s.cardTicker}>{sig.ticker}</Text>
+                  <Text style={s.cardPrice}>${sig.price.toFixed(2)}</Text>
+                  <Text style={[s.cardChange, { color: getDirectionColor(sig.change_pct, colors) }]}>
+                    {sig.change_pct >= 0 ? '+' : ''}{sig.change_pct.toFixed(1)}%
+                  </Text>
+                  <Text style={[s.cardWinRate, { color: colors.bullish }]}>
+                    {sig.win_rate_20d.toFixed(0)}%
+                  </Text>
+                  <Text style={s.cardPeriod}>1M</Text>
+                  <Text style={s.cardCases}>{sig.occurrences} cases</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        );
+      })()}
 
-        {signals.map((sig, i) => {
-          const isBullish = sig.win_rate_20d >= 55;
-          const isBearish = sig.win_rate_20d <= 45;
-          const accentColor = isBullish ? colors.bullish : isBearish ? colors.bearish : colors.textMuted;
-          return (
-            <Pressable
-              key={sig.ticker}
-              style={({ pressed }) => [s.signalRow, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
-              onPress={() => goToAnalysis(sig.ticker)}
-            >
-              {/* Left side */}
-              <View style={s.signalLeft}>
-                <View style={[s.rankBadge, { backgroundColor: `${accentColor}15` }]}>
-                  <Text style={[s.rankText, { color: accentColor }]}>{i + 1}</Text>
-                </View>
-                <View>
-                  <Text style={s.signalTicker}>{sig.ticker}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={s.signalPrice}>${sig.price.toFixed(2)}</Text>
-                    <Text style={[s.signalChange, { color: getDirectionColor(sig.change_pct, colors) }]}>
-                      {sig.change_pct >= 0 ? '+' : ''}{sig.change_pct.toFixed(1)}%
-                    </Text>
-                  </View>
-                  <Text style={s.signalMeta}>{sig.occurrences} cases{sig.sector ? ` \u00B7 ${sig.sector}` : ''}</Text>
-                </View>
-              </View>
-
-              {/* Right side - WIN RATE */}
-              <View style={s.signalWinRate}>
-                <Text style={s.wrPeriodLabel}>1M</Text>
-                <Text style={[s.wrBigValue, { color: sig.win_rate_20d >= 50 ? colors.bullish : colors.bearish }]}>
-                  {sig.win_rate_20d.toFixed(0)}%
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
+      {/* Bearish Signals */}
+      {(() => {
+        const bearish = signals.filter(s => s.win_rate_20d <= 45)
+          .sort((a, b) => a.win_rate_20d - b.win_rate_20d);
+        if (bearish.length === 0) return null;
+        return (
+          <View style={s.sectionContainer}>
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionLabel}>BEARISH</Text>
+              <Text style={s.sectionCount}>{bearish.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
+              {bearish.map((sig) => (
+                <Pressable key={sig.ticker} style={({ pressed }) => [s.signalCard, pressed && { transform: [{ scale: 0.96 }] }]} onPress={() => goToAnalysis(sig.ticker)}>
+                  <Text style={s.cardTicker}>{sig.ticker}</Text>
+                  <Text style={s.cardPrice}>${sig.price.toFixed(2)}</Text>
+                  <Text style={[s.cardChange, { color: getDirectionColor(sig.change_pct, colors) }]}>
+                    {sig.change_pct >= 0 ? '+' : ''}{sig.change_pct.toFixed(1)}%
+                  </Text>
+                  <Text style={[s.cardWinRate, { color: colors.bearish }]}>
+                    {sig.win_rate_20d.toFixed(0)}%
+                  </Text>
+                  <Text style={s.cardPeriod}>1M</Text>
+                  <Text style={s.cardCases}>{sig.occurrences} cases</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        );
+      })()}
 
       {/* Scan info */}
       {signalsUpdated ? (
@@ -332,7 +352,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginBottom: 2,
   },
   sectionLabel: { color: c.textTertiary, ...typography.label },
-  sectionSubtitle: { color: c.textMuted, fontSize: 11, marginBottom: 4 },
+  sectionCount: { color: c.textMuted, fontSize: 12 },
 
   watchlistChip: {
     backgroundColor: c.bgCard, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
@@ -340,24 +360,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   watchlistChipText: { color: c.textPrimary, ...typography.bodyBold, letterSpacing: 0.5 },
 
-  signalRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: c.bgCard, borderRadius: radius.md, padding: spacing.md,
-    marginBottom: 6, borderWidth: 1, borderColor: c.border,
+  signalCard: {
+    width: 130, minHeight: 150, backgroundColor: c.bgCard, borderRadius: radius.lg,
+    padding: spacing.md, marginRight: spacing.sm, borderWidth: 1, borderColor: c.border,
+    alignItems: 'center', justifyContent: 'center',
   },
-  signalLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
-  rankBadge: {
-    width: 28, height: 28, borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  rankText: { fontSize: 12, fontWeight: '700' },
-  signalTicker: { color: c.textPrimary, ...typography.bodyBold },
-  signalPrice: { color: c.textSecondary, ...typography.number, fontSize: 13 },
-  signalChange: { fontSize: 12 },
-  signalMeta: { color: c.textMuted, fontSize: 10, marginTop: 2 },
-  signalWinRate: { alignItems: 'center', justifyContent: 'center' },
-  wrPeriodLabel: { color: c.textMuted, fontSize: 9, fontWeight: '600', marginBottom: 1 },
-  wrBigValue: { fontSize: 22, fontWeight: '800' },
+  cardTicker: { color: c.textPrimary, ...typography.bodyBold, fontSize: 15, marginBottom: 4 },
+  cardPrice: { color: c.textSecondary, ...typography.number, fontSize: 13 },
+  cardChange: { fontSize: 12, marginBottom: 8 },
+  cardWinRate: { fontSize: 28, fontWeight: '800' },
+  cardPeriod: { color: c.textMuted, fontSize: 10, fontWeight: '600', marginTop: 1 },
+  cardCases: { color: c.textMuted, fontSize: 10, marginTop: 4 },
 
   scanInfo: {
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,

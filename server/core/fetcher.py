@@ -19,6 +19,56 @@ _UA = (
 
 _IS_VERCEL = os.environ.get("VERCEL") is not None
 
+TICKER_DB = {
+    "AAPL": "Apple Inc.", "MSFT": "Microsoft Corporation", "GOOGL": "Alphabet Inc.",
+    "AMZN": "Amazon.com Inc.", "NVDA": "NVIDIA Corporation", "META": "Meta Platforms Inc.",
+    "TSLA": "Tesla Inc.", "BRK-B": "Berkshire Hathaway Inc.", "JPM": "JPMorgan Chase & Co.",
+    "V": "Visa Inc.", "MA": "Mastercard Inc.", "UNH": "UnitedHealth Group Inc.",
+    "JNJ": "Johnson & Johnson", "HD": "The Home Depot Inc.", "PG": "Procter & Gamble Co.",
+    "AVGO": "Broadcom Inc.", "COST": "Costco Wholesale Corp.", "ABBV": "AbbVie Inc.",
+    "CRM": "Salesforce Inc.", "MRK": "Merck & Co. Inc.", "AMD": "Advanced Micro Devices Inc.",
+    "PFE": "Pfizer Inc.", "ORCL": "Oracle Corporation", "ADBE": "Adobe Inc.",
+    "NFLX": "Netflix Inc.", "TMO": "Thermo Fisher Scientific Inc.",
+    "DIS": "The Walt Disney Company", "CMCSA": "Comcast Corporation",
+    "INTC": "Intel Corporation", "QCOM": "Qualcomm Inc.", "AMAT": "Applied Materials Inc.",
+    "WMT": "Walmart Inc.", "NKE": "Nike Inc.", "SBUX": "Starbucks Corp.",
+    "MCD": "McDonald's Corporation", "GS": "Goldman Sachs Group Inc.",
+    "BAC": "Bank of America Corp.", "MS": "Morgan Stanley",
+    "LLY": "Eli Lilly and Company", "XOM": "Exxon Mobil Corporation",
+    "CVX": "Chevron Corporation", "COP": "ConocoPhillips",
+    "CAT": "Caterpillar Inc.", "BA": "The Boeing Company",
+    "LMT": "Lockheed Martin Corp.", "UNP": "Union Pacific Corp.",
+    "GE": "GE Aerospace", "PLTR": "Palantir Technologies Inc.",
+    "COIN": "Coinbase Global Inc.", "SQ": "Block Inc.", "SHOP": "Shopify Inc.",
+    "SNOW": "Snowflake Inc.", "UBER": "Uber Technologies Inc.",
+    "ABNB": "Airbnb Inc.", "RBLX": "Roblox Corporation",
+    "SOFI": "SoFi Technologies Inc.", "RIVN": "Rivian Automotive Inc.",
+    "LCID": "Lucid Group Inc.", "NIO": "NIO Inc.",
+    "BABA": "Alibaba Group", "TSM": "Taiwan Semiconductor",
+    "ASML": "ASML Holding NV", "ARM": "Arm Holdings plc",
+    "MSTR": "MicroStrategy Inc.", "SMCI": "Super Micro Computer Inc.",
+    "PANW": "Palo Alto Networks Inc.", "CRWD": "CrowdStrike Holdings Inc.",
+    "NET": "Cloudflare Inc.", "DDOG": "Datadog Inc.",
+    "ZS": "Zscaler Inc.", "OKTA": "Okta Inc.",
+    "MRVL": "Marvell Technology Inc.", "MU": "Micron Technology Inc.",
+    "LRCX": "Lam Research Corp.", "KLAC": "KLA Corporation",
+    "PYPL": "PayPal Holdings Inc.", "AXP": "American Express Company",
+    "T": "AT&T Inc.", "VZ": "Verizon Communications Inc.",
+    "PEP": "PepsiCo Inc.", "KO": "The Coca-Cola Company",
+    "SPY": "SPDR S&P 500 ETF", "QQQ": "Invesco QQQ Trust",
+    "IWM": "iShares Russell 2000 ETF", "DIA": "SPDR Dow Jones ETF",
+    "ARKK": "ARK Innovation ETF",
+}
+
+_NASDAQ_TICKERS = {
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AVGO", "COST",
+    "ADBE", "NFLX", "AMD", "INTC", "QCOM", "AMAT", "PLTR", "COIN", "SQ",
+    "ABNB", "RBLX", "SOFI", "RIVN", "LCID", "ASML", "ARM", "MSTR", "SMCI",
+    "PANW", "CRWD", "NET", "DDOG", "ZS", "OKTA", "MRVL", "MU", "LRCX", "KLAC",
+    "PYPL", "PEP", "SBUX", "CRM", "ORCL", "TMO", "CMCSA", "SHOP", "SNOW",
+    "UBER", "BABA", "TSM", "NIO",
+}
+
 
 def _make_session() -> requests.Session:
     """Create a requests session with browser-like headers."""
@@ -326,20 +376,42 @@ def fetch_batch_quotes(tickers: list[str]) -> list[dict]:
 
 
 def search_tickers(query: str, limit: int = 10) -> list[dict]:
-    """Search for tickers matching a query."""
+    """Search for tickers matching a query. Uses local DB first, yfinance as fallback."""
+    q = query.upper().strip()
+    if not q:
+        return []
+
+    # Local search: match ticker prefix OR company name substring
+    local_results = []
+    for ticker, name in TICKER_DB.items():
+        if ticker.startswith(q) or q.lower() in name.lower():
+            local_results.append({
+                "ticker": ticker,
+                "name": name,
+                "exchange": "NASDAQ" if ticker in _NASDAQ_TICKERS else "NYSE",
+                "type": "EQUITY",
+            })
+
+    # Sort: exact ticker prefix first, then alphabetical
+    local_results.sort(key=lambda x: (0 if x["ticker"].startswith(q) else 1, x["ticker"]))
+
+    if local_results:
+        return local_results[:limit]
+
+    # Fallback to yfinance for tickers not in local DB
     try:
         results = yf.search(query, max_results=limit)
         if not results or "quotes" not in results:
             return []
         return [
             {
-                "ticker": q.get("symbol", ""),
-                "name": q.get("longname") or q.get("shortname", ""),
-                "exchange": q.get("exchange", ""),
-                "type": q.get("quoteType", ""),
+                "ticker": q_item.get("symbol", ""),
+                "name": q_item.get("longname") or q_item.get("shortname", ""),
+                "exchange": q_item.get("exchange", ""),
+                "type": q_item.get("quoteType", ""),
             }
-            for q in results["quotes"]
-            if q.get("symbol")
-        ]
+            for q_item in results["quotes"]
+            if q_item.get("symbol")
+        ][:limit]
     except Exception:
         return []
