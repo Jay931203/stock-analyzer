@@ -17,7 +17,7 @@ import SmartCombinedView from '../../src/components/SmartCombinedView';
 import Week52Gauge from '../../src/components/Week52Gauge';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../../src/store/watchlist';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { spacing, radius, typography, formatVolume, getDirectionColor, type ThemeColors } from '../../src/theme';
+import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../../src/theme';
 
 const INDICATOR_META: Record<string, { label: string; short: string }> = {
   RSI: { label: 'RSI', short: 'Momentum' },
@@ -78,11 +78,9 @@ export default function AnalyzeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedIndicators, setSelectedIndicators] = useState<Set<string>>(new Set(['RSI', 'MACD', 'MA', 'Vol']));
   const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(isInWatchlist(ticker ?? ''));
   const [period, setPeriod] = useState<string>('2y');
-  const [showCombined, setShowCombined] = useState(true);
 
   useEffect(() => {
     navigation.setOptions({ title: ticker?.toUpperCase() ?? 'Analysis' });
@@ -112,15 +110,6 @@ export default function AnalyzeScreen() {
     setRefreshing(false);
   }, [ticker, period]);
 
-  const toggleIndicator = (key: string) => {
-    setSelectedIndicators(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
   const toggleExpand = (key: string) => {
     setExpandedIndicator(prev => prev === key ? null : key);
   };
@@ -147,7 +136,6 @@ export default function AnalyzeScreen() {
   }
 
   const { ticker_info, price, indicators } = data;
-  const activeForCombined = ALL_INDICATORS.filter(k => selectedIndicators.has(k));
 
   return (
     <View style={s.container}>
@@ -160,8 +148,9 @@ export default function AnalyzeScreen() {
           />
         }
       >
-        {/* HEADER */}
-        <View style={s.header}>
+        {/* HEADER + COMBINED ANALYSIS (same background) */}
+        <View style={s.headerBlock}>
+          {/* Price info */}
           <View style={s.headerTop}>
             <View style={{ flex: 1 }}>
               <Text style={s.tickerLabel}>{ticker_info.ticker}</Text>
@@ -208,56 +197,41 @@ export default function AnalyzeScreen() {
               </Pressable>
             ))}
           </View>
-        </View>
 
-        {/* COMBINED ANALYSIS (PRIMARY - shown by default) */}
-        <View style={s.section}>
-          <Pressable style={s.combinedHeader} onPress={() => setShowCombined(!showCombined)}>
+          {/* COMBINED ANALYSIS - always visible, same background */}
+          <View style={s.combinedSection}>
             <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
-            <Text style={s.chevron}>{showCombined ? 'Hide' : 'Show'}</Text>
-          </Pressable>
-
-          {showCombined && activeForCombined.length >= 2 && (
-            <SmartCombinedView ticker={ticker!} selectedIndicators={activeForCombined} />
-          )}
-
-          {showCombined && activeForCombined.length < 2 && (
-            <Text style={s.hintText}>Select at least 2 indicators below to run combined analysis</Text>
-          )}
-
-          {showCombined && (
+            <SmartCombinedView ticker={ticker!} selectedIndicators={ALL_INDICATORS} />
             <View style={{ marginTop: spacing.md }}>
               <CombinedTab data={data} />
             </View>
-          )}
+          </View>
         </View>
 
-        {/* INDICATOR CARDS GRID */}
-        <View style={s.section}>
+        {/* INDICATORS - separate section with different background */}
+        <View style={s.indicatorsSection}>
           <Text style={s.sectionTitle}>INDICATORS</Text>
-          <Text style={s.hintText}>Tap to toggle for combined. Long press for details.</Text>
+          <Text style={s.hintText}>Tap any indicator for detailed analysis</Text>
 
           <View style={s.cardGrid}>
             {ALL_INDICATORS.map(key => {
               const { value, winRate } = getIndicatorPreview(key, data);
-              const selected = selectedIndicators.has(key);
               const meta = INDICATOR_META[key];
+              const isExpanded = expandedIndicator === key;
 
               return (
                 <View key={key} style={{ width: '32%', marginBottom: 6 }}>
                   <Pressable
-                    style={[s.indicatorCard, selected && s.indicatorCardSelected]}
-                    onPress={() => toggleIndicator(key)}
-                    onLongPress={() => toggleExpand(key)}
+                    style={[s.indicatorCard, isExpanded && s.indicatorCardExpanded]}
+                    onPress={() => toggleExpand(key)}
                   >
-                    <Text style={[s.cardLabel, selected && s.cardLabelSelected]}>{meta.label}</Text>
+                    <Text style={[s.cardLabel, isExpanded && s.cardLabelExpanded]}>{meta.label}</Text>
                     <Text style={s.cardValue}>{value}</Text>
                     {winRate !== null && (
                       <Text style={[s.cardWinRate, { color: winRate >= 50 ? colors.bullish : colors.bearish }]}>
                         {winRate.toFixed(0)}% win
                       </Text>
                     )}
-                    {selected && <View style={s.selectedDot} />}
                   </Pressable>
                 </View>
               );
@@ -267,7 +241,7 @@ export default function AnalyzeScreen() {
 
         {/* EXPANDED INDICATOR DETAIL */}
         {expandedIndicator && (
-          <View style={s.section}>
+          <View style={s.detailSection}>
             <View style={s.expandedHeader}>
               <Text style={s.sectionTitle}>{INDICATOR_META[expandedIndicator]?.label} DETAIL</Text>
               <Pressable onPress={() => setExpandedIndicator(null)}>
@@ -303,9 +277,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   retryBtnText: { color: c.accent, ...typography.bodyBold },
 
-  header: {
-    padding: spacing.lg, paddingBottom: spacing.sm,
-    backgroundColor: c.bgCard, borderBottomWidth: 1, borderBottomColor: c.border,
+  // Header + Combined = one block with bgCard
+  headerBlock: {
+    backgroundColor: c.bgCard, paddingHorizontal: spacing.lg, paddingTop: spacing.lg,
+    paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: c.border,
   },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.xs },
   tickerLabel: { color: c.accent, ...typography.label, letterSpacing: 1 },
@@ -328,7 +303,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden',
   },
 
-  periodRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.sm },
+  periodRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.sm, marginBottom: spacing.md },
   periodLabel: { color: c.textMuted, fontSize: 10, marginRight: 2 },
   periodPill: {
     paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4,
@@ -338,32 +313,34 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   periodPillText: { color: c.textMuted, fontSize: 10, fontWeight: '600' },
   periodPillTextActive: { color: c.accent },
 
-  section: { padding: spacing.lg, paddingTop: spacing.md },
+  // Combined section inside headerBlock
+  combinedSection: {
+    marginTop: spacing.sm, paddingTop: spacing.md,
+    borderTopWidth: 1, borderTopColor: c.border,
+  },
+
   sectionTitle: { color: c.textTertiary, ...typography.label, marginBottom: spacing.sm },
   hintText: { color: c.textMuted, fontSize: 11, marginBottom: spacing.sm },
 
-  combinedHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: spacing.sm,
+  // Indicators - separate section on bg (not bgCard)
+  indicatorsSection: {
+    padding: spacing.lg, paddingTop: spacing.lg,
   },
-  chevron: { color: c.accent, fontSize: 12, fontWeight: '600' },
 
   cardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   indicatorCard: {
     backgroundColor: c.bgCard, borderRadius: radius.md, padding: spacing.sm,
     borderWidth: 1, borderColor: c.border, alignItems: 'center',
-    minHeight: 72, justifyContent: 'center', position: 'relative',
+    minHeight: 72, justifyContent: 'center',
   },
-  indicatorCardSelected: { borderColor: c.accent, backgroundColor: c.accentDim },
+  indicatorCardExpanded: { borderColor: c.accent, backgroundColor: c.accentDim },
   cardLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '600', marginBottom: 2 },
-  cardLabelSelected: { color: c.accent },
+  cardLabelExpanded: { color: c.accent },
   cardValue: { color: c.textPrimary, fontSize: 14, fontWeight: '700' },
   cardWinRate: { fontSize: 10, fontWeight: '600', marginTop: 2 },
-  selectedDot: {
-    position: 'absolute', top: 4, right: 4,
-    width: 6, height: 6, borderRadius: 3, backgroundColor: c.accent,
-  },
 
+  // Detail section
+  detailSection: { padding: spacing.lg, paddingTop: spacing.sm },
   expandedHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: spacing.sm,

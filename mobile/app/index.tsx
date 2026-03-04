@@ -300,7 +300,7 @@ export default function HomeScreen() {
           </View>
 
           <Pressable style={s.orderBtn} onPress={toggleSortOrder}>
-            <Text style={s.orderBtnText}>{sortAsc ? 'ASC' : 'DESC'}</Text>
+            <Text style={s.orderBtnText}>{sortAsc ? '↑' : '↓'}</Text>
           </Pressable>
         </View>
 
@@ -494,7 +494,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.bgCard, borderWidth: 1, borderColor: c.borderLight,
     marginLeft: 'auto',
   },
-  orderBtnText: { color: c.textTertiary, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  orderBtnText: { color: c.textTertiary, fontSize: 14, fontWeight: '600' },
 
   stockCard: {
     flexDirection: 'row', alignItems: 'center',
