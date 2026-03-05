@@ -235,6 +235,7 @@ export default function HomeScreen() {
   const goToAnalysis = (ticker: string) => router.push(`/analyze/${ticker}`);
   const handleSubmit = () => { const t = query.trim().toUpperCase(); if (t) { setQuery(''); setResults([]); goToAnalysis(t); } };
 
+  const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU', 'TNA', 'FNGU']);
   const sectorMomentum = useMemo(() => {
     const map: Record<string, { bullish: number; bearish: number; avgWinRate: number; avgChange: number }> = {};
     const uniqueSectors = [...new Set(signals.map(s => s.sector).filter(Boolean))];
@@ -257,7 +258,6 @@ export default function HomeScreen() {
     });
     return ['All', ...uniqueSectors];
   }, [signals, sectorMomentum]);
-  const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU', 'TNA', 'FNGU']);
   const filtered = useMemo(() => {
     const base = activeSector && activeSector !== 'All' ? signals.filter(s => s.sector === activeSector) : signals;
     return base.filter(s => s.ticker !== 'QQQ' && s.ticker !== 'SPY' && !LEVERAGED_TICKERS.has(s.ticker));
