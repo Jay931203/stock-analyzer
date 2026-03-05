@@ -288,14 +288,7 @@ export default function HomeScreen() {
 
   return (
     <View style={s.container}>
-      {/* ═══ SCROLLABLE CONTENT (header + all sections) ═══ */}
-      <ScrollView
-        style={s.mainScroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
-        keyboardShouldPersistTaps="handled"
-      >
-      {/* ═══ HEADER BLOCK ═══ */}
+      {/* ═══ COMPACT FIXED HEADER ═══ */}
       <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
         {/* Top bar */}
         <View style={s.topBar}>
@@ -336,103 +329,32 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* App Name + Title + Summary */}
-        <Text style={s.appName}>Stock Scanner</Text>
+        {/* Compact Title + QQQ/SPY inline */}
         <View style={s.titleRow}>
-          <Text style={s.title}>NASDAQ 100</Text>
-          {signals.length > 0 && (
-            <View style={s.summaryRow}>
-              <View style={[s.summaryBadge, { backgroundColor: `${colors.bullish}15` }]}>
-                <View style={[s.summaryDot, { backgroundColor: colors.bullish }]} />
-                <Text style={[s.summaryText, { color: colors.bullish }]}>{bullish.length}</Text>
-              </View>
-              <View style={[s.summaryBadge, { backgroundColor: `${colors.bearish}15` }]}>
-                <View style={[s.summaryDot, { backgroundColor: colors.bearish }]} />
-                <Text style={[s.summaryText, { color: colors.bearish }]}>{bearish.length}</Text>
-              </View>
-            </View>
-          )}
+          <View>
+            <Text style={s.appName}>Stock Scanner</Text>
+            <Text style={s.title}>NASDAQ 100</Text>
+          </View>
+          <View style={s.indicesRow}>
+            {['QQQ', 'SPY'].map(sym => {
+              const sig = signals.find(s => s.ticker === sym);
+              const idx = marketIndices[sym];
+              const price = idx?.price ?? sig?.price;
+              const changePct = idx?.change_pct ?? sig?.change_pct;
+              if (price == null) return null;
+              const color = (changePct ?? 0) >= 0 ? colors.bullish : colors.bearish;
+              return (
+                <Pressable key={sym} style={s.indexChip} onPress={() => goToAnalysis(sym)}>
+                  <Text style={s.indexLabel}>{sym}</Text>
+                  <Text style={s.indexPrice}>${price.toFixed(2)}</Text>
+                  <Text style={[s.indexChange, { color }]}>
+                    {(changePct ?? 0) >= 0 ? '+' : ''}{(changePct ?? 0).toFixed(2)}%
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-
-        {/* INDEX ETF Cards (QQQ/SPY) */}
-        {(() => {
-          const etfs = signals.filter(s => s.ticker === 'QQQ' || s.ticker === 'SPY');
-          // Fall back to simple price chips if signals haven't loaded yet
-          if (etfs.length === 0 && (marketIndices['QQQ'] || marketIndices['SPY'])) {
-            return (
-              <View style={s.indicesRow}>
-                {['QQQ', 'SPY'].map(sym => {
-                  const idx = marketIndices[sym];
-                  if (!idx) return null;
-                  const color = idx.change_pct >= 0 ? colors.bullish : colors.bearish;
-                  return (
-                    <Pressable key={sym} style={s.indexChip} onPress={() => goToAnalysis(sym)}>
-                      <Text style={s.indexLabel}>{sym}</Text>
-                      <Text style={s.indexPrice}>${idx.price.toFixed(2)}</Text>
-                      <Text style={[s.indexChange, { color }]}>
-                        {idx.change_pct >= 0 ? '+' : ''}{idx.change_pct.toFixed(2)}%
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            );
-          }
-          if (etfs.length === 0) return null;
-          return (
-            <View style={s.indexCardsRow}>
-              {etfs.map(sig => {
-                const liveData = marketIndices[sig.ticker];
-                const price = liveData?.price ?? sig.price;
-                const changePct = liveData?.change_pct ?? sig.change_pct;
-                const color = sig.win_rate_20d >= 50 ? colors.bullish : colors.bearish;
-                const name = sig.ticker === 'QQQ' ? 'Invesco QQQ' : sig.ticker === 'SPY' ? 'S&P 500 ETF' : sig.name;
-                return (
-                  <Pressable
-                    key={sig.ticker}
-                    style={({ pressed }) => [
-                      s.indexCard,
-                      pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
-                    ]}
-                    onPress={() => goToAnalysis(sig.ticker)}
-                  >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <View>
-                        <Text style={s.indexCardTicker}>{sig.ticker}</Text>
-                        <Text style={s.indexCardName}>{name}</Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={s.indexCardPrice}>${price.toFixed(2)}</Text>
-                        <Text style={[s.indexCardChange, { color: getDirectionColor(changePct, colors) }]}>
-                          {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={[s.indexCardDivider, { backgroundColor: `${color}30` }]} />
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={[s.indexCardWinRate, { color }]}>{sig.win_rate_20d.toFixed(0)}%</Text>
-                        <Text style={s.indexCardLabel}>1M Win</Text>
-                      </View>
-                      {sig.avg_return_20d !== undefined && sig.avg_return_20d !== 0 && (
-                        <View style={{ alignItems: 'center' }}>
-                          <Text style={[s.indexCardAvg, { color: sig.avg_return_20d >= 0 ? colors.bullish : colors.bearish }]}>
-                            {sig.avg_return_20d >= 0 ? '+' : ''}{sig.avg_return_20d.toFixed(1)}%
-                          </Text>
-                          <Text style={s.indexCardLabel}>Avg Return</Text>
-                        </View>
-                      )}
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={s.indexCardCases}>{sig.occurrences}</Text>
-                        <Text style={s.indexCardLabel}>Cases</Text>
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          );
-        })()}
 
         {/* Search */}
         <View style={s.searchWrapper}>
@@ -476,6 +398,12 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* ═══ SCROLLABLE CONTENT ═══ */}
+      <ScrollView
+        style={s.mainScroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
+      >
         {/* Recently Searched */}
         {(() => {
           const visible = recentSearches.filter(t => !dismissedSearches.has(t));
