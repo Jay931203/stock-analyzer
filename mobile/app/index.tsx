@@ -288,7 +288,14 @@ export default function HomeScreen() {
 
   return (
     <View style={s.container}>
-      {/* ═══ HEADER BLOCK (bgCard background) ═══ */}
+      {/* ═══ SCROLLABLE CONTENT (header + all sections) ═══ */}
+      <ScrollView
+        style={s.mainScroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
+        keyboardShouldPersistTaps="handled"
+      >
+      {/* ═══ HEADER BLOCK ═══ */}
       <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
         {/* Top bar */}
         <View style={s.topBar}>
@@ -469,12 +476,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* ═══ SCROLLABLE CONTENT ═══ */}
-      <ScrollView
-        style={s.mainScroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
-      >
         {/* Recently Searched */}
         {(() => {
           const visible = recentSearches.filter(t => !dismissedSearches.has(t));
@@ -544,8 +545,7 @@ export default function HomeScreen() {
                     onPress={() => setActiveSector(sec)}
                   >
                     <Text style={[s.sectorChipText, isActive && s.sectorChipTextActive]}>
-                      {sec === 'All' ? `All (${signals.length})` : `${sec}`}
-                      {momentum ? ` \u{1F7E2}${momentum.bullish} \u{1F534}${momentum.bearish}` : ''}
+                      {sec === 'All' ? `All (${signals.length})` : sec}
                     </Text>
                   </Pressable>
                 );
