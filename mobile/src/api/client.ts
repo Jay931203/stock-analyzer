@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AnalysisResponse, EarningsItem, FlipItem, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TrendingStock } from '../types/analysis';
+import type { AnalysisResponse, CalendarEvent, EarningsItem, FlipItem, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TrendingStock } from '../types/analysis';
 
 // Simple in-memory cache for analysis results (avoids redundant server calls)
 const _cache = new Map<string, { data: any; ts: number }>();
@@ -163,6 +163,19 @@ const api = {
     const res = await axios.get(`${BASE_URL}/api/signals/flips`, {
       timeout: 10000,
     });
+    return res.data;
+  },
+
+  async marketCalendar(days = 30): Promise<{ events: CalendarEvent[]; updated: string }> {
+    const cacheKey = `calendar:${days}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
+    const res = await axios.get(`${BASE_URL}/api/calendar`, {
+      params: { days },
+      timeout: 15000,
+    });
+    setCache(cacheKey, res.data);
     return res.data;
   },
 

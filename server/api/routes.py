@@ -10,6 +10,7 @@ from ..core.analyzer import compute_all_indicators, get_indicator_state
 from ..core.backtester import calc_combined_probability, calc_probability
 from ..core.fetcher import fetch_batch_quotes, fetch_earnings_dates, fetch_live_prices, fetch_price_history, get_ticker_info, search_tickers
 from ..core.signal_flip import snapshot_and_detect, get_flips
+from ..core.economic_calendar import get_economic_events
 from ..core.presets import get_preset, list_presets, PRESETS
 from ..core.smart_matcher import calc_adaptive_combined
 from ..core.supabase_cache import read_cached_signals, write_cached_signals, read_cached_analysis, write_cached_analysis, log_recent_search, read_recent_searches
@@ -732,6 +733,46 @@ async def earnings_calendar():
     _earnings_cache["ts"] = now
 
     return result
+
+
+@router.get("/calendar")
+async def market_calendar(days: int = Query(30, ge=7, le=60)):
+    """Combined calendar: earnings + economic events."""
+    now = time.time()
+
+    # Get earnings (reuse existing cache)
+    earnings = []
+    if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
+        earnings = _earnings_cache["data"].get("earnings", [])
+    else:
+        raw = fetch_earnings_dates(POPULAR_TICKERS)
+        earnings = [e for e in raw if 0 <= e["days_until"] <= days]
+
+    # Format earnings as calendar events
+    earning_events = []
+    for e in earnings:
+        earning_events.append({
+            "date": e["earnings_date"],
+            "type": "EARNINGS",
+            "label": f"{e['ticker']} Earnings",
+            "ticker": e["ticker"],
+            "name": e.get("name", e["ticker"]),
+            "time_of_day": e.get("time_of_day", ""),
+            "impact": "medium",
+            "days_until": e["days_until"],
+        })
+
+    # Get economic events
+    econ_events = get_economic_events(days_ahead=days)
+
+    # Merge and sort
+    all_events = earning_events + econ_events
+    all_events.sort(key=lambda x: x["date"])
+
+    return {
+        "events": all_events,
+        "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
 
 
 @router.get("/sectors")

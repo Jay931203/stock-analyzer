@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api, { initServerUrl } from '../src/api/client';
-import type { EarningsItem, FlipItem, SearchResult, SignalItem } from '../src/types/analysis';
+import type { CalendarEvent, EarningsItem, FlipItem, SearchResult, SignalItem } from '../src/types/analysis';
 import { getWatchlist, removeFromWatchlist, subscribe, initWatchlist } from '../src/store/watchlist';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../src/theme';
@@ -145,6 +145,7 @@ export default function HomeScreen() {
   const [dismissedSearches, setDismissedSearches] = useState<Set<string>>(new Set());
   const [earnings, setEarnings] = useState<EarningsItem[]>([]);
   const [flips, setFlips] = useState<FlipItem[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const debounce = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
@@ -160,6 +161,7 @@ export default function HomeScreen() {
         loadRecentSearches();
         loadEarnings();
         loadFlips();
+        loadCalendar();
       }
     }
     init();
@@ -224,9 +226,16 @@ export default function HomeScreen() {
     } catch {}
   };
 
+  const loadCalendar = async () => {
+    try {
+      const res = await api.marketCalendar(30);
+      setCalendarEvents(res.events || []);
+    } catch {}
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadSignals(), loadMarketIndices(), loadRecentSearches(), loadEarnings(), loadFlips()]);
+    await Promise.all([loadSignals(), loadMarketIndices(), loadRecentSearches(), loadEarnings(), loadFlips(), loadCalendar()]);
     setRefreshing(false);
   };
 
@@ -303,6 +312,21 @@ export default function HomeScreen() {
       .filter(s => !LEVERAGED_TICKERS.has(s.ticker) && s.ticker !== 'QQQ' && s.ticker !== 'SPY' && s.volume_ratio !== undefined && (s.volume_ratio >= 2.0 || s.volume_ratio <= 0.5))
       .sort((a, b) => (b.volume_ratio ?? 1) - (a.volume_ratio ?? 1));
   }, [signals]);
+
+  // Group calendar events by date for calendar view
+  const calendarDays = useMemo(() => {
+    if (calendarEvents.length === 0) return [];
+    const grouped: Record<string, CalendarEvent[]> = {};
+    for (const ev of calendarEvents) {
+      if (!grouped[ev.date]) grouped[ev.date] = [];
+      grouped[ev.date].push(ev);
+    }
+    return Object.entries(grouped)
+      .map(([date, events]) => ({ date, events, days_until: events[0].days_until }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 14); // Show next 14 distinct days
+  }, [calendarEvents]);
+
   const getWinRate = useCallback((s: SignalItem) => {
     return period === '5d' ? s.win_rate_5d : period === '60d' ? s.win_rate_60d : s.win_rate_20d;
   }, [period]);
@@ -861,59 +885,54 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Earnings This Week */}
-        {earnings.length > 0 && (
+        {/* Market Calendar */}
+        {calendarDays.length > 0 && (
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <View style={[s.sectionDot, { backgroundColor: '#F59E0B' }]} />
-              <Text style={s.sectionLabel}>EARNINGS THIS WEEK</Text>
-              <Text style={s.sectionCount}>{earnings.length}</Text>
+              <Text style={s.sectionLabel}>MARKET CALENDAR</Text>
+              <Text style={s.sectionCount}>{calendarEvents.length} events</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
-              {earnings.map((item) => (
-                <Pressable
-                  key={item.ticker}
-                  style={({ pressed }) => [
-                    cardStyles(colors).card,
-                    { borderLeftColor: '#F59E0B' },
-                    pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
-                  ]}
-                  onPress={() => goToAnalysis(item.ticker)}
-                >
-                  <View style={cardStyles(colors).topRow}>
-                    <Text style={cardStyles(colors).ticker}>{item.ticker}</Text>
-                    <View style={{
-                      backgroundColor: item.time_of_day === 'BMO' ? `${colors.warning}25` : `${colors.accent}25`,
-                      paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4,
-                    }}>
-                      <Text style={{ fontSize: 9, fontWeight: '700', color: item.time_of_day === 'BMO' ? colors.warning : colors.accent }}>
-                        {item.time_of_day || '?'}
-                      </Text>
-                    </View>
+            {calendarDays.map(({ date, events, days_until }) => {
+              const d = new Date(date + 'T12:00:00');
+              const dayLabel = days_until === 0 ? 'TODAY' : days_until === 1 ? 'TOMORROW' : days_until === -1 ? 'YESTERDAY' : '';
+              const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
+              const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+              const isToday = days_until === 0;
+              const isPast = days_until < 0;
+              return (
+                <View key={date} style={[s.calDay, isToday && { borderLeftColor: colors.warning, borderLeftWidth: 3 }, isPast && { opacity: 0.5 }]}>
+                  <View style={s.calDateCol}>
+                    <Text style={[s.calDateNum, isToday && { color: colors.warning }]}>{d.getDate()}</Text>
+                    <Text style={s.calDateWeekday}>{dayLabel || `${weekday}`}</Text>
+                    <Text style={s.calDateMonth}>{month}</Text>
                   </View>
-                  <Text style={cardStyles(colors).companyName} numberOfLines={1}>{item.name}</Text>
-                  {item.price != null && (
-                    <View style={cardStyles(colors).priceRow}>
-                      <Text style={cardStyles(colors).price}>${item.price.toFixed(2)}</Text>
-                      {item.change_pct != null && (
-                        <Text style={[cardStyles(colors).change, { color: getDirectionColor(item.change_pct, colors) }]}>
-                          {item.change_pct >= 0 ? '+' : ''}{item.change_pct.toFixed(1)}%
-                        </Text>
-                      )}
-                    </View>
-                  )}
-                  <View style={cardStyles(colors).divider} />
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ color: '#F59E0B', fontSize: 22, fontWeight: '800' }}>
-                      D-{item.days_until}
-                    </Text>
-                    <Text style={cardStyles(colors).probLabel}>
-                      {item.earnings_date}
-                    </Text>
+                  <View style={s.calEventsCol}>
+                    {events.map((ev, i) => {
+                      const typeColors: Record<string, string> = {
+                        FOMC: '#EF4444', CPI: '#F59E0B', PPI: '#F97316',
+                        PMI: '#8B5CF6', NFP: '#3B82F6', EARNINGS: '#10B981',
+                      };
+                      const evColor = typeColors[ev.type] || colors.textMuted;
+                      return (
+                        <Pressable
+                          key={`${ev.type}-${i}`}
+                          style={({ pressed }) => [s.calEvent, pressed && ev.ticker && { opacity: 0.7 }]}
+                          onPress={ev.ticker ? () => goToAnalysis(ev.ticker!) : undefined}
+                        >
+                          <View style={[s.calEventDot, { backgroundColor: evColor }]} />
+                          <View style={[s.calEventBadge, { backgroundColor: `${evColor}18` }]}>
+                            <Text style={[s.calEventType, { color: evColor }]}>{ev.type}</Text>
+                          </View>
+                          <Text style={s.calEventLabel} numberOfLines={1}>{ev.label}</Text>
+                          {ev.impact === 'high' && <Text style={s.calEventImpact}>!</Text>}
+                        </Pressable>
+                      );
+                    })}
                   </View>
-                </Pressable>
-              ))}
-            </ScrollView>
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -1130,4 +1149,31 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginTop: 2,
   },
   flipBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+
+  // ═══ MARKET CALENDAR ═══
+  calDay: {
+    flexDirection: 'row', gap: 12,
+    paddingVertical: 10, paddingHorizontal: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border,
+    borderLeftWidth: 0, borderLeftColor: 'transparent',
+  },
+  calDateCol: {
+    width: 42, alignItems: 'center' as const, justifyContent: 'flex-start' as const,
+    paddingTop: 2,
+  },
+  calDateNum: { color: c.textPrimary, fontSize: 20, fontWeight: '800', lineHeight: 22 },
+  calDateWeekday: { color: c.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 0.3, marginTop: 1 },
+  calDateMonth: { color: c.textMuted, fontSize: 8, fontWeight: '500' },
+  calEventsCol: { flex: 1, gap: 4 },
+  calEvent: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 3,
+  },
+  calEventDot: { width: 5, height: 5, borderRadius: 3 },
+  calEventBadge: {
+    paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3,
+  },
+  calEventType: { fontSize: 8, fontWeight: '800', letterSpacing: 0.3 },
+  calEventLabel: { color: c.textSecondary, fontSize: 12, fontWeight: '500', flex: 1 },
+  calEventImpact: { color: '#EF4444', fontSize: 12, fontWeight: '800' },
 });

@@ -241,6 +241,17 @@ export interface FlipItem {
   delta: number;
 }
 
+export interface CalendarEvent {
+  date: string;
+  type: 'FOMC' | 'CPI' | 'PPI' | 'PMI' | 'NFP' | 'EARNINGS';
+  label: string;
+  impact: 'high' | 'medium' | 'low';
+  days_until: number;
+  ticker?: string;
+  name?: string;
+  time_of_day?: string;
+}
+
 export interface SignalsResponse {
   signals: SignalItem[];
   scanned: number;
