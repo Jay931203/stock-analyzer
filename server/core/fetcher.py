@@ -20,53 +20,111 @@ _UA = (
 _IS_VERCEL = os.environ.get("VERCEL") is not None
 
 TICKER_DB = {
-    "AAPL": "Apple Inc.", "MSFT": "Microsoft Corporation", "GOOGL": "Alphabet Inc.",
-    "AMZN": "Amazon.com Inc.", "NVDA": "NVIDIA Corporation", "META": "Meta Platforms Inc.",
-    "TSLA": "Tesla Inc.", "BRK-B": "Berkshire Hathaway Inc.", "JPM": "JPMorgan Chase & Co.",
-    "V": "Visa Inc.", "MA": "Mastercard Inc.", "UNH": "UnitedHealth Group Inc.",
-    "JNJ": "Johnson & Johnson", "HD": "The Home Depot Inc.", "PG": "Procter & Gamble Co.",
-    "AVGO": "Broadcom Inc.", "COST": "Costco Wholesale Corp.", "ABBV": "AbbVie Inc.",
-    "CRM": "Salesforce Inc.", "MRK": "Merck & Co. Inc.", "AMD": "Advanced Micro Devices Inc.",
-    "PFE": "Pfizer Inc.", "ORCL": "Oracle Corporation", "ADBE": "Adobe Inc.",
-    "NFLX": "Netflix Inc.", "TMO": "Thermo Fisher Scientific Inc.",
-    "DIS": "The Walt Disney Company", "CMCSA": "Comcast Corporation",
-    "INTC": "Intel Corporation", "QCOM": "Qualcomm Inc.", "AMAT": "Applied Materials Inc.",
-    "WMT": "Walmart Inc.", "NKE": "Nike Inc.", "SBUX": "Starbucks Corp.",
-    "MCD": "McDonald's Corporation", "GS": "Goldman Sachs Group Inc.",
-    "BAC": "Bank of America Corp.", "MS": "Morgan Stanley",
-    "LLY": "Eli Lilly and Company", "XOM": "Exxon Mobil Corporation",
-    "CVX": "Chevron Corporation", "COP": "ConocoPhillips",
-    "CAT": "Caterpillar Inc.", "BA": "The Boeing Company",
-    "LMT": "Lockheed Martin Corp.", "UNP": "Union Pacific Corp.",
-    "GE": "GE Aerospace", "PLTR": "Palantir Technologies Inc.",
-    "COIN": "Coinbase Global Inc.", "SQ": "Block Inc.", "SHOP": "Shopify Inc.",
-    "SNOW": "Snowflake Inc.", "UBER": "Uber Technologies Inc.",
-    "ABNB": "Airbnb Inc.", "RBLX": "Roblox Corporation",
-    "SOFI": "SoFi Technologies Inc.", "RIVN": "Rivian Automotive Inc.",
-    "LCID": "Lucid Group Inc.", "NIO": "NIO Inc.",
-    "BABA": "Alibaba Group", "TSM": "Taiwan Semiconductor",
-    "ASML": "ASML Holding NV", "ARM": "Arm Holdings plc",
-    "MSTR": "MicroStrategy Inc.", "SMCI": "Super Micro Computer Inc.",
-    "PANW": "Palo Alto Networks Inc.", "CRWD": "CrowdStrike Holdings Inc.",
-    "NET": "Cloudflare Inc.", "DDOG": "Datadog Inc.",
-    "ZS": "Zscaler Inc.", "OKTA": "Okta Inc.",
+    # ── Technology: Mega-cap ──
+    "AAPL": "Apple Inc.", "AMZN": "Amazon.com Inc.", "GOOGL": "Alphabet Inc.",
+    "META": "Meta Platforms Inc.", "MSFT": "Microsoft Corporation",
+    "NVDA": "NVIDIA Corporation", "TSLA": "Tesla Inc.",
+    # ── Technology: Semiconductors ──
+    "AMAT": "Applied Materials Inc.", "AMD": "Advanced Micro Devices Inc.",
+    "ARM": "Arm Holdings plc", "ASML": "ASML Holding NV",
+    "AVGO": "Broadcom Inc.", "INTC": "Intel Corporation",
+    "KLAC": "KLA Corporation", "LRCX": "Lam Research Corp.",
     "MRVL": "Marvell Technology Inc.", "MU": "Micron Technology Inc.",
-    "LRCX": "Lam Research Corp.", "KLAC": "KLA Corporation",
-    "PYPL": "PayPal Holdings Inc.", "AXP": "American Express Company",
+    "QCOM": "Qualcomm Inc.", "SMCI": "Super Micro Computer Inc.",
+    "TSM": "Taiwan Semiconductor",
+    # ── Technology: Enterprise / Cloud / Cyber ──
+    "ADBE": "Adobe Inc.", "CRM": "Salesforce Inc.",
+    "CRWD": "CrowdStrike Holdings Inc.", "DDOG": "Datadog Inc.",
+    "NET": "Cloudflare Inc.", "OKTA": "Okta Inc.",
+    "ORCL": "Oracle Corporation", "PANW": "Palo Alto Networks Inc.",
+    "PLTR": "Palantir Technologies Inc.", "SHOP": "Shopify Inc.",
+    "SNOW": "Snowflake Inc.", "ZS": "Zscaler Inc.",
+    # ── Technology: Fintech / Payments ──
+    "AXP": "American Express Company", "COIN": "Coinbase Global Inc.",
+    "MA": "Mastercard Inc.", "MSTR": "MicroStrategy Inc.",
+    "PYPL": "PayPal Holdings Inc.", "SQ": "Block Inc.", "V": "Visa Inc.",
+    # ── Consumer Discretionary ──
+    "ABNB": "Airbnb Inc.", "BKNG": "Booking Holdings Inc.",
+    "CMG": "Chipotle Mexican Grill Inc.", "COST": "Costco Wholesale Corp.",
+    "DASH": "DoorDash Inc.", "HD": "The Home Depot Inc.",
+    "LOW": "Lowe's Companies Inc.", "LULU": "Lululemon Athletica Inc.",
+    "MAR": "Marriott International Inc.", "MCD": "McDonald's Corporation",
+    "NKE": "Nike Inc.", "SBUX": "Starbucks Corp.",
+    "TGT": "Target Corporation", "UBER": "Uber Technologies Inc.",
+    "WMT": "Walmart Inc.", "YUM": "Yum! Brands Inc.",
+    # ── Consumer Staples ──
+    "KO": "The Coca-Cola Company", "PEP": "PepsiCo Inc.",
+    "PG": "Procter & Gamble Co.",
+    # ── Communication / Media ──
+    "CHTR": "Charter Communications Inc.", "CMCSA": "Comcast Corporation",
+    "DIS": "The Walt Disney Company", "NFLX": "Netflix Inc.",
+    "PINS": "Pinterest Inc.", "SNAP": "Snap Inc.",
+    "SPOT": "Spotify Technology SA", "TMUS": "T-Mobile US Inc.",
+    # ── Telecom ──
     "T": "AT&T Inc.", "VZ": "Verizon Communications Inc.",
-    "PEP": "PepsiCo Inc.", "KO": "The Coca-Cola Company",
-    "SPY": "SPDR S&P 500 ETF", "QQQ": "Invesco QQQ Trust",
-    "IWM": "iShares Russell 2000 ETF", "DIA": "SPDR Dow Jones ETF",
-    "ARKK": "ARK Innovation ETF",
+    # ── Financial Services ──
+    "BAC": "Bank of America Corp.", "BLK": "BlackRock Inc.",
+    "BRK-B": "Berkshire Hathaway Inc.", "C": "Citigroup Inc.",
+    "CME": "CME Group Inc.", "GS": "Goldman Sachs Group Inc.",
+    "ICE": "Intercontinental Exchange Inc.", "JPM": "JPMorgan Chase & Co.",
+    "MCO": "Moody's Corporation", "MS": "Morgan Stanley",
+    "PNC": "PNC Financial Services Group Inc.", "SCHW": "Charles Schwab Corp.",
+    "SPGI": "S&P Global Inc.", "TFC": "Truist Financial Corp.",
+    "UNH": "UnitedHealth Group Inc.", "USB": "U.S. Bancorp",
+    "WFC": "Wells Fargo & Company",
+    # ── Healthcare ──
+    "ABBV": "AbbVie Inc.", "AMGN": "Amgen Inc.",
+    "BDX": "Becton Dickinson and Co.", "BMY": "Bristol-Myers Squibb Co.",
+    "DHR": "Danaher Corporation", "DXCM": "DexCom Inc.",
+    "EW": "Edwards Lifesciences Corp.", "GILD": "Gilead Sciences Inc.",
+    "IDXX": "IDEXX Laboratories Inc.", "ISRG": "Intuitive Surgical Inc.",
+    "JNJ": "Johnson & Johnson", "LLY": "Eli Lilly and Company",
+    "MDT": "Medtronic plc", "MRK": "Merck & Co. Inc.",
+    "PFE": "Pfizer Inc.", "REGN": "Regeneron Pharmaceuticals Inc.",
+    "SYK": "Stryker Corporation", "TMO": "Thermo Fisher Scientific Inc.",
+    "VRTX": "Vertex Pharmaceuticals Inc.", "ZTS": "Zoetis Inc.",
+    # ── Energy ──
+    "COP": "ConocoPhillips", "CVX": "Chevron Corporation",
+    "EOG": "EOG Resources Inc.", "OXY": "Occidental Petroleum Corp.",
+    "PSX": "Phillips 66", "SLB": "Schlumberger Ltd.",
+    "VLO": "Valero Energy Corporation", "XOM": "Exxon Mobil Corporation",
+    # ── Industrials / Defense ──
+    "BA": "The Boeing Company", "CAT": "Caterpillar Inc.",
+    "DE": "Deere & Company", "EMR": "Emerson Electric Co.",
+    "FDX": "FedEx Corporation", "GE": "GE Aerospace",
+    "HON": "Honeywell International Inc.", "ITW": "Illinois Tool Works Inc.",
+    "LMT": "Lockheed Martin Corp.", "MMM": "3M Company",
+    "RTX": "RTX Corporation", "UNP": "Union Pacific Corp.",
+    "UPS": "United Parcel Service Inc.",
+    # ── Utilities ──
+    "AEP": "American Electric Power Co.", "DUK": "Duke Energy Corporation",
+    "NEE": "NextEra Energy Inc.", "SO": "The Southern Company",
+    # ── Real Estate ──
+    "AMT": "American Tower Corp.", "CCI": "Crown Castle Inc.",
+    "EQIX": "Equinix Inc.", "PLD": "Prologis Inc.",
+    # ── Materials ──
+    "APD": "Air Products and Chemicals Inc.", "ECL": "Ecolab Inc.",
+    "FCX": "Freeport-McMoRan Inc.", "LIN": "Linde plc",
+    "NEM": "Newmont Corporation", "SHW": "Sherwin-Williams Co.",
+    # ── Other / Growth ──
+    "BABA": "Alibaba Group", "LCID": "Lucid Group Inc.",
+    "NIO": "NIO Inc.", "RBLX": "Roblox Corporation",
+    "RIVN": "Rivian Automotive Inc.", "SOFI": "SoFi Technologies Inc.",
+    # ── ETFs ──
+    "ARKK": "ARK Innovation ETF", "DIA": "SPDR Dow Jones ETF",
+    "IWM": "iShares Russell 2000 ETF", "QQQ": "Invesco QQQ Trust",
+    "SPY": "SPDR S&P 500 ETF",
 }
 
 _NASDAQ_TICKERS = {
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AVGO", "COST",
-    "ADBE", "NFLX", "AMD", "INTC", "QCOM", "AMAT", "PLTR", "COIN", "SQ",
-    "ABNB", "RBLX", "SOFI", "RIVN", "LCID", "ASML", "ARM", "MSTR", "SMCI",
-    "PANW", "CRWD", "NET", "DDOG", "ZS", "OKTA", "MRVL", "MU", "LRCX", "KLAC",
-    "PYPL", "PEP", "SBUX", "CRM", "ORCL", "TMO", "CMCSA", "SHOP", "SNOW",
-    "UBER", "BABA", "TSM", "NIO",
+    "AAPL", "ABNB", "ADBE", "AMGN", "AMZN", "AMD", "AMAT", "ARM", "ASML",
+    "AVGO", "BABA", "BKNG", "CHTR", "CMCSA", "CMG", "COIN", "COST", "CRWD",
+    "DASH", "DDOG", "DXCM", "EQIX", "GILD", "GOOGL", "IDXX", "INTC", "ISRG",
+    "KLAC", "LCID", "LRCX", "LULU", "MAR", "META", "MRVL", "MSFT", "MSTR",
+    "MU", "NET", "NFLX", "NIO", "NVDA", "OKTA", "ORCL", "PANW", "PEP",
+    "PINS", "PLTR", "PYPL", "QCOM", "RBLX", "REGN", "RIVN", "SBUX", "SHOP",
+    "SMCI", "SNAP", "SNOW", "SOFI", "SPOT", "SQ", "TMUS", "TSLA", "TSM",
+    "UBER", "VRTX", "ZS",
 }
 
 
@@ -372,6 +430,134 @@ def fetch_batch_quotes(tickers: list[str]) -> list[dict]:
                     results.append(q)
             except Exception:
                 pass
+    return results
+
+
+def fetch_live_prices(tickers: list[str]) -> dict[str, dict]:
+    """Fetch current prices for multiple tickers via Yahoo v7 quote API.
+    Returns pre-market or post-market prices when available.
+    Single HTTP call for all tickers - very efficient.
+    """
+    if not tickers:
+        return {}
+
+    session = _make_session()
+    try:
+        crumb, cookies = _get_yahoo_crumb(session)
+    except Exception:
+        crumb, cookies = "", {}
+
+    symbols = ",".join(t.upper() for t in tickers)
+    url = "https://query2.finance.yahoo.com/v7/finance/quote"
+    params = {"symbols": symbols}
+    if crumb:
+        params["crumb"] = crumb
+
+    try:
+        resp = session.get(url, params=params, cookies=cookies, timeout=15)
+        data = resp.json()
+    except Exception:
+        return {}
+
+    results = {}
+    for q in data.get("quoteResponse", {}).get("result", []):
+        sym = q.get("symbol", "")
+        market_state = q.get("marketState", "REGULAR")
+        reg_price = q.get("regularMarketPrice", 0)
+        reg_change = q.get("regularMarketChange", 0)
+        reg_change_pct = q.get("regularMarketChangePercent", 0)
+
+        if market_state == "PRE" and q.get("preMarketPrice"):
+            price = q["preMarketPrice"]
+            change = q.get("preMarketChange", 0)
+            change_pct = q.get("preMarketChangePercent", 0)
+        elif market_state in ("POST", "POSTPOST") and q.get("postMarketPrice"):
+            price = q["postMarketPrice"]
+            change = q.get("postMarketChange", 0)
+            change_pct = q.get("postMarketChangePercent", 0)
+        else:
+            price = reg_price
+            change = reg_change
+            change_pct = reg_change_pct
+
+        results[sym] = {
+            "price": round(price, 2),
+            "change": round(change, 2),
+            "change_pct": round(change_pct, 2),
+            "market_state": market_state,
+        }
+
+    return results
+
+
+def fetch_earnings_dates(tickers: list[str]) -> list[dict]:
+    """Fetch upcoming earnings dates for a list of tickers using yfinance calendar."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from datetime import datetime, timedelta
+
+    def _get_earnings(ticker: str) -> dict | None:
+        try:
+            kwargs = {"session": _session} if _session else {}
+            stock = yf.Ticker(ticker.upper(), **kwargs)
+            cal = stock.calendar
+            if cal is None or (isinstance(cal, pd.DataFrame) and cal.empty):
+                return None
+
+            # calendar can be a dict or DataFrame depending on yfinance version
+            if isinstance(cal, pd.DataFrame):
+                if "Earnings Date" in cal.index:
+                    raw_date = cal.loc["Earnings Date"].iloc[0]
+                else:
+                    return None
+            elif isinstance(cal, dict):
+                ed = cal.get("Earnings Date")
+                if not ed:
+                    return None
+                raw_date = ed[0] if isinstance(ed, list) else ed
+            else:
+                return None
+
+            # Parse earnings date
+            if isinstance(raw_date, str):
+                earnings_dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00")).replace(tzinfo=None)
+            elif hasattr(raw_date, 'to_pydatetime'):
+                earnings_dt = raw_date.to_pydatetime().replace(tzinfo=None)
+            else:
+                earnings_dt = datetime(raw_date.year, raw_date.month, raw_date.day)
+
+            now = datetime.now()
+            days_until = (earnings_dt.date() - now.date()).days
+
+            # Determine time of day (BMO = before market open, AMC = after market close)
+            hour = earnings_dt.hour if hasattr(earnings_dt, 'hour') else 0
+            if hour < 12:
+                time_of_day = "BMO"
+            elif hour >= 16:
+                time_of_day = "AMC"
+            else:
+                time_of_day = "TBD"
+
+            return {
+                "ticker": ticker.upper(),
+                "name": TICKER_DB.get(ticker.upper(), ticker.upper()),
+                "earnings_date": earnings_dt.strftime("%m/%d"),
+                "days_until": days_until,
+                "time_of_day": time_of_day,
+            }
+        except Exception:
+            return None
+
+    results = []
+    with ThreadPoolExecutor(max_workers=min(len(tickers), 12)) as executor:
+        futures = {executor.submit(_get_earnings, t): t for t in tickers}
+        for future in as_completed(futures):
+            try:
+                r = future.result()
+                if r:
+                    results.append(r)
+            except Exception:
+                pass
+
     return results
 
 

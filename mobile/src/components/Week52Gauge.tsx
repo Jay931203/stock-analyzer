@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Rect, Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 import { typography, spacing, radius, type ThemeColors } from '../theme';
@@ -13,9 +13,11 @@ interface Props {
   distribution?: PriceDistBin[];
 }
 
-export default function Week52Gauge({ current, low, high, width = 280, distribution }: Props) {
+export default function Week52Gauge({ current, low, high, width: widthProp, distribution }: Props) {
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
+  const { width: screenWidth } = useWindowDimensions();
+  const width = widthProp ?? Math.min(screenWidth - 64, 340);
 
   const range = high - low;
   const position = range > 0 ? ((current - low) / range) : 0.5;
@@ -90,6 +92,9 @@ export default function Week52Gauge({ current, low, high, width = 280, distribut
         <View>
           <Text style={s.labelValue}>${low.toFixed(2)}</Text>
           <Text style={s.labelText}>52W Low</Text>
+          <Text style={[s.pctFromCurrent, { color: colors.bullish }]}>
+            {current > low ? `+${(((current - low) / low) * 100).toFixed(1)}%` : '0%'}
+          </Text>
         </View>
         <View style={s.centerLabel}>
           <Text style={[s.currentValue, {
@@ -100,6 +105,9 @@ export default function Week52Gauge({ current, low, high, width = 280, distribut
         <View>
           <Text style={[s.labelValue, { textAlign: 'right' }]}>${high.toFixed(2)}</Text>
           <Text style={[s.labelText, { textAlign: 'right' }]}>52W High</Text>
+          <Text style={[s.pctFromCurrent, { color: colors.bearish, textAlign: 'right' }]}>
+            {high > current ? `-${(((high - current) / current) * 100).toFixed(1)}%` : '0%'}
+          </Text>
         </View>
       </View>
 
@@ -142,6 +150,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   labelText: { color: c.textMuted, ...typography.labelSm, marginTop: 1 },
   centerLabel: { alignItems: 'center' },
   currentValue: { ...typography.bodyBold },
+  pctFromCurrent: { fontSize: 10, fontWeight: '600', marginTop: 1 },
   distContainer: { marginTop: 8, alignItems: 'center' },
-  distLabel: { color: c.textMuted, fontSize: 9, marginBottom: 4, alignSelf: 'flex-start' },
+  distLabel: { color: c.textMuted, fontSize: 10, marginBottom: 4, alignSelf: 'flex-start' },
 });

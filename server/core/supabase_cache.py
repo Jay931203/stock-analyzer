@@ -20,6 +20,7 @@ _SIGNAL_FIELDS = [
     "ticker", "price", "change_pct", "sector",
     "win_rate_5d", "win_rate_20d", "win_rate_60d", "avg_return_20d",
     "occurrences", "condition", "indicators_used", "strength", "tier",
+    "volume_ratio", "volume_level",
     "updated_at",
 ]
 
@@ -54,13 +55,19 @@ def read_cached_signals() -> dict | None:
             return None
 
         latest = data[0].get("updated_at", "")
+        # Import enrichment dicts lazily to avoid circular import
+        from ..api.routes import TICKER_NAMES, MARKET_CAP_B
+
         signals = []
         for row in data:
+            t = row["ticker"]
             signals.append({
-                "ticker": row["ticker"],
+                "ticker": t,
+                "name": TICKER_NAMES.get(t, t),
                 "price": row["price"],
                 "change_pct": row["change_pct"],
                 "sector": row.get("sector", ""),
+                "market_cap_b": MARKET_CAP_B.get(t, 0),
                 "win_rate_5d": row["win_rate_5d"],
                 "win_rate_20d": row["win_rate_20d"],
                 "win_rate_60d": row["win_rate_60d"],
@@ -70,6 +77,8 @@ def read_cached_signals() -> dict | None:
                 "indicators_used": row.get("indicators_used", 0),
                 "strength": row["strength"],
                 "tier": row.get("tier", "normal"),
+                "volume_ratio": row.get("volume_ratio", 1.0),
+                "volume_level": row.get("volume_level", "normal"),
             })
 
         updated_str = ""
@@ -120,6 +129,8 @@ def write_cached_signals(signals: list[dict]) -> bool:
                 "indicators_used": sig.get("indicators_used", 0),
                 "strength": sig["strength"],
                 "tier": sig.get("tier", "normal"),
+                "volume_ratio": sig.get("volume_ratio", 1.0),
+                "volume_level": sig.get("volume_level", "normal"),
                 "updated_at": now,
             })
 
@@ -134,4 +145,109 @@ def write_cached_signals(signals: list[dict]) -> bool:
         return True
     except Exception as e:
         print(f"Supabase write error: {e}")
+        return False
+
+
+def read_cached_analysis(ticker: str) -> dict | None:
+    """Read cached analysis for a single ticker from Supabase."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None
+
+    try:
+        safe_ticker = ticker.upper()
+        url = _rest_url(f"analysis_cache?ticker=eq.{safe_ticker}&select=data,updated_at")
+        req = urllib.request.Request(url, headers=_headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            rows = json.loads(resp.read().decode())
+
+        if not rows:
+            return None
+
+        row = rows[0]
+        updated_at = row.get("updated_at", "")
+        data = row.get("data")
+
+        if not data:
+            return None
+
+        return {
+            "data": data,
+            "updated_at": updated_at,
+        }
+    except Exception as e:
+        print(f"Supabase analysis read error: {e}")
+        return None
+
+
+def log_recent_search(ticker: str) -> bool:
+    """Log a ticker search to Supabase for global recent-searches display."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return False
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        safe_ticker = ticker.upper()
+        row = {"ticker": safe_ticker, "searched_at": now}
+        url = _rest_url("recent_searches")
+        body = json.dumps(row).encode()
+        req = urllib.request.Request(
+            url, data=body, method="POST",
+            headers=_headers(prefer="return=minimal"),
+        )
+        urllib.request.urlopen(req, timeout=5)
+        return True
+    except Exception:
+        return False
+
+
+def read_recent_searches(limit: int = 20) -> list[str]:
+    """Read latest unique searched tickers from Supabase."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return []
+    try:
+        url = _rest_url(
+            f"recent_searches?select=ticker,searched_at&order=searched_at.desc&limit={limit * 3}"
+        )
+        req = urllib.request.Request(url, headers=_headers())
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        # Deduplicate keeping order
+        seen = set()
+        result = []
+        for row in data:
+            t = row["ticker"]
+            if t not in seen:
+                seen.add(t)
+                result.append(t)
+                if len(result) >= limit:
+                    break
+        return result
+    except Exception:
+        return []
+
+
+def write_cached_analysis(ticker: str, data: dict) -> bool:
+    """Write (upsert) cached analysis for a single ticker to Supabase."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return False
+
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        safe_ticker = ticker.upper()
+
+        row = {
+            "ticker": safe_ticker,
+            "data": data,
+            "updated_at": now,
+        }
+
+        url = _rest_url("analysis_cache")
+        body = json.dumps(row).encode()
+        req = urllib.request.Request(
+            url, data=body, method="POST",
+            headers=_headers(prefer="resolution=merge-duplicates,return=minimal"),
+        )
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except Exception as e:
+        print(f"Supabase analysis write error: {e}")
         return False

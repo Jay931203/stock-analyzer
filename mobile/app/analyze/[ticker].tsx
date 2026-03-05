@@ -21,22 +21,23 @@ import Week52Gauge from '../../src/components/Week52Gauge';
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../../src/store/watchlist';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../../src/theme';
+import { SunIcon, MoonIcon, MonitorIcon, ChevronLeftIcon, StarIcon } from '../../src/components/ThemeIcons';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-const INDICATOR_META: Record<string, { label: string; icon: string }> = {
-  RSI: { label: 'RSI', icon: '' },
-  MACD: { label: 'MACD', icon: '' },
-  MA: { label: 'MA', icon: '' },
-  BB: { label: 'BB', icon: '' },
-  Vol: { label: 'Vol', icon: '' },
-  Stoch: { label: 'Stoch', icon: '' },
-  Drawdown: { label: 'DD', icon: '' },
-  ADX: { label: 'ADX', icon: '' },
-  MADist: { label: 'MADist', icon: '' },
-  Consec: { label: 'Streak', icon: '' },
-  W52: { label: '52W', icon: '' },
-  ATR: { label: 'ATR', icon: '' },
+const INDICATOR_META: Record<string, { label: string }> = {
+  RSI: { label: 'RSI' },
+  MACD: { label: 'MACD' },
+  MA: { label: 'MA' },
+  BB: { label: 'BB' },
+  Vol: { label: 'Vol' },
+  Stoch: { label: 'Stoch' },
+  Drawdown: { label: 'DD' },
+  ADX: { label: 'ADX' },
+  MADist: { label: 'MADist' },
+  Consec: { label: 'Streak' },
+  W52: { label: '52W' },
+  ATR: { label: 'ATR' },
 };
 
 const ALL_INDICATORS = Object.keys(INDICATOR_META);
@@ -126,7 +127,7 @@ export default function AnalyzeScreen() {
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
-  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.85)).current;
 
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const [data, setData] = useState<AnalysisResponse | null>(null);
@@ -139,6 +140,7 @@ export default function AnalyzeScreen() {
   const [modalIndicator, setModalIndicator] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(isInWatchlist(ticker ?? ''));
   const [period, setPeriod] = useState<string>('10y');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     loadData();
@@ -164,6 +166,7 @@ export default function AnalyzeScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refreshData();
+    setRefreshKey(k => k + 1);
     setRefreshing(false);
   }, [ticker, period]);
 
@@ -181,16 +184,17 @@ export default function AnalyzeScreen() {
     Animated.spring(scaleAnim, {
       toValue: 1,
       useNativeDriver: true,
-      tension: 65,
+      tension: 100,
       friction: 8,
     }).start();
   };
 
   const closeModal = () => {
-    Animated.timing(scaleAnim, {
-      toValue: 0,
-      duration: 200,
+    Animated.spring(scaleAnim, {
+      toValue: 0.85,
       useNativeDriver: true,
+      tension: 100,
+      friction: 8,
     }).start(() => setModalIndicator(null));
   };
 
@@ -232,22 +236,32 @@ export default function AnalyzeScreen() {
         {/* HEADER + COMBINED */}
         <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
           <View style={s.navRow}>
-            <Pressable style={s.backBtn} onPress={() => router.back()}>
-              <Text style={s.backBtnText}>← Home</Text>
+            <Pressable style={s.backBtn} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <ChevronLeftIcon size={14} color={colors.accent} />
+                <Text style={s.backBtnText}>Home</Text>
+              </View>
             </Pressable>
             <View style={s.navRight}>
               <Pressable onPress={cycleTheme} style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}>
-                <Text style={s.themeBtnIcon}>
-                  {themeMode === 'light' ? '\u2600\uFE0E' : themeMode === 'dark' ? '\u263D' : '\u25A3'}
-                </Text>
+                {themeMode === 'light' ? (
+                  <SunIcon size={14} color={colors.textSecondary} />
+                ) : themeMode === 'dark' ? (
+                  <MoonIcon size={14} color={colors.textSecondary} />
+                ) : (
+                  <MonitorIcon size={14} color={colors.textSecondary} />
+                )}
               </Pressable>
               <Pressable
                 style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
                 onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
               >
-                <Text style={[s.saveBtnText, inWatchlist && s.saveBtnTextActive]}>
-                  {inWatchlist ? '★ Saved' : '☆ Save'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <StarIcon size={13} color={inWatchlist ? colors.accent : colors.textTertiary} filled={inWatchlist} />
+                  <Text style={[s.saveBtnText, inWatchlist && s.saveBtnTextActive]}>
+                    {inWatchlist ? 'Saved' : 'Save'}
+                  </Text>
+                </View>
               </Pressable>
             </View>
           </View>
@@ -282,7 +296,7 @@ export default function AnalyzeScreen() {
           <View style={s.periodRow}>
             <Text style={s.periodLabel}>Backtest</Text>
             {['6m', '1y', '2y', '5y', '10y'].map((p) => (
-              <Pressable key={p} style={[s.periodPill, period === p && s.periodPillActive]} onPress={() => setPeriod(p)}>
+              <Pressable key={p} style={({ pressed }) => [s.periodPill, period === p && s.periodPillActive, pressed && { opacity: 0.7 }]} onPress={() => setPeriod(p)}>
                 <Text style={[s.periodPillText, period === p && s.periodPillTextActive]}>{p.toUpperCase()}</Text>
               </Pressable>
             ))}
@@ -310,7 +324,11 @@ export default function AnalyzeScreen() {
             </View>
 
             {activeForCombined.length >= 2 ? (
-              <SmartCombinedView ticker={ticker!} selectedIndicators={activeForCombined} />
+              <SmartCombinedView
+                key={refreshKey}
+                ticker={ticker!}
+                selectedIndicators={activeForCombined}
+              />
             ) : (
               <Text style={s.hintText}>Enable at least 2 indicators for combined analysis</Text>
             )}
@@ -459,7 +477,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingVertical: 6, paddingHorizontal: 8, borderRadius: 6,
   },
   themeBtnPressed: { backgroundColor: c.bgElevated },
-  themeBtnIcon: { fontSize: 14, color: c.textSecondary },
 
   tickerLabel: { color: c.accent, ...typography.label, letterSpacing: 1 },
   tickerName: { color: c.textTertiary, ...typography.labelSm, marginTop: 1, maxWidth: 280, marginBottom: spacing.xs },
@@ -540,7 +557,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: spacing.lg, paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm,
     borderBottomWidth: 1, borderBottomColor: c.border,
   },
   modalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

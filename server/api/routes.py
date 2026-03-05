@@ -1,17 +1,17 @@
 """FastAPI route handlers."""
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 
 from ..core.analyzer import compute_all_indicators, get_indicator_state
 from ..core.backtester import calc_combined_probability, calc_probability
-from ..core.fetcher import fetch_batch_quotes, fetch_price_history, get_ticker_info, search_tickers
+from ..core.fetcher import fetch_batch_quotes, fetch_earnings_dates, fetch_live_prices, fetch_price_history, get_ticker_info, search_tickers
 from ..core.presets import get_preset, list_presets, PRESETS
 from ..core.smart_matcher import calc_adaptive_combined
-from ..core.supabase_cache import read_cached_signals, write_cached_signals
+from ..core.supabase_cache import read_cached_signals, write_cached_signals, read_cached_analysis, write_cached_analysis, log_recent_search, read_recent_searches
 from .schemas import (
     ADXData,
     ATRData,
@@ -40,21 +40,37 @@ router = APIRouter(prefix="/api")
 
 
 @router.get("/analyze/{ticker}", response_model=AnalysisResponse)
-async def analyze_ticker(ticker: str, period: str = "10y"):
-    """Full analysis: all indicators + historical probabilities."""
-    try:
-        df = fetch_price_history(ticker, period=period)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Data fetch error: {e}")
+async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period: str = "10y"):
+    """Full analysis: all indicators + historical probabilities.
+    Uses Supabase cache to avoid recomputing on every request.
+    """
+    # ── Check Supabase cache first ──
+    cached = read_cached_analysis(ticker)
+    if cached and cached.get("data"):
+        updated_at = cached.get("updated_at", "")
+        if _is_analysis_cache_fresh(updated_at):
+            return cached["data"]
 
-    # Ticker info
-    try:
-        info = get_ticker_info(ticker)
-        ticker_info = TickerInfo(**info)
-    except Exception:
-        ticker_info = TickerInfo(ticker=ticker.upper(), name=ticker.upper())
+    # ── Cache miss or stale: compute fresh ──
+    from concurrent.futures import ThreadPoolExecutor
+
+    # Parallel fetch: price history + ticker info
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        future_df = pool.submit(lambda: fetch_price_history(ticker, period=period))
+        future_info = pool.submit(get_ticker_info, ticker)
+
+        try:
+            df = future_df.result(timeout=30)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Data fetch error: {e}")
+
+        try:
+            info = future_info.result(timeout=10)
+            ticker_info = TickerInfo(**info)
+        except Exception:
+            ticker_info = TickerInfo(ticker=ticker.upper(), name=ticker.upper())
 
     # Price info
     close = df["Close"]
@@ -71,6 +87,13 @@ async def analyze_ticker(ticker: str, period: str = "10y"):
     # Compute all indicators
     indicators = compute_all_indicators(df)
     states = get_indicator_state(indicators)
+
+    # Cache indicators for smart-probability reuse (avoids recomputation)
+    _indicator_mem_cache[f"{ticker.upper()}:{period}"] = {
+        "indicators": indicators, "states": states,
+        "current_values": _build_current_values(indicators, states),
+        "ts": time.time(),
+    }
 
     indicator_results = {}
 
@@ -211,7 +234,7 @@ async def analyze_ticker(ticker: str, period: str = "10y"):
     # Data range info
     data_range = f"{df.index[0].strftime('%Y-%m-%d')} ~ {df.index[-1].strftime('%Y-%m-%d')} ({len(df)} days)"
 
-    return AnalysisResponse(
+    response = AnalysisResponse(
         ticker_info=ticker_info,
         price=price,
         indicators=indicator_results,
@@ -219,6 +242,19 @@ async def analyze_ticker(ticker: str, period: str = "10y"):
         analysis_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         data_range=data_range,
     )
+
+    # ── Background tasks (non-blocking) ──
+    def _bg_cache():
+        try:
+            rd = response.model_dump()
+            _strip_cases(rd)
+            write_cached_analysis(ticker, rd)
+        except Exception:
+            pass
+    background_tasks.add_task(_bg_cache)
+    background_tasks.add_task(log_recent_search, ticker)
+
+    return response
 
 
 @router.get("/probability/{ticker}")
@@ -288,83 +324,43 @@ class SmartProbabilityRequest(BaseModel):
 async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: str = "10y"):
     """
     Adaptive combined probability with progressive bin widening.
-    Returns results at multiple strictness tiers + impact analysis.
+    Uses in-memory caches to avoid recomputation on back-to-back requests.
     """
+    key_map = {
+        "RSI": "rsi", "MACD": "macd", "MA": "ma", "Drawdown": "drawdown",
+        "ADX": "adx", "BB": "bb", "Vol": "volume", "Stoch": "stoch",
+        "MADist": "ma_distance", "Consec": "consecutive", "W52": "week52",
+    }
+    selected = [key_map[k] for k in req.selected_indicators if k in key_map]
+    if len(selected) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 indicators")
+
+    # ── Check smart-prob result cache (instant if same indicators) ──
+    now = time.time()
+    sp_key = f"{ticker.upper()}:{period}:{','.join(sorted(selected))}"
+    sp_cached = _smart_prob_cache.get(sp_key)
+    if sp_cached and now - sp_cached["ts"] < _SMART_PROB_TTL:
+        return sp_cached["result"]
+
+    # ── Fetch df (SQLite cached) ──
     try:
         df = fetch_price_history(ticker, period=period)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    indicators = compute_all_indicators(df)
-    states = get_indicator_state(indicators)
-
-    # Map frontend indicator keys to smart_matcher keys + current values
-    key_map = {
-        "RSI": "rsi",
-        "MACD": "macd",
-        "MA": "ma",
-        "Drawdown": "drawdown",
-        "ADX": "adx",
-        "BB": "bb",
-        "Vol": "volume",
-        "Stoch": "stoch",
-        "MADist": "ma_distance",
-        "Consec": "consecutive",
-        "W52": "week52",
-    }
-
-    selected = []
-    for frontend_key in req.selected_indicators:
-        matcher_key = key_map.get(frontend_key)
-        if matcher_key:
-            selected.append(matcher_key)
-
-    if len(selected) < 2:
-        raise HTTPException(status_code=400, detail="Need at least 2 indicators")
-
-    # Build current_values dict from computed indicators
-    current_values = {}
-    rsi_val = indicators["rsi"]["value"]
-    if rsi_val is not None:
-        current_values["rsi"] = rsi_val
-
-    macd = indicators["macd"]
-    if macd["histogram"] is not None:
-        current_values["macd_histogram"] = macd["histogram"]
-    current_values["macd_event"] = states.get("macd_event")
-
-    current_values["ma_alignment"] = indicators["ma"]["alignment"]
-
-    dd = indicators.get("drawdown", {})
-    if dd.get("from_60d_high") is not None:
-        current_values["drawdown_60d"] = dd["from_60d_high"]
-
-    adx = indicators.get("adx", {})
-    if adx.get("adx") is not None:
-        current_values["adx"] = adx["adx"]
-
-    bb = indicators.get("bb", {})
-    if bb.get("position") is not None:
-        current_values["bb_position"] = bb["position"]
-
-    vol = indicators.get("volume", {})
-    if vol.get("ratio") is not None:
-        current_values["volume_ratio"] = vol["ratio"]
-
-    stoch = indicators.get("stochastic", {})
-    if stoch.get("k") is not None:
-        current_values["stoch_k"] = stoch["k"]
-
-    ma_dist = indicators.get("ma_distance", {})
-    if ma_dist.get("from_sma20") is not None:
-        current_values["ma20_distance"] = ma_dist["from_sma20"]
-
-    consec = indicators.get("consecutive", {})
-    current_values["consecutive_days"] = consec.get("days", 0)
-
-    w52 = indicators.get("week52_position", {})
-    if w52.get("position_pct") is not None:
-        current_values["w52_position"] = w52["position_pct"]
+    # ── Reuse indicator cache if available (set by analyze_ticker) ──
+    ind_key = f"{ticker.upper()}:{period}"
+    ind_cached = _indicator_mem_cache.get(ind_key)
+    if ind_cached and now - ind_cached["ts"] < _INDICATOR_MEM_TTL:
+        current_values = ind_cached["current_values"]
+    else:
+        indicators = compute_all_indicators(df)
+        states = get_indicator_state(indicators)
+        current_values = _build_current_values(indicators, states)
+        _indicator_mem_cache[ind_key] = {
+            "indicators": indicators, "states": states,
+            "current_values": current_values, "ts": now,
+        }
 
     result = calc_adaptive_combined(df, selected, current_values)
 
@@ -374,14 +370,14 @@ async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: s
         tiers[tier_name] = _to_prob_data(prob_result).model_dump()
 
     individuals = {}
-    for ind_key, prob_result in result["individuals"].items():
-        individuals[ind_key] = _to_prob_data(prob_result).model_dump()
+    for ind_key_name, prob_result in result["individuals"].items():
+        individuals[ind_key_name] = _to_prob_data(prob_result).model_dump()
 
     impact = {}
-    for ind_key, prob_result in result["impact"].items():
-        impact[ind_key] = _to_prob_data(prob_result).model_dump()
+    for ind_key_name, prob_result in result["impact"].items():
+        impact[ind_key_name] = _to_prob_data(prob_result).model_dump()
 
-    return {
+    response = {
         "tiers": tiers,
         "best_tier": result["best_tier"],
         "individuals": individuals,
@@ -392,52 +388,151 @@ async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: s
                           for k, v in current_values.items()},
     }
 
+    # Cache the result
+    _smart_prob_cache[sp_key] = {"result": response, "ts": now}
+    return response
 
-# Selection criteria:
-# - US-listed equities with market cap > $50B
-# - Top representatives from each GICS sector
-# - High trading volume and retail investor interest
-POPULAR_TICKERS = [
-    # Technology (mega-cap + key semis + enterprise)
-    "AAPL", "MSFT", "GOOGL", "NVDA", "META", "AVGO", "AMD",
-    "CRM", "ORCL", "ADBE", "PLTR", "INTC", "QCOM", "AMAT",
-    # Consumer (e-commerce + EV + retail)
-    "AMZN", "TSLA", "COST", "WMT", "HD", "NKE", "SBUX", "MCD",
-    # Financial Services (banks + payments + insurance)
-    "BRK-B", "JPM", "V", "MA", "GS", "BAC", "MS",
-    # Healthcare (pharma + biotech + devices)
-    "LLY", "UNH", "JNJ", "ABBV", "PFE", "MRK", "TMO",
-    # Communication / Media
-    "NFLX", "DIS", "CMCSA",
-    # Energy
-    "XOM", "CVX", "COP",
-    # Industrials / Defense
-    "CAT", "BA", "LMT", "UNP", "GE",
+
+# NASDAQ 100 constituents (100 largest non-financial NASDAQ-listed companies)
+NASDAQ_100 = [
+    "AAPL", "ABNB", "ADBE", "ADI", "ADP", "ADSK", "AEP", "AMAT",
+    "AMGN", "AMZN", "AMD", "ANSS", "APP", "ARM", "ASML", "AVGO",
+    "AZN", "BIIB", "BKNG", "BKR", "CCEP", "CDNS", "CDW", "CEG",
+    "CHTR", "CMCSA", "COIN", "COST", "CPRT", "CRWD", "CSCO", "CSGP",
+    "CSX", "CTAS", "CTSH", "DASH", "DDOG", "DLTR", "DXCM", "EA",
+    "EXC", "FANG", "FAST", "FTNT", "GEHC", "GILD", "GFS", "GOOGL",
+    "HON", "IDXX", "ILMN", "INTC", "INTU", "ISRG", "KDP", "KHC",
+    "KLAC", "LIN", "LRCX", "LULU", "MAR", "MCHP", "MDB", "MDLZ",
+    "MELI", "META", "MNST", "MRNA", "MRVL", "MSFT", "MU", "NFLX",
+    "NVDA", "NXPI", "ODFL", "ON", "ORLY", "PANW", "PAYX", "PCAR",
+    "PDD", "PEP", "PLTR", "PYPL", "QCOM", "QQQ", "REGN", "ROP",
+    "ROST", "SBUX", "SMCI", "SNPS", "SPY", "TEAM", "TMUS", "TSLA",
+    "TTD", "TTWO", "TXN", "VRSK", "VRTX", "WDAY", "ZS",
 ]
+
+LEVERAGED_ETFS = [
+    "TQQQ", "SOXL", "UPRO", "TECL", "SQQQ", "LABU", "TNA", "FNGU",
+]
+
+POPULAR_TICKERS = NASDAQ_100 + LEVERAGED_ETFS
 
 SECTOR_MAP = {
     "Technology": [
-        "AAPL", "MSFT", "GOOGL", "NVDA", "META", "AVGO", "AMD",
-        "CRM", "ORCL", "ADBE", "PLTR", "INTC", "QCOM", "AMAT",
+        "AAPL", "ADBE", "ADI", "ADSK", "AMAT", "AMD", "AMZN", "ANSS",
+        "APP", "ARM", "ASML", "AVGO", "CDNS", "CDW", "CRM", "CRWD",
+        "CSCO", "CSGP", "CTSH", "DDOG", "FTNT", "GFS", "GOOGL", "INTC",
+        "INTU", "KLAC", "LRCX", "MDB", "META", "MRVL", "MSFT", "MU",
+        "NXPI", "NVDA", "ON", "ORCL", "PANW", "PLTR", "QCOM", "SHOP",
+        "SMCI", "SNPS", "TEAM", "TXN", "TSLA", "TTD", "WDAY", "ZS",
     ],
     "Consumer": [
-        "AMZN", "TSLA", "COST", "WMT", "HD", "NKE", "SBUX", "MCD",
+        "ABNB", "BKNG", "CCEP", "CMG", "COST", "CPRT", "DASH", "DLTR",
+        "EA", "FAST", "HD", "KDP", "KHC", "KO", "LOW", "LULU", "MAR",
+        "MCD", "MDLZ", "MELI", "MNST", "NKE", "ODFL", "ORLY", "PCAR",
+        "PDD", "PEP", "PG", "ROST", "SBUX", "TGT", "TTWO", "UBER",
+        "WMT", "YUM",
     ],
     "Financial": [
-        "BRK-B", "JPM", "V", "MA", "GS", "BAC", "MS",
+        "ADP", "AXP", "BAC", "BKR", "BLK", "BRK-B", "C", "CME",
+        "COIN", "CTAS", "GS", "ICE", "JPM", "MA", "MCO", "MS",
+        "PAYX", "PYPL", "ROP", "SCHW", "SPGI", "SQ", "TFC",
+        "UNH", "USB", "V", "VRSK", "WFC",
     ],
     "Healthcare": [
-        "LLY", "UNH", "JNJ", "ABBV", "PFE", "MRK", "TMO",
+        "ABBV", "AMGN", "AZN", "BDX", "BIIB", "BMY", "DHR", "DXCM",
+        "EW", "GEHC", "GILD", "IDXX", "ILMN", "ISRG", "JNJ", "LLY",
+        "MCHP", "MDT", "MRK", "MRNA", "PFE", "REGN", "SYK", "TMO",
+        "VRTX", "ZTS",
     ],
     "Media": [
-        "NFLX", "DIS", "CMCSA",
+        "CHTR", "CMCSA", "DIS", "EA", "NFLX", "PINS", "SNAP", "SPOT",
+        "T", "TMUS", "TTWO", "VZ",
     ],
     "Energy": [
-        "XOM", "CVX", "COP",
+        "BKR", "COP", "CVX", "EOG", "FANG", "OXY", "PSX", "SLB",
+        "VLO", "XOM",
     ],
     "Industrial": [
-        "CAT", "BA", "LMT", "UNP", "GE",
+        "BA", "CAT", "CSX", "DE", "EMR", "FDX", "GE", "HON", "ITW",
+        "LMT", "MMM", "RTX", "UNP", "UPS",
     ],
+    "Utilities": [
+        "AEP", "CEG", "DUK", "EXC", "NEE", "SO",
+    ],
+    "Real Estate": [
+        "AMT", "CCI", "EQIX", "PLD",
+    ],
+    "Materials": [
+        "APD", "ECL", "FCX", "LIN", "NEM", "SHW",
+    ],
+    "ETF": [
+        "QQQ", "SPY",
+    ],
+    "Leveraged": [
+        "TQQQ", "SOXL", "UPRO", "TECL", "SQQQ", "LABU", "TNA", "FNGU",
+    ],
+}
+
+TICKER_NAMES = {
+    "AAPL": "Apple", "ABNB": "Airbnb", "ADBE": "Adobe", "ADI": "Analog Devices",
+    "ADP": "ADP", "ADSK": "Autodesk", "AEP": "AE Power", "AMAT": "Applied Materials",
+    "AMGN": "Amgen", "AMZN": "Amazon", "AMD": "AMD", "ANSS": "Ansys",
+    "APP": "AppLovin", "ARM": "Arm Holdings", "ASML": "ASML", "AVGO": "Broadcom",
+    "AZN": "AstraZeneca", "BIIB": "Biogen", "BKNG": "Booking", "BKR": "Baker Hughes",
+    "CCEP": "Coca-Cola EP", "CDNS": "Cadence", "CDW": "CDW", "CEG": "Constellation",
+    "CHTR": "Charter", "CMCSA": "Comcast", "COIN": "Coinbase", "COST": "Costco",
+    "CPRT": "Copart", "CRWD": "CrowdStrike", "CSCO": "Cisco", "CSGP": "CoStar",
+    "CSX": "CSX Corp", "CTAS": "Cintas", "CTSH": "Cognizant", "DASH": "DoorDash",
+    "DDOG": "Datadog", "DLTR": "Dollar Tree", "DXCM": "DexCom", "EA": "EA Games",
+    "EXC": "Exelon", "FANG": "Diamondback", "FAST": "Fastenal", "FTNT": "Fortinet",
+    "GEHC": "GE Healthcare", "GILD": "Gilead", "GFS": "GlobalFoundries", "GOOGL": "Google",
+    "HON": "Honeywell", "IDXX": "IDEXX", "ILMN": "Illumina", "INTC": "Intel",
+    "INTU": "Intuit", "ISRG": "Intuitive Surg", "KDP": "Keurig Dr P", "KHC": "Kraft Heinz",
+    "KLAC": "KLA Corp", "LIN": "Linde", "LRCX": "Lam Research", "LULU": "Lululemon",
+    "MAR": "Marriott", "MCHP": "Microchip", "MDB": "MongoDB", "MDLZ": "Mondelez",
+    "MELI": "MercadoLibre", "META": "Meta", "MNST": "Monster", "MRNA": "Moderna",
+    "MRVL": "Marvell", "MSFT": "Microsoft", "MU": "Micron", "NFLX": "Netflix",
+    "NVDA": "NVIDIA", "NXPI": "NXP Semi", "ODFL": "Old Dominion", "ON": "ON Semi",
+    "ORLY": "O'Reilly", "PANW": "Palo Alto", "PAYX": "Paychex", "PCAR": "PACCAR",
+    "PDD": "PDD Holdings", "PEP": "PepsiCo", "PLTR": "Palantir", "PYPL": "PayPal",
+    "QCOM": "Qualcomm", "QQQ": "Invesco QQQ", "REGN": "Regeneron", "ROP": "Roper Tech",
+    "ROST": "Ross Stores", "SBUX": "Starbucks", "SMCI": "Super Micro", "SNPS": "Synopsys",
+    "SPY": "S&P 500 ETF", "TEAM": "Atlassian", "TMUS": "T-Mobile", "TSLA": "Tesla",
+    "TTD": "Trade Desk", "TTWO": "Take-Two", "TXN": "Texas Instr", "VRSK": "Verisk",
+    "VRTX": "Vertex Pharma", "WDAY": "Workday", "ZS": "Zscaler",
+    # Leveraged ETFs
+    "TQQQ": "3x NASDAQ", "SOXL": "3x Semis", "UPRO": "3x S&P 500",
+    "TECL": "3x Tech", "SQQQ": "-3x NASDAQ", "LABU": "3x Biotech",
+    "TNA": "3x Small Cap", "FNGU": "3x FANG+",
+}
+
+# Approximate market caps in billions (updated periodically, good enough for display)
+MARKET_CAP_B = {
+    "AAPL": 3400, "MSFT": 3100, "NVDA": 2800, "AMZN": 2100, "GOOGL": 2000,
+    "META": 1500, "AVGO": 800, "TSLA": 750, "LLY": 700, "COST": 400,
+    "NFLX": 380, "AMD": 220, "QCOM": 190, "ADBE": 200, "ISRG": 190,
+    "INTU": 180, "AMGN": 165, "AMAT": 150, "BKNG": 160, "TXN": 185,
+    "PANW": 120, "LRCX": 95, "MU": 100, "KLAC": 90, "SNPS": 80,
+    "CDNS": 78, "CRWD": 85, "INTC": 100, "MRVL": 65, "ASML": 260,
+    "ARM": 150, "PLTR": 200, "COIN": 50, "APP": 90, "SMCI": 20,
+    "PEP": 210, "MDLZ": 85, "KDP": 45, "KHC": 40, "MNST": 55,
+    "CMCSA": 170, "CHTR": 50, "TMUS": 260, "NXPI": 55, "ON": 25,
+    "ADI": 105, "MCHP": 30, "FTNT": 75, "DDOG": 40, "MDB": 25,
+    "ZS": 30, "WDAY": 65, "TEAM": 55, "CSCO": 230, "ADP": 110,
+    "ADSK": 55, "CTSH": 40, "ANSS": 28, "CSGP": 35, "CDW": 25,
+    "PYPL": 75, "MRNA": 15, "BIIB": 25, "GILD": 110, "REGN": 90,
+    "VRTX": 120, "ILMN": 18, "DXCM": 30, "IDXX": 40, "GEHC": 40,
+    "AZN": 220, "PCAR": 55, "ODFL": 40, "CSX": 60, "FAST": 45,
+    "CPRT": 55, "ORLY": 70, "ROST": 45, "SBUX": 100, "MAR": 75,
+    "LULU": 35, "DLTR": 15, "CTAS": 85, "PAYX": 50, "MELI": 85,
+    "PDD": 130, "DASH": 65, "ABNB": 80, "TTWO": 30, "EA": 40,
+    "CEG": 80, "AEP": 50, "EXC": 40, "HON": 145, "ROP": 55,
+    "VRSK": 40, "TTD": 45, "FANG": 30, "BKR": 40, "GFS": 25,
+    "LIN": 210, "CCEP": 40,
+    "QQQ": 280, "SPY": 550,
+    # Leveraged ETFs (AUM not market cap, but close enough for display)
+    "TQQQ": 22, "SOXL": 10, "UPRO": 4, "TECL": 2,
+    "SQQQ": 5, "LABU": 1, "TNA": 3, "FNGU": 5,
 }
 
 AVAILABLE_SECTORS = ["All"] + sorted(SECTOR_MAP.keys())
@@ -449,6 +544,14 @@ _TRENDING_TTL = 300  # 5 minutes
 # Signal scanning cache (10 min TTL)
 _signals_cache: dict = {"data": None, "ts": 0}
 _SIGNALS_TTL = 600  # 10 minutes
+
+# In-memory cache for computed indicators (survives within Vercel warm instance)
+_indicator_mem_cache: dict = {}  # {ticker:period -> {indicators, states, current_values, ts}}
+_INDICATOR_MEM_TTL = 300  # 5 minutes
+
+# In-memory cache for smart probability results
+_smart_prob_cache: dict = {}  # {ticker:period:indicators -> {result, ts}}
+_SMART_PROB_TTL = 300  # 5 minutes
 
 
 @router.get("/similar/{ticker}")
@@ -482,7 +585,7 @@ async def refresh_signals():
     """
     from concurrent.futures import ThreadPoolExecutor
 
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=12) as pool:
         results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
     valid = [r for r in results if r is not None]
     valid.sort(key=lambda x: x["strength"], reverse=True)
@@ -507,7 +610,7 @@ async def refresh_signals():
 
 
 @router.get("/signals")
-async def get_signals(limit: int = Query(20, ge=1, le=50)):
+async def get_signals(limit: int = Query(101, ge=1, le=150)):
     """
     Combined probability for popular stocks.
     Uses Supabase cache for fast loading, falls back to computation.
@@ -540,7 +643,7 @@ async def get_signals(limit: int = Query(20, ge=1, le=50)):
     # 3. Full computation (slow, only on cache miss)
     from concurrent.futures import ThreadPoolExecutor
 
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=12) as pool:
         results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
     valid = [r for r in results if r is not None]
     valid.sort(key=lambda x: x["strength"], reverse=True)
@@ -562,6 +665,60 @@ async def get_signals(limit: int = Query(20, ge=1, le=50)):
         "updated": result["updated"],
         "market_state": _get_market_state(),
     }
+
+
+@router.get("/live-prices")
+async def live_prices(tickers: str = Query(..., description="Comma-separated tickers")):
+    """Fetch current prices including pre/post market via Yahoo v7 quote API."""
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not ticker_list:
+        return {"prices": {}}
+    prices = fetch_live_prices(ticker_list[:30])
+    return {"prices": prices, "market_state": _get_market_state()}
+
+
+@router.get("/recent-searches")
+async def recent_searches(limit: int = Query(15, ge=1, le=30)):
+    """Get recently searched tickers (global across all visitors)."""
+    tickers = read_recent_searches(limit=limit)
+    return {"tickers": tickers}
+
+
+_earnings_cache: dict = {"data": None, "ts": 0}
+_EARNINGS_TTL = 21600  # 6 hours
+
+
+@router.get("/earnings-calendar")
+async def earnings_calendar():
+    """Get stocks with earnings within the next 14 days."""
+    now = time.time()
+
+    if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
+        return _earnings_cache["data"]
+
+    earnings = fetch_earnings_dates(POPULAR_TICKERS)
+    # Filter to 14 days ahead only
+    upcoming = [e for e in earnings if 0 <= e["days_until"] <= 14]
+    upcoming.sort(key=lambda x: x["days_until"])
+
+    # Enrich with price/change from signals cache if available
+    if _signals_cache["data"]:
+        sig_map = {s["ticker"]: s for s in _signals_cache["data"].get("signals", [])}
+        for e in upcoming:
+            sig = sig_map.get(e["ticker"])
+            if sig:
+                e["price"] = sig["price"]
+                e["change_pct"] = sig["change_pct"]
+
+    result = {
+        "earnings": upcoming,
+        "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+    _earnings_cache["data"] = result
+    _earnings_cache["ts"] = now
+
+    return result
 
 
 @router.get("/sectors")
@@ -680,9 +837,35 @@ async def available_conditions():
 # ── Helpers ──
 
 
+def _is_analysis_cache_fresh(updated_at_str: str) -> bool:
+    """Check if cached analysis is still fresh.
+    - During market hours (Mon-Fri 9:30-16:00 ET): 15 minutes TTL
+    - Outside market hours: 60 minutes TTL
+    """
+    if not updated_at_str:
+        return False
+
+    try:
+        updated = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+        now_utc = datetime.now(timezone.utc)
+        age_seconds = (now_utc - updated).total_seconds()
+
+        # Determine if market is currently open
+        et = now_utc.astimezone(timezone(timedelta(hours=-5)))
+        is_weekday = et.weekday() < 5
+        t = et.hour * 60 + et.minute
+        is_market_hours = is_weekday and 570 <= t < 960  # 9:30 AM - 4:00 PM ET
+
+        if is_market_hours:
+            return age_seconds < 900   # 15 minutes
+        else:
+            return age_seconds < 3600  # 60 minutes
+    except Exception:
+        return False
+
+
 def _get_market_state() -> str:
     """Get current US market state based on ET time."""
-    from datetime import timezone, timedelta
     et = datetime.now(timezone(timedelta(hours=-5)))
     # Weekend
     if et.weekday() >= 5:
@@ -699,6 +882,56 @@ def _get_market_state() -> str:
         return "AFTER"
     else:
         return "CLOSED"
+
+
+def _build_current_values(indicators: dict, states: dict) -> dict:
+    """Build current_values dict from computed indicators (shared by analyze + smart-prob)."""
+    cv = {}
+    rsi_val = indicators["rsi"]["value"]
+    if rsi_val is not None:
+        cv["rsi"] = rsi_val
+    macd = indicators["macd"]
+    if macd["histogram"] is not None:
+        cv["macd_histogram"] = macd["histogram"]
+    cv["macd_event"] = states.get("macd_event")
+    cv["ma_alignment"] = indicators["ma"]["alignment"]
+    dd = indicators.get("drawdown", {})
+    if dd.get("from_60d_high") is not None:
+        cv["drawdown_60d"] = dd["from_60d_high"]
+    adx = indicators.get("adx", {})
+    if adx.get("adx") is not None:
+        cv["adx"] = adx["adx"]
+    bb = indicators.get("bb", {})
+    if bb.get("position") is not None:
+        cv["bb_position"] = bb["position"]
+    vol = indicators.get("volume", {})
+    if vol.get("ratio") is not None:
+        cv["volume_ratio"] = vol["ratio"]
+    stoch = indicators.get("stochastic", {})
+    if stoch.get("k") is not None:
+        cv["stoch_k"] = stoch["k"]
+    ma_dist = indicators.get("ma_distance", {})
+    if ma_dist.get("from_sma20") is not None:
+        cv["ma20_distance"] = ma_dist["from_sma20"]
+    consec = indicators.get("consecutive", {})
+    cv["consecutive_days"] = consec.get("days", 0)
+    w52 = indicators.get("week52_position", {})
+    if w52.get("position_pct") is not None:
+        cv["w52_position"] = w52["position_pct"]
+    return cv
+
+
+def _strip_cases(d: dict) -> None:
+    """Remove 'cases' arrays from nested probability data to reduce cache size."""
+    if isinstance(d, dict):
+        d.pop("cases", None)
+        for v in d.values():
+            if isinstance(v, dict):
+                _strip_cases(v)
+            elif isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict):
+                        _strip_cases(item)
 
 
 def _to_prob_data(result) -> ProbabilityData:
@@ -840,34 +1073,109 @@ def _scan_ticker_combo(ticker: str) -> dict | None:
     }
     selected = [k for k, v in checks.items() if v]
 
+    # Extract volume info (already computed, just expose it)
+    _volume_ratio = round(current_values.get("volume_ratio", 1.0) or 1.0, 2)
+    _volume_level = states.get("volume_level", "normal")
+
     if len(selected) < 2:
-        return None
+        # Not enough indicators - return stock with neutral win rates
+        return {
+            "ticker": ticker,
+            "name": TICKER_NAMES.get(ticker, ticker),
+            "price": round(current_price, 2),
+            "change_pct": change_pct,
+            "sector": sector,
+            "market_cap_b": MARKET_CAP_B.get(ticker, 0),
+            "win_rate_5d": 50.0,
+            "win_rate_20d": 50.0,
+            "win_rate_60d": 50.0,
+            "avg_return_5d": 0.0,
+            "avg_return_20d": 0.0,
+            "avg_return_60d": 0.0,
+            "occurrences": 0,
+            "condition": "",
+            "indicators_used": len(selected),
+            "strength": 0.0,
+            "tier": "",
+            "volume_ratio": _volume_ratio,
+            "volume_level": _volume_level,
+        }
 
     result = calc_adaptive_combined(df, selected, current_values)
     best_tier = result["best_tier"]
     best = result["tiers"].get(best_tier)
 
-    if not best or best.occurrences < 15:
-        return None
+    if not best:
+        # No best tier found - return stock with neutral win rates
+        return {
+            "ticker": ticker,
+            "name": TICKER_NAMES.get(ticker, ticker),
+            "price": round(current_price, 2),
+            "change_pct": change_pct,
+            "sector": sector,
+            "market_cap_b": MARKET_CAP_B.get(ticker, 0),
+            "win_rate_5d": 50.0,
+            "win_rate_20d": 50.0,
+            "win_rate_60d": 50.0,
+            "avg_return_5d": 0.0,
+            "avg_return_20d": 0.0,
+            "avg_return_60d": 0.0,
+            "occurrences": 0,
+            "condition": "",
+            "indicators_used": len(selected),
+            "strength": 0.0,
+            "tier": best_tier,
+            "volume_ratio": _volume_ratio,
+            "volume_level": _volume_level,
+        }
 
     p5 = best.periods.get(5, {})
     p20 = best.periods.get(20, {})
     p60 = best.periods.get(60, {})
 
+    MIN_CASES = 10  # Minimum cases for statistically meaningful win rate
+    occ = best.occurrences
+    if occ < MIN_CASES:
+        # Insufficient data: blend toward 50% based on how few cases we have
+        # 0 cases → 50%, 1 case → mostly 50%, 4 cases → mostly real value
+        blend = occ / MIN_CASES  # 0.0 to 0.8
+        raw_wr5 = p5.get("win_rate", 50)
+        raw_wr20 = p20.get("win_rate", 50)
+        raw_wr60 = p60.get("win_rate", 50)
+        wr5 = round(50 + (raw_wr5 - 50) * blend, 1)
+        wr20 = round(50 + (raw_wr20 - 50) * blend, 1)
+        wr60 = round(50 + (raw_wr60 - 50) * blend, 1)
+        avg_ret5 = round(p5.get("avg_return", 0) * blend, 2)
+        avg_ret = round(p20.get("avg_return", 0) * blend, 2)
+        avg_ret60 = round(p60.get("avg_return", 0) * blend, 2)
+    else:
+        wr5 = round(p5.get("win_rate", 50), 1)
+        wr20 = round(p20.get("win_rate", 50), 1)
+        wr60 = round(p60.get("win_rate", 50), 1)
+        avg_ret5 = round(p5.get("avg_return", 0), 2)
+        avg_ret = round(p20.get("avg_return", 0), 2)
+        avg_ret60 = round(p60.get("avg_return", 0), 2)
+
     return {
         "ticker": ticker,
+        "name": TICKER_NAMES.get(ticker, ticker),
         "price": round(current_price, 2),
         "change_pct": change_pct,
         "sector": sector,
-        "win_rate_5d": round(p5.get("win_rate", 50), 1),
-        "win_rate_20d": round(p20.get("win_rate", 50), 1),
-        "win_rate_60d": round(p60.get("win_rate", 50), 1),
-        "avg_return_20d": round(p20.get("avg_return", 0), 2),
-        "occurrences": best.occurrences,
+        "market_cap_b": MARKET_CAP_B.get(ticker, 0),
+        "win_rate_5d": wr5,
+        "win_rate_20d": wr20,
+        "win_rate_60d": wr60,
+        "avg_return_5d": avg_ret5,
+        "avg_return_20d": avg_ret,
+        "avg_return_60d": avg_ret60,
+        "occurrences": occ,
         "condition": best.condition,
         "indicators_used": len(selected),
-        "strength": round(abs(p20.get("win_rate", 50) - 50) + abs(p5.get("win_rate", 50) - 50), 1),
+        "strength": round(abs(wr20 - 50) + abs(wr5 - 50), 1),
         "tier": best_tier,
+        "volume_ratio": _volume_ratio,
+        "volume_level": _volume_level,
     }
 
 

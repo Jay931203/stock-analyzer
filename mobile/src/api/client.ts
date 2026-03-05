@@ -1,7 +1,30 @@
 import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AnalysisResponse, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TrendingStock } from '../types/analysis';
+import type { AnalysisResponse, EarningsItem, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TrendingStock } from '../types/analysis';
+
+// Simple in-memory cache for analysis results (avoids redundant server calls)
+const _cache = new Map<string, { data: any; ts: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCached(key: string): any | null {
+  const entry = _cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL) {
+    _cache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCache(key: string, data: any): void {
+  _cache.set(key, { data, ts: Date.now() });
+  // Evict old entries if cache grows too large
+  if (_cache.size > 50) {
+    const oldest = [..._cache.entries()].sort((a, b) => a[1].ts - b[1].ts);
+    for (let i = 0; i < 10; i++) _cache.delete(oldest[i][0]);
+  }
+}
 
 const STORAGE_KEY = 'stock_analyzer_server_url';
 
@@ -43,10 +66,15 @@ export function getBaseUrl() {
 
 const api = {
   async analyze(ticker: string, period = '10y'): Promise<AnalysisResponse> {
+    const cacheKey = `analyze:${ticker}:${period}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
     const res = await axios.get(`${BASE_URL}/api/analyze/${ticker}`, {
       params: { period },
       timeout: 30000,
     });
+    setCache(cacheKey, res.data);
     return res.data;
   },
 
@@ -104,18 +132,51 @@ const api = {
     return res.data;
   },
 
+  async livePrices(tickers: string[]): Promise<{ prices: Record<string, { price: number; change: number; change_pct: number; market_state: string }>; market_state: string }> {
+    const res = await axios.get(`${BASE_URL}/api/live-prices`, {
+      params: { tickers: tickers.join(',') },
+      timeout: 10000,
+    });
+    return res.data;
+  },
+
   async similar(ticker: string): Promise<{ ticker: string; sector: string; similar: string[] }> {
     const res = await axios.get(`${BASE_URL}/api/similar/${ticker}`, { timeout: 10000 });
     return res.data;
   },
 
   async smartProbability(ticker: string, selectedIndicators: string[]): Promise<SmartProbabilityResult> {
+    const cacheKey = `smart:${ticker}:${[...selectedIndicators].sort().join(',')}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
     const res = await axios.post(
       `${BASE_URL}/api/smart-probability/${ticker}`,
       { selected_indicators: selectedIndicators },
       { timeout: 60000 },
     );
+    setCache(cacheKey, res.data);
     return res.data;
+  },
+
+  async earningsCalendar(): Promise<{ earnings: EarningsItem[]; updated: string }> {
+    const cacheKey = 'earnings-calendar';
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
+    const res = await axios.get(`${BASE_URL}/api/earnings-calendar`, {
+      timeout: 15000,
+    });
+    setCache(cacheKey, res.data);
+    return res.data;
+  },
+
+  async recentSearches(limit = 15): Promise<string[]> {
+    const res = await axios.get(`${BASE_URL}/api/recent-searches`, {
+      params: { limit },
+      timeout: 5000,
+    });
+    return res.data.tickers;
   },
 
   async health(): Promise<boolean> {
@@ -127,5 +188,15 @@ const api = {
     }
   },
 };
+
+export function clearAnalysisCache(ticker?: string) {
+  if (ticker) {
+    for (const key of _cache.keys()) {
+      if (key.includes(ticker)) _cache.delete(key);
+    }
+  } else {
+    _cache.clear();
+  }
+}
 
 export default api;

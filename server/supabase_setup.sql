@@ -25,3 +25,25 @@ ALTER TABLE signal_cache DISABLE ROW LEVEL SECURITY;
 -- Index for fast reads
 CREATE INDEX IF NOT EXISTS idx_signal_cache_strength ON signal_cache(strength DESC);
 CREATE INDEX IF NOT EXISTS idx_signal_cache_ticker ON signal_cache(ticker);
+
+-- Analysis Cache table for individual ticker analysis results
+-- Stores the full JSON response to avoid recomputing indicators on every page load
+
+CREATE TABLE IF NOT EXISTS analysis_cache (
+  ticker TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Disable RLS for simplicity (public cache data)
+ALTER TABLE analysis_cache DISABLE ROW LEVEL SECURITY;
+
+-- Recent Searches table for global "recently searched" feature
+CREATE TABLE IF NOT EXISTS recent_searches (
+  id SERIAL PRIMARY KEY,
+  ticker TEXT NOT NULL,
+  searched_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE recent_searches DISABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_recent_searches_time ON recent_searches(searched_at DESC);

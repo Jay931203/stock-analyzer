@@ -141,8 +141,8 @@ function MACDContent({ data }: { data: AnalysisResponse['indicators']['macd'] })
   const eventLabels: Record<string, { label: string; color: string }> = {
     golden_cross: { label: 'Golden Cross', color: colors.bullish },
     dead_cross: { label: 'Dead Cross', color: colors.bearish },
-    positive: { label: 'Positive', color: '#8bc34a' },
-    negative: { label: 'Negative', color: '#ff9800' },
+    positive: { label: 'Positive', color: colors.success },
+    negative: { label: 'Negative', color: colors.warning },
   };
 
   const event = data.event ? eventLabels[data.event] : null;
@@ -271,7 +271,7 @@ function VolContent({ data }: { data: AnalysisResponse['indicators']['volume'] }
   const { colors } = useTheme();
   const s = getStyles(colors);
   const ratio = data.ratio ?? 0;
-  const ratioColor = ratio >= 2 ? '#ff9800' : ratio >= 1.2 ? '#8bc34a' : colors.textMuted;
+  const ratioColor = ratio >= 2 ? colors.warning : ratio >= 1.2 ? colors.success : colors.textMuted;
 
   return (
     <View>
@@ -365,7 +365,7 @@ function DrawdownContent({ data }: { data: AnalysisResponse['indicators']['drawd
   const s = getStyles(colors);
   const dd60 = data.from_60d_high;
   const ddColor = dd60 !== null
-    ? dd60 <= -20 ? colors.bearish : dd60 <= -10 ? '#ff9800' : dd60 <= -5 ? '#ffc107' : colors.bullish
+    ? dd60 <= -20 ? colors.bearish : dd60 <= -10 ? colors.warning : dd60 <= -5 ? colors.warning : colors.bullish
     : colors.textMuted;
 
   return (
@@ -383,12 +383,12 @@ function DrawdownContent({ data }: { data: AnalysisResponse['indicators']['drawd
         <MetricBox
           label="20d High"
           value={data.from_20d_high !== null ? `${data.from_20d_high.toFixed(1)}%` : 'N/A'}
-          color={data.from_20d_high !== null && data.from_20d_high < -5 ? '#ff9800' : undefined}
+          color={data.from_20d_high !== null && data.from_20d_high < -5 ? colors.warning : undefined}
         />
         <MetricBox
           label="60d High"
           value={data.from_60d_high !== null ? `${data.from_60d_high.toFixed(1)}%` : 'N/A'}
-          color={data.from_60d_high !== null && data.from_60d_high < -5 ? '#ff9800' : undefined}
+          color={data.from_60d_high !== null && data.from_60d_high < -5 ? colors.warning : undefined}
         />
         <MetricBox
           label="1yr High"
@@ -412,7 +412,7 @@ function ADXContent({ data }: { data: AnalysisResponse['indicators']['adx'] }) {
     : data.trend_strength === 'weak_trend' ? 'Weak Trend'
     : 'No Trend';
   const trendColor = adx !== null
-    ? adx >= 40 ? colors.bullish : adx >= 25 ? '#8bc34a' : adx >= 20 ? '#ff9800' : colors.bearish
+    ? adx >= 40 ? colors.bullish : adx >= 25 ? colors.success : adx >= 20 ? colors.warning : colors.bearish
     : colors.textMuted;
 
   return (
@@ -440,8 +440,8 @@ function ADXContent({ data }: { data: AnalysisResponse['indicators']['adx'] }) {
           </View>
           <View style={s.gaugeLabels}>
             <Text style={s.gaugeLabel}>0</Text>
-            <Text style={[s.gaugeLabel, { color: '#ff9800' }]}>20</Text>
-            <Text style={[s.gaugeLabel, { color: '#8bc34a' }]}>25</Text>
+            <Text style={[s.gaugeLabel, { color: colors.warning }]}>20</Text>
+            <Text style={[s.gaugeLabel, { color: colors.success }]}>25</Text>
             <Text style={[s.gaugeLabel, { color: colors.bullish }]}>40</Text>
             <Text style={s.gaugeLabel}>60</Text>
           </View>
@@ -537,9 +537,9 @@ function ConsecContent({ data }: { data: AnalysisResponse['indicators']['consecu
   const days = data.days;
   const isUp = days > 0;
   const color = Math.abs(days) >= 5
-    ? (isUp ? '#ff9800' : colors.bullish)
+    ? (isUp ? colors.warning : colors.bullish)
     : Math.abs(days) >= 3
-    ? (isUp ? '#ffc107' : '#8bc34a')
+    ? (isUp ? colors.warning : colors.success)
     : colors.textMuted;
 
   return (
@@ -573,7 +573,7 @@ function Week52Content({ data }: { data: AnalysisResponse['indicators']['week52'
   const s = getStyles(colors);
   const pos = data.position_pct;
   const posColor = pos !== null
-    ? pos >= 90 ? colors.bearish : pos >= 70 ? '#ff9800' : pos <= 10 ? colors.bullish : pos <= 30 ? '#8bc34a' : colors.textMuted
+    ? pos >= 90 ? colors.bearish : pos >= 70 ? colors.warning : pos <= 10 ? colors.bullish : pos <= 30 ? colors.success : colors.textMuted
     : colors.textMuted;
 
   return (
@@ -731,7 +731,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     top: -1,
     width: 3,
     height: 12,
-    backgroundColor: '#ff980080',
+    backgroundColor: `${c.warning}80`,
     borderRadius: 2,
     marginLeft: -1.5,
   },

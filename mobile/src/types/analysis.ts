@@ -199,18 +199,34 @@ export interface TrendingStock {
 
 export interface SignalItem {
   ticker: string;
+  name?: string;
   price: number;
   change_pct: number;
   sector: string;
+  market_cap_b?: number;
   win_rate_5d: number;
   win_rate_20d: number;
   win_rate_60d: number;
+  avg_return_5d?: number;
   avg_return_20d: number;
+  avg_return_60d?: number;
   occurrences: number;
   condition: string;
   indicators_used: number;
   strength: number;
   tier: string;
+  volume_ratio?: number;
+  volume_level?: string;
+}
+
+export interface EarningsItem {
+  ticker: string;
+  name: string;
+  earnings_date: string;
+  days_until: number;
+  time_of_day: string;
+  price?: number;
+  change_pct?: number;
 }
 
 export interface SignalsResponse {

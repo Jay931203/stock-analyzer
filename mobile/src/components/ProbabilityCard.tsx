@@ -1,9 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, LayoutAnimation, Platform, UIManager } from 'react-native';
 import type { ProbabilityData, CaseRecord } from '../types/analysis';
 import ProbabilityBar from './ProbabilityBar';
 import { useTheme } from '../contexts/ThemeContext';
 import { typography, spacing, radius, getWinRateColor, type ThemeColors } from '../theme';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 interface Props {
   data: ProbabilityData;
@@ -137,7 +141,7 @@ export default function ProbabilityCard({ data, compact }: Props) {
       )}
 
       {data.cases && data.cases.length > 0 && (
-        <Pressable style={s.casesToggle} onPress={() => setShowCases(!showCases)}>
+        <Pressable style={s.casesToggle} onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowCases(!showCases); }}>
           <Text style={s.casesToggleText}>
             {showCases ? 'Hide' : 'Show'} individual cases ({data.cases.length})
           </Text>
