@@ -288,7 +288,32 @@ export default function HomeScreen() {
 
   return (
     <View style={s.container}>
-      {/* ═══ COMPACT FIXED HEADER ═══ */}
+      {/* Search dropdown overlay (above everything) */}
+      {results.length > 0 && (
+        <View style={[s.dropdown, { top: insets.top + 100 }]}>
+          {results.map((item) => (
+            <Pressable
+              key={item.ticker}
+              style={({ pressed }) => [s.dropdownItem, pressed && { backgroundColor: colors.bgElevated }]}
+              onPress={() => { setQuery(''); setResults([]); goToAnalysis(item.ticker); }}
+            >
+              <View style={s.dropdownItemLeft}>
+                <Text style={s.dropdownTicker}>{item.ticker}</Text>
+                <Text style={s.dropdownName} numberOfLines={1}>{item.name}</Text>
+              </View>
+              <Text style={s.dropdownExchange}>{item.exchange}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {/* ═══ SINGLE SCROLLVIEW (header + content) ═══ */}
+      <ScrollView
+        style={s.mainScroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
+        keyboardShouldPersistTaps="handled"
+      >
       <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
         {/* Top bar */}
         <View style={s.topBar}>
@@ -329,35 +354,105 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* Compact Title + QQQ/SPY inline */}
+        {/* App Name + Title + Summary */}
+        <Text style={s.appName}>Stock Scanner</Text>
         <View style={s.titleRow}>
-          <View>
-            <Text style={s.appName}>Stock Scanner</Text>
-            <Text style={s.title}>NASDAQ 100</Text>
-          </View>
-          <View style={s.indicesRow}>
-            {['QQQ', 'SPY'].map(sym => {
-              const sig = signals.find(s => s.ticker === sym);
-              const idx = marketIndices[sym];
-              const price = idx?.price ?? sig?.price;
-              const changePct = idx?.change_pct ?? sig?.change_pct;
-              if (price == null) return null;
-              const color = (changePct ?? 0) >= 0 ? colors.bullish : colors.bearish;
-              return (
-                <Pressable key={sym} style={s.indexChip} onPress={() => goToAnalysis(sym)}>
-                  <Text style={s.indexLabel}>{sym}</Text>
-                  <Text style={s.indexPrice}>${price.toFixed(2)}</Text>
-                  <Text style={[s.indexChange, { color }]}>
-                    {(changePct ?? 0) >= 0 ? '+' : ''}{(changePct ?? 0).toFixed(2)}%
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Text style={s.title}>NASDAQ 100</Text>
+          {signals.length > 0 && (
+            <View style={s.summaryRow}>
+              <View style={[s.summaryBadge, { backgroundColor: `${colors.bullish}15` }]}>
+                <View style={[s.summaryDot, { backgroundColor: colors.bullish }]} />
+                <Text style={[s.summaryText, { color: colors.bullish }]}>{bullish.length}</Text>
+              </View>
+              <View style={[s.summaryBadge, { backgroundColor: `${colors.bearish}15` }]}>
+                <View style={[s.summaryDot, { backgroundColor: colors.bearish }]} />
+                <Text style={[s.summaryText, { color: colors.bearish }]}>{bearish.length}</Text>
+              </View>
+            </View>
+          )}
         </View>
 
+        {/* INDEX ETF Cards (QQQ/SPY) */}
+        {(() => {
+          const etfs = signals.filter(s => s.ticker === 'QQQ' || s.ticker === 'SPY');
+          if (etfs.length === 0 && (marketIndices['QQQ'] || marketIndices['SPY'])) {
+            return (
+              <View style={s.indicesRow}>
+                {['QQQ', 'SPY'].map(sym => {
+                  const idx = marketIndices[sym];
+                  if (!idx) return null;
+                  const color = idx.change_pct >= 0 ? colors.bullish : colors.bearish;
+                  return (
+                    <Pressable key={sym} style={s.indexChip} onPress={() => goToAnalysis(sym)}>
+                      <Text style={s.indexLabel}>{sym}</Text>
+                      <Text style={s.indexPrice}>${idx.price.toFixed(2)}</Text>
+                      <Text style={[s.indexChange, { color }]}>
+                        {idx.change_pct >= 0 ? '+' : ''}{idx.change_pct.toFixed(2)}%
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            );
+          }
+          if (etfs.length === 0) return null;
+          return (
+            <View style={s.indexCardsRow}>
+              {etfs.map(sig => {
+                const liveData = marketIndices[sig.ticker];
+                const price = liveData?.price ?? sig.price;
+                const changePct = liveData?.change_pct ?? sig.change_pct;
+                const color = sig.win_rate_20d >= 50 ? colors.bullish : colors.bearish;
+                const name = sig.ticker === 'QQQ' ? 'Invesco QQQ' : sig.ticker === 'SPY' ? 'S&P 500 ETF' : sig.name;
+                return (
+                  <Pressable
+                    key={sig.ticker}
+                    style={({ pressed }) => [
+                      s.indexCard,
+                      pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
+                    ]}
+                    onPress={() => goToAnalysis(sig.ticker)}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <View>
+                        <Text style={s.indexCardTicker}>{sig.ticker}</Text>
+                        <Text style={s.indexCardName}>{name}</Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={s.indexCardPrice}>${price.toFixed(2)}</Text>
+                        <Text style={[s.indexCardChange, { color: getDirectionColor(changePct, colors) }]}>
+                          {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[s.indexCardDivider, { backgroundColor: `${color}30` }]} />
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={[s.indexCardWinRate, { color }]}>{sig.win_rate_20d.toFixed(0)}%</Text>
+                        <Text style={s.indexCardLabel}>1M Win</Text>
+                      </View>
+                      {sig.avg_return_20d !== undefined && sig.avg_return_20d !== 0 && (
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={[s.indexCardAvg, { color: sig.avg_return_20d >= 0 ? colors.bullish : colors.bearish }]}>
+                            {sig.avg_return_20d >= 0 ? '+' : ''}{sig.avg_return_20d.toFixed(1)}%
+                          </Text>
+                          <Text style={s.indexCardLabel}>Avg Return</Text>
+                        </View>
+                      )}
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={s.indexCardCases}>{sig.occurrences}</Text>
+                        <Text style={s.indexCardLabel}>Cases</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          );
+        })()}
+
         {/* Search */}
-        <View style={s.searchWrapper}>
+        <View style={{ zIndex: 10, position: 'relative', marginTop: 10 }}>
           <View style={s.searchContainer}>
             <View style={s.searchIcon}><SearchIcon size={15} color={colors.textMuted} /></View>
             <TextInput
@@ -378,32 +473,9 @@ export default function HomeScreen() {
               </Pressable>
             )}
           </View>
-          {results.length > 0 && (
-            <View style={s.dropdown}>
-              {results.map((item) => (
-                <Pressable
-                  key={item.ticker}
-                  style={({ pressed }) => [s.dropdownItem, pressed && { backgroundColor: colors.bgElevated }]}
-                  onPress={() => { setQuery(''); setResults([]); goToAnalysis(item.ticker); }}
-                >
-                  <View style={s.dropdownItemLeft}>
-                    <Text style={s.dropdownTicker}>{item.ticker}</Text>
-                    <Text style={s.dropdownName} numberOfLines={1}>{item.name}</Text>
-                  </View>
-                  <Text style={s.dropdownExchange}>{item.exchange}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
         </View>
       </View>
 
-      {/* ═══ SCROLLABLE CONTENT ═══ */}
-      <ScrollView
-        style={s.mainScroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
-      >
         {/* Recently Searched */}
         {(() => {
           const visible = recentSearches.filter(t => !dismissedSearches.has(t));
@@ -803,7 +875,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   clearBtn: { color: c.textMuted, fontSize: 14, padding: 4 },
 
   dropdown: {
-    position: 'absolute', top: 48, left: 0, right: 0,
+    position: 'absolute', left: spacing.lg, right: spacing.lg,
     backgroundColor: c.bgCard, borderRadius: radius.md,
     borderWidth: 1, borderColor: c.border, maxHeight: 320,
     elevation: 20, zIndex: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
