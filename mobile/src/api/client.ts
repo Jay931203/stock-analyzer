@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AnalysisResponse, EarningsItem, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TrendingStock } from '../types/analysis';
+import type { AnalysisResponse, EarningsItem, FlipItem, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TrendingStock } from '../types/analysis';
 
 // Simple in-memory cache for analysis results (avoids redundant server calls)
 const _cache = new Map<string, { data: any; ts: number }>();
@@ -156,6 +156,13 @@ const api = {
       { timeout: 60000 },
     );
     setCache(cacheKey, res.data);
+    return res.data;
+  },
+
+  async signalFlips(): Promise<{ flips: FlipItem[]; updated: string; count: number }> {
+    const res = await axios.get(`${BASE_URL}/api/signals/flips`, {
+      timeout: 10000,
+    });
     return res.data;
   },
 

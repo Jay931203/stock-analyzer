@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from ..core.analyzer import compute_all_indicators, get_indicator_state
 from ..core.backtester import calc_combined_probability, calc_probability
 from ..core.fetcher import fetch_batch_quotes, fetch_earnings_dates, fetch_live_prices, fetch_price_history, get_ticker_info, search_tickers
+from ..core.signal_flip import snapshot_and_detect, get_flips
 from ..core.presets import get_preset, list_presets, PRESETS
 from ..core.smart_matcher import calc_adaptive_combined
 from ..core.supabase_cache import read_cached_signals, write_cached_signals, read_cached_analysis, write_cached_analysis, log_recent_search, read_recent_searches
@@ -590,6 +591,9 @@ async def refresh_signals():
     valid = [r for r in results if r is not None]
     valid.sort(key=lambda x: x["strength"], reverse=True)
 
+    # Detect signal flips before caching
+    snapshot_and_detect(valid)
+
     result = {
         "signals": valid,
         "scanned": len(POPULAR_TICKERS),
@@ -607,6 +611,12 @@ async def refresh_signals():
         "scanned": len(POPULAR_TICKERS),
         "updated": result["updated"],
     }
+
+
+@router.get("/signals/flips")
+async def signal_flips():
+    """Get stocks that recently flipped between bullish and bearish."""
+    return get_flips()
 
 
 @router.get("/signals")
@@ -647,6 +657,9 @@ async def get_signals(limit: int = Query(101, ge=1, le=150)):
         results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
     valid = [r for r in results if r is not None]
     valid.sort(key=lambda x: x["strength"], reverse=True)
+
+    # Detect signal flips
+    snapshot_and_detect(valid)
 
     result = {
         "signals": valid,

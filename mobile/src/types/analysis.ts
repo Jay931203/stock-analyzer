@@ -229,6 +229,18 @@ export interface EarningsItem {
   change_pct?: number;
 }
 
+export interface FlipItem {
+  ticker: string;
+  name: string;
+  price: number;
+  change_pct: number;
+  sector: string;
+  prev_win_rate: number;
+  curr_win_rate: number;
+  direction: 'bullish' | 'bearish';
+  delta: number;
+}
+
 export interface SignalsResponse {
   signals: SignalItem[];
   scanned: number;

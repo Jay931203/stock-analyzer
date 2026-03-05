@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api, { initServerUrl } from '../src/api/client';
-import type { EarningsItem, SearchResult, SignalItem } from '../src/types/analysis';
+import type { EarningsItem, FlipItem, SearchResult, SignalItem } from '../src/types/analysis';
 import { getWatchlist, removeFromWatchlist, subscribe, initWatchlist } from '../src/store/watchlist';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../src/theme';
@@ -144,6 +144,7 @@ export default function HomeScreen() {
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [dismissedSearches, setDismissedSearches] = useState<Set<string>>(new Set());
   const [earnings, setEarnings] = useState<EarningsItem[]>([]);
+  const [flips, setFlips] = useState<FlipItem[]>([]);
   const debounce = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
@@ -158,6 +159,7 @@ export default function HomeScreen() {
         loadMarketIndices();
         loadRecentSearches();
         loadEarnings();
+        loadFlips();
       }
     }
     init();
@@ -215,9 +217,16 @@ export default function HomeScreen() {
     } catch {}
   };
 
+  const loadFlips = async () => {
+    try {
+      const res = await api.signalFlips();
+      setFlips(res.flips || []);
+    } catch {}
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadSignals(), loadMarketIndices(), loadRecentSearches(), loadEarnings()]);
+    await Promise.all([loadSignals(), loadMarketIndices(), loadRecentSearches(), loadEarnings(), loadFlips()]);
     setRefreshing(false);
   };
 
@@ -236,6 +245,18 @@ export default function HomeScreen() {
   const handleSubmit = () => { const t = query.trim().toUpperCase(); if (t) { setQuery(''); setResults([]); goToAnalysis(t); } };
 
   const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU', 'TNA', 'FNGU']);
+
+  // Market Regime: bullish vs bearish ratio across all non-leveraged signals
+  const marketRegime = useMemo(() => {
+    const nonLev = signals.filter(s => !LEVERAGED_TICKERS.has(s.ticker) && s.ticker !== 'QQQ' && s.ticker !== 'SPY');
+    if (nonLev.length === 0) return null;
+    const bullCount = nonLev.filter(s => s.win_rate_20d >= 50).length;
+    const bearCount = nonLev.length - bullCount;
+    const bullPct = Math.round((bullCount / nonLev.length) * 100);
+    const avgWinRate = nonLev.reduce((sum, s) => sum + s.win_rate_20d, 0) / nonLev.length;
+    const mood = bullPct >= 65 ? 'Strong Bull' : bullPct >= 55 ? 'Mild Bull' : bullPct >= 45 ? 'Neutral' : bullPct >= 35 ? 'Mild Bear' : 'Strong Bear';
+    return { bullCount, bearCount, bullPct, total: nonLev.length, avgWinRate: Math.round(avgWinRate), mood };
+  }, [signals]);
   const sectorMomentum = useMemo(() => {
     const map: Record<string, { bullish: number; bearish: number; avgWinRate: number; avgChange: number }> = {};
     const uniqueSectors = [...new Set(signals.map(s => s.sector).filter(Boolean))];
@@ -249,6 +270,18 @@ export default function HomeScreen() {
     }
     return map;
   }, [signals]);
+  // Sector heatmap data: color-coded tiles
+  const sectorHeatmap = useMemo(() => {
+    return Object.entries(sectorMomentum)
+      .filter(([sec]) => sec !== 'ETF' && sec !== 'Leveraged')
+      .map(([sec, data]) => {
+        const total = data.bullish + data.bearish;
+        const bullPct = total > 0 ? Math.round((data.bullish / total) * 100) : 50;
+        return { sector: sec, bullPct, avgWinRate: data.avgWinRate, avgChange: data.avgChange, total };
+      })
+      .sort((a, b) => b.avgWinRate - a.avgWinRate);
+  }, [sectorMomentum]);
+
   const sectors = useMemo(() => {
     const uniqueSectors = [...new Set(signals.map(s => s.sector).filter(Boolean))];
     uniqueSectors.sort((a, b) => {
@@ -451,6 +484,29 @@ export default function HomeScreen() {
           );
         })()}
 
+        {/* Market Regime Bar */}
+        {marketRegime && (
+          <View style={s.regimeBar}>
+            <View style={s.regimeHeader}>
+              <Text style={s.regimeTitle}>MARKET MOOD</Text>
+              <Text style={[s.regimeMood, {
+                color: marketRegime.bullPct >= 55 ? colors.bullish : marketRegime.bullPct <= 45 ? colors.bearish : colors.textSecondary
+              }]}>{marketRegime.mood}</Text>
+            </View>
+            <View style={s.regimeTrack}>
+              <View style={[s.regimeFill, {
+                width: `${marketRegime.bullPct}%`,
+                backgroundColor: colors.bullish,
+              }]} />
+            </View>
+            <View style={s.regimeLabels}>
+              <Text style={[s.regimeStat, { color: colors.bullish }]}>{marketRegime.bullCount} Bullish</Text>
+              <Text style={s.regimePct}>{marketRegime.bullPct}%</Text>
+              <Text style={[s.regimeStat, { color: colors.bearish }]}>{marketRegime.bearCount} Bearish</Text>
+            </View>
+          </View>
+        )}
+
         {/* Search */}
         <View style={{ zIndex: 10, position: 'relative', marginTop: 10 }}>
           <View style={s.searchContainer}>
@@ -607,6 +663,59 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Signal Flips */}
+        {flips.length > 0 && (
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <View style={[s.sectionDot, { backgroundColor: '#F59E0B' }]} />
+              <Text style={s.sectionLabel}>JUST FLIPPED</Text>
+              <Text style={s.sectionCount}>{flips.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
+              {flips.map((flip) => (
+                <Pressable
+                  key={flip.ticker}
+                  style={({ pressed }) => [
+                    cardStyles(colors).card,
+                    { borderLeftColor: flip.direction === 'bullish' ? colors.bullish : colors.bearish },
+                    pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
+                  ]}
+                  onPress={() => goToAnalysis(flip.ticker)}
+                >
+                  <View style={cardStyles(colors).topRow}>
+                    <Text style={cardStyles(colors).ticker}>{flip.ticker}</Text>
+                    <Text style={[cardStyles(colors).change, { color: getDirectionColor(flip.change_pct, colors) }]}>
+                      {flip.change_pct >= 0 ? '+' : ''}{flip.change_pct.toFixed(1)}%
+                    </Text>
+                  </View>
+                  {flip.name && <Text style={cardStyles(colors).companyName} numberOfLines={1}>{flip.name}</Text>}
+                  <View style={cardStyles(colors).divider} />
+                  <View style={{ alignItems: 'center', gap: 4 }}>
+                    <View style={s.flipArrow}>
+                      <Text style={[s.flipFrom, { color: flip.direction === 'bullish' ? colors.bearish : colors.bullish }]}>
+                        {flip.prev_win_rate.toFixed(0)}%
+                      </Text>
+                      <Text style={s.flipArrowText}>{'\u2192'}</Text>
+                      <Text style={[s.flipTo, { color: flip.direction === 'bullish' ? colors.bullish : colors.bearish }]}>
+                        {flip.curr_win_rate.toFixed(0)}%
+                      </Text>
+                    </View>
+                    <View style={[s.flipBadge, {
+                      backgroundColor: flip.direction === 'bullish' ? `${colors.bullish}20` : `${colors.bearish}20`,
+                    }]}>
+                      <Text style={[s.flipBadgeText, {
+                        color: flip.direction === 'bullish' ? colors.bullish : colors.bearish,
+                      }]}>
+                        {flip.direction === 'bullish' ? 'NOW BULL' : 'NOW BEAR'}
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Bullish Signals */}
         {bullish.length > 0 && (
           <View style={s.section}>
@@ -636,6 +745,42 @@ export default function HomeScreen() {
                 <SignalCard key={sig.ticker} sig={sig} colors={colors} bullishColor={colors.bearish} onPress={() => goToAnalysis(sig.ticker)} period={period} />
               ))}
             </ScrollView>
+          </View>
+        )}
+
+        {/* Sector Heatmap */}
+        {sectorHeatmap.length > 0 && (
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <View style={[s.sectionDot, { backgroundColor: colors.accent }]} />
+              <Text style={s.sectionLabel}>SECTOR HEATMAP</Text>
+            </View>
+            <View style={s.heatmapGrid}>
+              {sectorHeatmap.map(({ sector, bullPct, avgWinRate, avgChange, total }) => {
+                const isHot = avgWinRate >= 55;
+                const isCold = avgWinRate < 45;
+                const tileColor = isHot ? colors.bullish : isCold ? colors.bearish : colors.textMuted;
+                const bgOpacity = Math.min(Math.abs(avgWinRate - 50) / 25, 1) * 0.25;
+                return (
+                  <Pressable
+                    key={sector}
+                    style={({ pressed }) => [
+                      s.heatmapTile,
+                      { backgroundColor: `${tileColor}${Math.round(bgOpacity * 255).toString(16).padStart(2, '0')}`, borderColor: `${tileColor}40` },
+                      pressed && { transform: [{ scale: 0.96 }], opacity: 0.8 },
+                    ]}
+                    onPress={() => setActiveSector(sector)}
+                  >
+                    <Text style={[s.heatmapSector, { color: colors.textPrimary }]} numberOfLines={1}>{sector}</Text>
+                    <Text style={[s.heatmapWr, { color: tileColor }]}>{avgWinRate.toFixed(0)}%</Text>
+                    <Text style={[s.heatmapChange, { color: getDirectionColor(avgChange, colors) }]}>
+                      {avgChange >= 0 ? '+' : ''}{avgChange.toFixed(1)}%
+                    </Text>
+                    <Text style={s.heatmapCount}>{total} stocks</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         )}
 
@@ -935,4 +1080,54 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
 
   scanInfo: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, alignItems: 'center' },
   scanInfoText: { color: c.textMuted, fontSize: 10, letterSpacing: 0.3 },
+
+  // ═══ MARKET REGIME ═══
+  regimeBar: {
+    marginTop: 10, backgroundColor: c.bgElevated, borderRadius: radius.md,
+    padding: spacing.sm, paddingHorizontal: spacing.md,
+  },
+  regimeHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 6,
+  },
+  regimeTitle: { color: c.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  regimeMood: { fontSize: 11, fontWeight: '800' },
+  regimeTrack: {
+    height: 6, borderRadius: 3, backgroundColor: `${c.bearish}30`,
+    overflow: 'hidden' as const,
+  },
+  regimeFill: { height: '100%', borderRadius: 3 },
+  regimeLabels: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 4,
+  },
+  regimeStat: { fontSize: 10, fontWeight: '600' },
+  regimePct: { color: c.textMuted, fontSize: 10, fontWeight: '700' },
+
+  // ═══ SECTOR HEATMAP ═══
+  heatmapGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+  },
+  heatmapTile: {
+    flexBasis: '30%' as any, flexGrow: 1,
+    borderRadius: radius.md, padding: spacing.sm,
+    borderWidth: 1, alignItems: 'center' as const, minWidth: 90, maxWidth: '48%' as any,
+  },
+  heatmapSector: { fontSize: 11, fontWeight: '700', marginBottom: 2 },
+  heatmapWr: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  heatmapChange: { fontSize: 10, fontWeight: '600', marginTop: 1 },
+  heatmapCount: { color: c.textMuted, fontSize: 8, fontWeight: '500', marginTop: 2 },
+
+  // ═══ SIGNAL FLIP ═══
+  flipArrow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+  },
+  flipFrom: { fontSize: 16, fontWeight: '700' },
+  flipArrowText: { fontSize: 14, color: c.textMuted },
+  flipTo: { fontSize: 20, fontWeight: '800' },
+  flipBadge: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full,
+    marginTop: 2,
+  },
+  flipBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
 });
