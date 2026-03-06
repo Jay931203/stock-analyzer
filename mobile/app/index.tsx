@@ -19,6 +19,7 @@ import { useTheme } from '../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../src/theme';
 import { SunIcon, MoonIcon, MonitorIcon, SearchIcon } from '../src/components/ThemeIcons';
 import TopLoadingBar from '../src/components/TopLoadingBar';
+import AdSlot from '../src/components/AdSlot';
 import { PERIOD_LABELS } from '../src/constants/ui';
 import { doShare as doShareUtil } from '../src/utils/share';
 
@@ -936,6 +937,9 @@ export default function HomeScreen() {
             </View>
           </View>
         )}
+
+        {/* Ad Slot */}
+        <AdSlot size="banner" />
 
         {/* Leveraged ETFs */}
         {leveraged.length > 0 && (

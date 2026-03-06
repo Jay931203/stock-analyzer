@@ -3,6 +3,8 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
+import { PremiumProvider } from '../src/contexts/PremiumContext';
+import Paywall from '../src/components/Paywall';
 
 function InnerLayout() {
   const { colors, isDark } = useTheme();
@@ -49,7 +51,10 @@ export default function RootLayout() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <ThemeProvider>
-          <InnerLayout />
+          <PremiumProvider>
+            <InnerLayout />
+            <Paywall />
+          </PremiumProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

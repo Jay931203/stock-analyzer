@@ -363,6 +363,29 @@ async def share_page_short(ticker: str, request: Request):
     return await share_page(ticker, request)
 
 
+@share_router.get("/robots.txt")
+async def robots_txt(request: Request):
+    """Serve robots.txt for search engine crawlers."""
+    host = request.headers.get("host", "")
+    scheme = request.headers.get("x-forwarded-proto", "https")
+    base_url = f"{scheme}://{host}" if host else ""
+
+    content = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Allow: /share/\n"
+        "Disallow: /api/\n"
+        "Disallow: /settings\n"
+        "\n"
+        f"Sitemap: {base_url}/sitemap.xml\n"
+    )
+    return Response(
+        content=content,
+        media_type="text/plain",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @share_router.get("/sitemap.xml")
 async def sitemap(request: Request):
     """Generate a basic sitemap.xml for SEO."""
