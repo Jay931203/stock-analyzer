@@ -466,7 +466,7 @@ export default function HomeScreen() {
             ) : null}
           </View>
           <View style={s.topBarRight}>
-            <Text style={s.miniLabel}>BT</Text>
+            <Text style={s.miniLabel}>Backtest</Text>
             <View style={s.miniPillGroup}>
               {(['1y', '3y', '5y', '10y'] as const).map(dp => (
                 <Pressable key={dp} style={[s.miniPill, dataPeriod === dp && s.miniPillActiveBlue]} onPress={() => changeDataPeriod(dp)}>
@@ -475,7 +475,7 @@ export default function HomeScreen() {
               ))}
             </View>
             <View style={s.miniDivider} />
-            <Text style={s.miniLabel}>W</Text>
+            <Text style={s.miniLabel}>Window</Text>
             <View style={s.miniPillGroup}>
               {(['5d', '20d', '60d', '120d', '252d'] as const).map(p => (
                 <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveOrange]} onPress={() => { setPeriod(p); AsyncStorage.setItem('window_period', p).catch(() => {}); }}>

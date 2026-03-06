@@ -295,7 +295,7 @@ export default function AnalyzeScreen() {
               </View>
             </Pressable>
             <View style={s.navRight}>
-              <Text style={s.miniLabel}>BT</Text>
+              <Text style={s.miniLabel}>Backtest</Text>
               <View style={s.miniPillGroup}>
                 {(['1y', '3y', '5y', '10y'] as const).map(p => (
                   <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveBlue]} onPress={() => { setPeriod(p); AsyncStorage.setItem('data_period', p).catch(() => {}); }}>
@@ -304,7 +304,7 @@ export default function AnalyzeScreen() {
                 ))}
               </View>
               <View style={s.miniDivider} />
-              <Text style={s.miniLabel}>W</Text>
+              <Text style={s.miniLabel}>Window</Text>
               <View style={s.miniPillGroup}>
                 {(['5d', '20d', '60d', '120d', '252d'] as const).map(wp => (
                   <Pressable key={wp} style={[s.miniPill, windowPeriod === wp && s.miniPillActiveOrange]} onPress={() => { setWindowPeriod(wp); AsyncStorage.setItem('window_period', wp).catch(() => {}); }}>
