@@ -279,30 +279,30 @@ export default function HomeScreen() {
 
   const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU', 'TNA', 'FNGU']);
 
-  // Market Regime: bullish vs bearish ratio across all non-leveraged signals
+  // Market Regime: bullish vs bearish ratio across all non-leveraged signals (period-aware)
   const marketRegime = useMemo(() => {
     const nonLev = signals.filter(s => !LEVERAGED_TICKERS.has(s.ticker) && s.ticker !== 'QQQ' && s.ticker !== 'SPY');
     if (nonLev.length === 0) return null;
-    const bullCount = nonLev.filter(s => s.win_rate_20d >= 50).length;
+    const bullCount = nonLev.filter(s => getWinRateForPeriod(s, period) >= 50).length;
     const bearCount = nonLev.length - bullCount;
     const bullPct = Math.round((bullCount / nonLev.length) * 100);
-    const avgWinRate = nonLev.reduce((sum, s) => sum + s.win_rate_20d, 0) / nonLev.length;
+    const avgWinRate = nonLev.reduce((sum, s) => sum + getWinRateForPeriod(s, period), 0) / nonLev.length;
     const mood = bullPct >= 65 ? 'Strong Bull' : bullPct >= 55 ? 'Mild Bull' : bullPct >= 45 ? 'Neutral' : bullPct >= 35 ? 'Mild Bear' : 'Strong Bear';
     return { bullCount, bearCount, bullPct, total: nonLev.length, avgWinRate: Math.round(avgWinRate), mood };
-  }, [signals]);
+  }, [signals, period]);
   const sectorMomentum = useMemo(() => {
     const map: Record<string, { bullish: number; bearish: number; avgWinRate: number; avgChange: number }> = {};
     const uniqueSectors = [...new Set(signals.map(s => s.sector).filter(Boolean))];
     for (const sec of uniqueSectors) {
       const sectorSignals = signals.filter(s => s.sector === sec && !LEVERAGED_TICKERS.has(s.ticker));
-      const bull = sectorSignals.filter(s => s.win_rate_20d >= 50).length;
+      const bull = sectorSignals.filter(s => getWinRateForPeriod(s, period) >= 50).length;
       const bear = sectorSignals.length - bull;
-      const avgWr = sectorSignals.length > 0 ? sectorSignals.reduce((sum, s) => sum + s.win_rate_20d, 0) / sectorSignals.length : 50;
+      const avgWr = sectorSignals.length > 0 ? sectorSignals.reduce((sum, s) => sum + getWinRateForPeriod(s, period), 0) / sectorSignals.length : 50;
       const avgChg = sectorSignals.length > 0 ? sectorSignals.reduce((sum, s) => sum + s.change_pct, 0) / sectorSignals.length : 0;
       map[sec] = { bullish: bull, bearish: bear, avgWinRate: avgWr, avgChange: avgChg };
     }
     return map;
-  }, [signals]);
+  }, [signals, period]);
   // Sector heatmap data: color-coded tiles
   const sectorHeatmap = useMemo(() => {
     return Object.entries(sectorMomentum)
@@ -509,7 +509,9 @@ export default function HomeScreen() {
                 const liveData = marketIndices[sig.ticker];
                 const price = liveData?.price ?? sig.price;
                 const changePct = liveData?.change_pct ?? sig.change_pct;
-                const color = sig.win_rate_20d >= 50 ? colors.bullish : colors.bearish;
+                const wr = getWinRateForPeriod(sig, period);
+                const avgRet = getAvgReturnForPeriod(sig, period);
+                const color = wr >= 50 ? colors.bullish : colors.bearish;
                 const name = sig.ticker === 'QQQ' ? 'Invesco QQQ' : sig.ticker === 'SPY' ? 'S&P 500 ETF' : sig.name;
                 return (
                   <Pressable
@@ -535,13 +537,13 @@ export default function HomeScreen() {
                     <View style={[s.indexCardDivider, { backgroundColor: `${color}30` }]} />
                     <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
                       <View style={{ alignItems: 'center' }}>
-                        <Text style={[s.indexCardWinRate, { color }]}>{sig.win_rate_20d.toFixed(0)}%</Text>
-                        <Text style={s.indexCardLabel}>1M Win</Text>
+                        <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
+                        <Text style={s.indexCardLabel}>{PERIOD_LABELS[period]} Win</Text>
                       </View>
-                      {sig.avg_return_20d !== undefined && sig.avg_return_20d !== 0 && (
+                      {avgRet !== undefined && avgRet !== 0 && (
                         <View style={{ alignItems: 'center' }}>
-                          <Text style={[s.indexCardAvg, { color: sig.avg_return_20d >= 0 ? colors.bullish : colors.bearish }]}>
-                            {sig.avg_return_20d >= 0 ? '+' : ''}{sig.avg_return_20d.toFixed(1)}%
+                          <Text style={[s.indexCardAvg, { color: avgRet >= 0 ? colors.bullish : colors.bearish }]}>
+                            {avgRet >= 0 ? '+' : ''}{avgRet.toFixed(1)}%
                           </Text>
                           <Text style={s.indexCardLabel}>Avg Return</Text>
                         </View>
@@ -562,7 +564,7 @@ export default function HomeScreen() {
         {marketRegime && (
           <View style={s.regimeBar}>
             <View style={s.regimeHeader}>
-              <Text style={s.regimeTitle}>MARKET MOOD</Text>
+              <Text style={s.regimeTitle}>MARKET MOOD ({PERIOD_LABELS[period]})</Text>
               <Text style={[s.regimeMood, {
                 color: marketRegime.bullPct >= 55 ? colors.bullish : marketRegime.bullPct <= 45 ? colors.bearish : colors.textSecondary
               }]}>{marketRegime.mood}</Text>
@@ -928,7 +930,7 @@ export default function HomeScreen() {
                     <Text style={[cardStyles(colors).winRate, { color: volColor, fontSize: 22 }]}>
                       {wr.toFixed(0)}%
                     </Text>
-                    <Text style={cardStyles(colors).probLabel}>Win Rate</Text>
+                    <Text style={cardStyles(colors).probLabel}>Win Rate ({PERIOD_LABELS[period]})</Text>
                   </Pressable>
                 );
               })}
