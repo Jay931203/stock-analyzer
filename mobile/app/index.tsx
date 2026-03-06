@@ -657,20 +657,13 @@ export default function HomeScreen() {
                   <Text style={[s.summaryText, { color: colors.bearish }]}>{bearish.length}</Text>
                 </View>
               </View>
-              <Pressable
-                style={({ pressed }) => [s.shareTopBtn, pressed && { opacity: 0.7 }]}
-                onPress={shareMarketSummary}
-              >
-                <Text style={s.shareTopBtnText}>{shareMsg || 'Share'}</Text>
-              </Pressable>
             </>
           )}
           <Pressable
-            style={({ pressed }) => [s.refreshBtn, refreshing && { opacity: 0.5 }, pressed && { opacity: 0.7 }]}
-            onPress={onRefresh}
-            disabled={refreshing}
+            style={({ pressed }) => [s.shareTopBtn, pressed && { opacity: 0.7 }]}
+            onPress={shareMarketSummary}
           >
-            <Text style={s.refreshBtnText}>{refreshing ? '...' : '\u21BB'}</Text>
+            <Text style={s.shareTopBtnText}>{shareMsg || 'Share'}</Text>
           </Pressable>
         </View>
 
@@ -1073,9 +1066,6 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Ad Slot */}
-        <AdSlot size="banner" />
-
         {/* Leveraged ETFs */}
         {leveraged.length > 0 && (
           <View style={s.section}>
@@ -1272,6 +1262,9 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Ad Slot */}
+        <AdSlot size="banner" />
+
         {/* Scan info */}
         {signalsUpdated ? (
           <View style={s.scanInfo}>
@@ -1358,11 +1351,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
   },
   shareTopBtnText: { color: c.textSecondary, fontSize: 10, fontWeight: '600' },
-  refreshBtn: {
-    paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6,
-    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
-  },
-  refreshBtnText: { color: c.textSecondary, fontSize: 14, fontWeight: '600' },
 
   // Install banner
   installBanner: {
