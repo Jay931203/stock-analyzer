@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
+  Share,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,11 +39,12 @@ function getAvgReturnForPeriod(sig: SignalItem, period: string): number {
   return sig.avg_return_20d;
 }
 
-function SignalCard({ sig, colors, bullishColor, onPress, period = '20d' }: {
+function SignalCard({ sig, colors, bullishColor, onPress, onLongPress, period = '20d' }: {
   sig: SignalItem;
   colors: ThemeColors;
   bullishColor: string;
   onPress: () => void;
+  onLongPress?: () => void;
   period?: string;
 }) {
   const winRate = getWinRateForPeriod(sig, period);
@@ -54,6 +57,7 @@ function SignalCard({ sig, colors, bullishColor, onPress, period = '20d' }: {
         pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
       ]}
       onPress={onPress}
+      onLongPress={onLongPress}
     >
       <View style={cardStyles(colors).topRow}>
         <Text style={cardStyles(colors).ticker}>{sig.ticker}</Text>
@@ -209,6 +213,58 @@ export default function HomeScreen() {
     init();
     return subscribe(() => setWatchlist(getWatchlist()));
   }, []);
+
+  const [shareMsg, setShareMsg] = useState('');
+
+  const shareSignal = async (sig: SignalItem) => {
+    const wr = getWinRateForPeriod(sig, period);
+    const avgRet = getAvgReturnForPeriod(sig, period);
+    const dir = sig.change_pct >= 0 ? '+' : '';
+    const text = [
+      `📊 ${sig.ticker}${sig.name ? ` - ${sig.name}` : ''}`,
+      `$${sig.price.toFixed(2)} (${dir}${sig.change_pct.toFixed(1)}%)`,
+      `Win Rate (${PERIOD_LABELS[period]}): ${wr.toFixed(0)}%`,
+      avgRet ? `Avg Return: ${avgRet >= 0 ? '+' : ''}${avgRet.toFixed(1)}%` : '',
+      `Cases: ${sig.occurrences} | ${sig.sector}`,
+      `Backtest: ${dataPeriod.toUpperCase()} | via Stock Scanner`,
+    ].filter(Boolean).join('\n');
+    await doShare(text);
+  };
+
+  const shareMarketSummary = async () => {
+    if (!marketRegime || signals.length === 0) return;
+    const topBull = bullish.slice(0, 5).map(s => `  ${s.ticker}: ${getWinRateForPeriod(s, period).toFixed(0)}% win`).join('\n');
+    const topBear = bearish.slice(0, 5).map(s => `  ${s.ticker}: ${getWinRateForPeriod(s, period).toFixed(0)}% win`).join('\n');
+    const text = [
+      `📊 Market Summary (${PERIOD_LABELS[period]} window, ${dataPeriod.toUpperCase()} backtest)`,
+      `Mood: ${marketRegime.mood} (${marketRegime.bullPct}% bullish)`,
+      `${marketRegime.bullCount} bullish / ${marketRegime.bearCount} bearish`,
+      '',
+      topBull ? `Top Bullish:\n${topBull}` : '',
+      topBear ? `Top Bearish:\n${topBear}` : '',
+      '',
+      `Scanned ${scannedCount} stocks | via Stock Scanner`,
+    ].filter(Boolean).join('\n');
+    await doShare(text);
+  };
+
+  const doShare = async (text: string) => {
+    try {
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({ text });
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(text);
+          setShareMsg('Copied!');
+          setTimeout(() => setShareMsg(''), 2000);
+        } else {
+          window.prompt('Copy this:', text);
+        }
+      } else {
+        await Share.share({ message: text });
+      }
+    } catch {}
+  };
 
   const changeDataPeriod = (dp: string) => {
     setDataPeriod(dp);
@@ -496,6 +552,12 @@ export default function HomeScreen() {
               ) : (
                 <MonitorIcon size={16} color={colors.textSecondary} />
               )}
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [s.shareTopBtn, pressed && { opacity: 0.7 }]}
+              onPress={shareMarketSummary}
+            >
+              <Text style={s.shareTopBtnText}>{shareMsg || 'Share'}</Text>
             </Pressable>
           </View>
         </View>
@@ -829,7 +891,7 @@ export default function HomeScreen() {
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
               {bullish.map((sig) => (
-                <SignalCard key={sig.ticker} sig={sig} colors={colors} bullishColor={colors.bullish} onPress={() => goToAnalysis(sig.ticker)} period={period} />
+                <SignalCard key={sig.ticker} sig={sig} colors={colors} bullishColor={colors.bullish} onPress={() => goToAnalysis(sig.ticker)} onLongPress={() => shareSignal(sig)} period={period} />
               ))}
             </ScrollView>
           </View>
@@ -845,7 +907,7 @@ export default function HomeScreen() {
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
               {bearish.map((sig) => (
-                <SignalCard key={sig.ticker} sig={sig} colors={colors} bullishColor={colors.bearish} onPress={() => goToAnalysis(sig.ticker)} period={period} />
+                <SignalCard key={sig.ticker} sig={sig} colors={colors} bullishColor={colors.bearish} onPress={() => goToAnalysis(sig.ticker)} onLongPress={() => shareSignal(sig)} period={period} />
               ))}
             </ScrollView>
           </View>
@@ -900,7 +962,7 @@ export default function HomeScreen() {
                 const wr = getWinRateForPeriod(sig, period);
                 const leveragedColor = wr >= 50 ? colors.bullish : colors.bearish;
                 return (
-                  <SignalCard key={sig.ticker} sig={sig} colors={colors} bullishColor={leveragedColor} onPress={() => goToAnalysis(sig.ticker)} period={period} />
+                  <SignalCard key={sig.ticker} sig={sig} colors={colors} bullishColor={leveragedColor} onPress={() => goToAnalysis(sig.ticker)} onLongPress={() => shareSignal(sig)} period={period} />
                 );
               })}
             </ScrollView>
@@ -1137,6 +1199,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   miniDivider: { width: 1, height: 12, backgroundColor: c.border },
   themeBtn: { padding: 6, borderRadius: 6 },
   themeBtnPressed: { backgroundColor: c.bgElevated },
+  shareTopBtn: {
+    paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4,
+    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
+  },
+  shareTopBtnText: { color: c.textSecondary, fontSize: 8, fontWeight: '700' },
 
   titleRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

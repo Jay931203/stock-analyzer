@@ -189,13 +189,15 @@ export default function AnalyzeScreen() {
     setRefreshing(false);
   }, [ticker, period]);
 
-  const handleShare = async () => {
-    if (!data) return;
-    const { ticker_info, price, indicators } = data;
+  const [shareMsg, setShareMsg] = useState('');
+
+  const buildShareText = () => {
+    if (!data) return '';
+    const { ticker_info, price } = data;
     const dir = price.change_pct >= 0 ? '+' : '';
     const wp = WINDOW_KEY_MAP[windowPeriod] || '20';
     const lines = [
-      `${ticker_info.ticker} - ${ticker_info.name}`,
+      `📊 ${ticker_info.ticker} - ${ticker_info.name}`,
       `$${price.current.toFixed(2)} (${dir}${price.change_pct.toFixed(2)}%)`,
       `Sector: ${ticker_info.sector}`,
       '',
@@ -211,15 +213,31 @@ export default function AnalyzeScreen() {
       const cp = data.combined.probability.periods?.[wp];
       if (cp) lines.push('', `Combined: ${cp.win_rate.toFixed(0)}% win (${data.combined.probability.occurrences} cases)`);
     }
-    lines.push('', `Data: ${period.toUpperCase()} | via Stock Scanner`);
-    const text = lines.join('\n');
+    lines.push('', `Data: ${period.toUpperCase()} backtest | via Stock Scanner`);
+    return lines.join('\n');
+  };
+
+  const handleShare = async () => {
+    const text = buildShareText();
+    if (!text) return;
     try {
       if (Platform.OS === 'web') {
-        await navigator.clipboard.writeText(text);
+        if (navigator.share) {
+          await navigator.share({ text });
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(text);
+          setShareMsg('Copied!');
+          setTimeout(() => setShareMsg(''), 2000);
+        } else {
+          // Fallback: prompt
+          window.prompt('Copy this:', text);
+        }
       } else {
         await Share.share({ message: text });
       }
-    } catch {}
+    } catch {
+      // User cancelled share dialog
+    }
   };
 
   const toggleCombinedIndicator = (key: string) => {
@@ -322,10 +340,10 @@ export default function AnalyzeScreen() {
                 )}
               </Pressable>
               <Pressable
-                style={s.shareBtn}
+                style={({ pressed }) => [s.shareBtn, pressed && { opacity: 0.7 }]}
                 onPress={handleShare}
               >
-                <Text style={s.shareBtnText}>Share</Text>
+                <Text style={s.shareBtnText}>{shareMsg || 'Share'}</Text>
               </Pressable>
               <Pressable
                 style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
