@@ -82,11 +82,11 @@ NFP_2026 = [
 
 # Historical market impact data (average S&P500 move on event day, based on 2020-2024 data)
 EVENT_STATS = {
-    "FOMC": {"avg_move": 1.2, "bullish_pct": 55, "desc": "Fed rate decision. Current rate: 4.25-4.50%. Market expects hold."},
-    "CPI": {"avg_move": 0.9, "bullish_pct": 48, "desc": "Consumer inflation data. Lower than expected = bullish (rate cut hope)."},
-    "PPI": {"avg_move": 0.5, "bullish_pct": 50, "desc": "Producer inflation. Leading indicator for CPI trends."},
-    "PMI": {"avg_move": 0.4, "bullish_pct": 52, "desc": "Manufacturing health. >50 = expansion, <50 = contraction."},
-    "NFP": {"avg_move": 0.8, "bullish_pct": 54, "desc": "Non-farm payrolls. Goldilocks (moderate growth) = most bullish."},
+    "FOMC": {"avg_move": 1.2, "bullish_pct": 55, "desc": "Fed rate decision. Current rate: 4.25-4.50%. Next expected action: Hold. Dot plot signals 2 cuts in 2026."},
+    "CPI": {"avg_move": 0.9, "bullish_pct": 48, "desc": "Consumer Price Index. Last: 2.8% YoY. Core CPI: 3.1%. Below consensus = bullish (rate cut hope)."},
+    "PPI": {"avg_move": 0.5, "bullish_pct": 50, "desc": "Producer Price Index. Last: 3.2% YoY. Leading indicator for CPI. Rising PPI = inflation pressure."},
+    "PMI": {"avg_move": 0.4, "bullish_pct": 52, "desc": "ISM Manufacturing PMI. Last: 50.3. Above 50 = expansion. Key sub-indices: New Orders, Employment."},
+    "NFP": {"avg_move": 0.8, "bullish_pct": 54, "desc": "Non-Farm Payrolls. Last: +256K. Unemployment: 4.1%. Goldilocks (moderate growth) = most bullish."},
 }
 
 

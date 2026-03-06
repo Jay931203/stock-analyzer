@@ -120,6 +120,15 @@ export default function TimeMachinePage() {
           )}
         </View>
 
+        {/* Empty state hint */}
+        {!result && !loading && (
+          <View style={{ padding: 24, alignItems: 'center' }}>
+            <Text style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center' }}>
+              Select a date above to see historical signals and compare with actual results
+            </Text>
+          </View>
+        )}
+
         {/* Loading */}
         {loading && (
           <View style={s.loadingBox}>
@@ -291,7 +300,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: spacing.sm },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 10, marginBottom: spacing.sm },
   backText: { color: c.accent, fontSize: 14, fontWeight: '600' },
   pageTitle: { color: c.textPrimary, fontSize: 22, fontWeight: '800', marginBottom: 4 },
   pageSubtitle: { color: c.textSecondary, fontSize: 13 },
@@ -301,14 +310,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
 
   presetGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   presetBtn: {
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.md,
+    paddingHorizontal: 12, paddingVertical: 12, borderRadius: radius.md,
     backgroundColor: c.bgCard, borderWidth: 1, borderColor: c.border,
     minWidth: '30%' as any, flexGrow: 1,
   },
   presetBtnActive: { borderColor: c.accent, backgroundColor: `${c.accent}15` },
   presetLabel: { color: c.textPrimary, fontSize: 12, fontWeight: '700' },
   presetLabelActive: { color: c.accent },
-  presetDate: { color: c.textMuted, fontSize: 10, marginTop: 2 },
+  presetDate: { color: c.textMuted, fontSize: 11, marginTop: 2 },
   presetDateActive: { color: c.accent },
 
   customDateRow: { flexDirection: 'row', gap: 8, marginTop: spacing.md, alignItems: 'center' },
@@ -337,13 +346,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
 
   resultsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   resultCard: {
-    flex: 1, minWidth: '28%' as any, backgroundColor: c.bgCard,
+    flex: 1, minWidth: '28%' as any, minHeight: 80, backgroundColor: c.bgCard,
     borderRadius: radius.md, padding: spacing.md, borderWidth: 1,
     alignItems: 'center',
   },
   resultPeriod: { color: c.textMuted, fontSize: 11, fontWeight: '700', marginBottom: 4 },
   resultReturn: { fontSize: 18, fontWeight: '800' },
-  resultPrice: { color: c.textMuted, fontSize: 10, marginTop: 2 },
+  resultPrice: { color: c.textMuted, fontSize: 11, marginTop: 2 },
 
   accuracyCard: {
     borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1,
@@ -367,7 +376,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   compareTitle: { color: c.textTertiary, fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginBottom: spacing.md },
   compareRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   compareCol: { alignItems: 'center' },
-  compareLabel: { color: c.textMuted, fontSize: 10, marginBottom: 4 },
+  compareLabel: { color: c.textMuted, fontSize: 11, marginBottom: 4 },
   comparePrice: { color: c.textPrimary, fontSize: 16, fontWeight: '700' },
   compareArrow: { color: c.textMuted, fontSize: 18 },
   compareReturn: { fontSize: 18, fontWeight: '800' },

@@ -288,7 +288,7 @@ const api = {
 
   async health(): Promise<boolean> {
     try {
-      const res = await axios.get(`${BASE_URL}/health`, { timeout: 5000 });
+      const res = await axios.get(`${BASE_URL}/health`, { timeout: 15000 });
       return res.data.status === 'ok';
     } catch {
       return false;

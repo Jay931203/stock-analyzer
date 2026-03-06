@@ -150,6 +150,7 @@ export default function AnalyzeScreen() {
   const [period, setPeriod] = useState<string>('3y');
   const [windowPeriod, setWindowPeriod] = useState<string>('20d');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [summaryVisible, setSummaryVisible] = useState(false);
 
   // Load global settings
   useEffect(() => {
@@ -208,7 +209,7 @@ export default function AnalyzeScreen() {
     const dir = price.change_pct >= 0 ? '+' : '';
     const wp = WINDOW_KEY_MAP[windowPeriod] || '20';
     const lines = [
-      `📊 ${ticker_info.ticker} - ${ticker_info.name}`,
+      `${ticker_info.ticker} - ${ticker_info.name}`,
       `$${price.current.toFixed(2)} (${dir}${price.change_pct.toFixed(2)}%)`,
       `Sector: ${ticker_info.sector}`,
       '',
@@ -370,6 +371,11 @@ export default function AnalyzeScreen() {
                 {price.change >= 0 ? '+' : ''}{price.change.toFixed(2)} ({price.change_pct >= 0 ? '+' : ''}{price.change_pct.toFixed(2)}%)
               </Text>
             </View>
+            {data.combined && data.combined.probability?.periods?.[WINDOW_KEY_MAP[windowPeriod]] && (
+              <Pressable style={s.summaryBtn} onPress={() => setSummaryVisible(true)}>
+                <Text style={s.summaryBtnText}>?</Text>
+              </Pressable>
+            )}
           </View>
 
           <View style={s.metricsRow}>
@@ -382,86 +388,6 @@ export default function AnalyzeScreen() {
             {ticker_info.sector ? <Text style={s.metricText}>{ticker_info.sector}</Text> : null}
           </View>
 
-          {price.high_52w && price.low_52w && (
-            <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
-          )}
-        </View>
-
-        {/* Aha moment summary card */}
-        {data.combined && data.combined.probability?.periods?.[WINDOW_KEY_MAP[windowPeriod]] && (
-          <View style={s.ahaCard}>
-            <Text style={s.ahaTitle}>
-              {ticker_info.ticker} 지금 어떤 상태?
-            </Text>
-            <Text style={s.ahaText}>
-              {(() => {
-                const wp = WINDOW_KEY_MAP[windowPeriod];
-                const p = data.combined.probability.periods[wp];
-                if (!p) return '';
-                const occ = data.combined.probability.occurrences;
-                const wins = Math.round(occ * p.win_rate / 100);
-                const periodLabel = PERIOD_LABELS[windowPeriod] || windowPeriod;
-                const direction = p.win_rate >= 50 ? '상승' : '하락';
-                return `과거 ${data.combined.probability.data_period || '10년'}간 지금과 비슷한 상황이 ${occ}번 있었고, 그 중 ${wins}번(${p.win_rate.toFixed(0)}%) ${periodLabel} 후 ${direction}했습니다.`;
-              })()}
-            </Text>
-            {highlights.length > 0 && (
-              <View style={s.ahaHighlights}>
-                {highlights.slice(0, 3).map((h, i) => (
-                  <View key={i} style={[s.ahaBadge, { backgroundColor: h.type === 'bullish' ? `${colors.bullish}20` : `${colors.bearish}20` }]}>
-                    <Text style={[s.ahaBadgeText, { color: h.type === 'bullish' ? colors.bullish : colors.bearish }]}>{h.text}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Time Machine CTA */}
-        <Pressable
-          style={({ pressed }) => [s.timeMachineBtn, pressed && { opacity: 0.8 }]}
-          onPress={() => router.push(`/time-machine/${ticker}`)}
-        >
-          <Text style={s.timeMachineBtnIcon}>⏳</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={s.timeMachineBtnTitle}>시그널 타임머신</Text>
-            <Text style={s.timeMachineBtnSub}>과거 날짜의 시그널과 실제 결과 비교</Text>
-          </View>
-          <Text style={{ color: colors.accent, fontSize: 16 }}>›</Text>
-        </Pressable>
-
-        <View style={s.headerBlock}>
-          {/* COMBINED ANALYSIS */}
-          <View style={s.combinedSection}>
-            <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
-
-            <View style={s.toggleRow}>
-              {ALL_INDICATORS.filter(k => k !== 'ATR').map(key => {
-                const active = combinedIndicators.has(key);
-                return (
-                  <Pressable
-                    key={key}
-                    style={[s.toggleChip, active && s.toggleChipActive]}
-                    onPress={() => toggleCombinedIndicator(key)}
-                  >
-                    <Text style={[s.toggleChipText, active && s.toggleChipTextActive]}>
-                      {INDICATOR_META[key].labelKo}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {activeForCombined.length >= 2 ? (
-              <SmartCombinedView
-                key={refreshKey}
-                ticker={ticker!}
-                selectedIndicators={activeForCombined}
-              />
-            ) : (
-              <Text style={s.hintText}>Enable at least 2 indicators for combined analysis</Text>
-            )}
-          </View>
         </View>
 
         {/* INDICATORS - tap to open modal */}
@@ -511,6 +437,60 @@ export default function AnalyzeScreen() {
           </View>
         </View>
 
+        {/* 52 Week Position */}
+        {price.high_52w && price.low_52w && (
+          <View style={s.week52Section}>
+            <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
+          </View>
+        )}
+
+        {/* Time Machine CTA */}
+        <Pressable
+          style={({ pressed }) => [s.timeMachineBtn, pressed && { opacity: 0.8 }]}
+          onPress={() => router.push(`/time-machine/${ticker}`)}
+        >
+          <Text style={s.timeMachineBtnIcon}>TM</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.timeMachineBtnTitle}>Signal Time Machine</Text>
+            <Text style={s.timeMachineBtnSub}>Compare past signals with actual results</Text>
+          </View>
+          <Text style={{ color: colors.accent, fontSize: 16 }}>›</Text>
+        </Pressable>
+
+        <View style={s.headerBlock}>
+          {/* COMBINED ANALYSIS */}
+          <View style={s.combinedSection}>
+            <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
+
+            <View style={s.toggleRow}>
+              {ALL_INDICATORS.filter(k => k !== 'ATR').map(key => {
+                const active = combinedIndicators.has(key);
+                return (
+                  <Pressable
+                    key={key}
+                    style={[s.toggleChip, active && s.toggleChipActive]}
+                    onPress={() => toggleCombinedIndicator(key)}
+                  >
+                    <Text style={[s.toggleChipText, active && s.toggleChipTextActive]}>
+                      {INDICATOR_META[key].labelKo}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {activeForCombined.length >= 2 ? (
+              <SmartCombinedView
+                key={refreshKey}
+                ticker={ticker!}
+                selectedIndicators={activeForCombined}
+              />
+            ) : (
+              <Text style={s.hintText}>Enable at least 2 indicators for combined analysis</Text>
+            )}
+          </View>
+        </View>
+
         <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
           <Text style={s.footerText}>Updated: {data.analysis_date}</Text>
         </View>
@@ -521,6 +501,52 @@ export default function AnalyzeScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* SUMMARY TOOLTIP MODAL */}
+      <Modal
+        visible={summaryVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSummaryVisible(false)}
+        statusBarTranslucent
+      >
+        <View style={s.modalOverlay}>
+          <Pressable style={s.modalBackdrop} onPress={() => setSummaryVisible(false)} />
+          <View style={s.summaryModal}>
+            <View style={s.summaryModalHeader}>
+              <Text style={s.summaryModalTitle}>{ticker_info.ticker} Summary</Text>
+              <Pressable style={s.modalCloseBtn} onPress={() => setSummaryVisible(false)}>
+                <Text style={s.modalCloseBtnText}>✕</Text>
+              </Pressable>
+            </View>
+            {data.combined && data.combined.probability?.periods?.[WINDOW_KEY_MAP[windowPeriod]] && (
+              <View style={s.summaryModalBody}>
+                <Text style={s.summaryModalText}>
+                  {(() => {
+                    const wp = WINDOW_KEY_MAP[windowPeriod];
+                    const p = data.combined!.probability.periods[wp];
+                    if (!p) return '';
+                    const occ = data.combined!.probability.occurrences;
+                    const wins = Math.round(occ * p.win_rate / 100);
+                    const periodLabel = PERIOD_LABELS[windowPeriod] || windowPeriod;
+                    const direction = p.win_rate >= 50 ? 'up' : 'down';
+                    return `In the past ${data.combined!.probability.data_period || '10 years'}, similar conditions occurred ${occ} times. ${wins} of those (${p.win_rate.toFixed(0)}%) moved ${direction} after ${periodLabel}.`;
+                  })()}
+                </Text>
+                {highlights.length > 0 && (
+                  <View style={s.summaryModalHighlights}>
+                    {highlights.slice(0, 3).map((h, i) => (
+                      <View key={i} style={[s.ahaBadge, { backgroundColor: h.type === 'bullish' ? `${colors.bullish}20` : `${colors.bearish}20` }]}>
+                        <Text style={[s.ahaBadgeText, { color: h.type === 'bullish' ? colors.bullish : colors.bearish }]}>{h.text}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* CENTERED POPUP MODAL */}
       <Modal
@@ -594,31 +620,31 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  backBtn: { paddingVertical: 6, paddingRight: 12 },
+  backBtn: { paddingVertical: 12, paddingRight: 16 },
   backBtnText: { color: c.accent, fontSize: 14, fontWeight: '600' },
   saveBtn: {
-    paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.sm,
+    paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.sm,
     borderWidth: 1, borderColor: c.borderLight, backgroundColor: c.bgElevated,
   },
   saveBtnActive: { backgroundColor: c.accentDim, borderColor: c.accent },
   saveBtnText: { color: c.textTertiary, ...typography.labelSm },
   saveBtnTextActive: { color: c.accent },
   navRight: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  miniLabel: { color: c.textMuted, fontSize: 7, fontWeight: '800', letterSpacing: 0.3 },
+  miniLabel: { color: c.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
   miniPillGroup: { flexDirection: 'row', gap: 1 },
-  miniPill: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 3 },
+  miniPill: { paddingHorizontal: 8, paddingVertical: 8, borderRadius: 3 },
   miniPillActiveBlue: { backgroundColor: c.accent },
   miniPillActiveOrange: { backgroundColor: c.warning },
-  miniPillText: { color: c.textMuted, fontSize: 8, fontWeight: '600' },
+  miniPillText: { color: c.textMuted, fontSize: 10, fontWeight: '600' },
   miniPillTextActive: { color: '#fff', fontWeight: '800' },
   miniDivider: { width: 1, height: 12, backgroundColor: c.border },
   shareBtn: {
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.sm,
+    paddingHorizontal: 8, paddingVertical: 8, borderRadius: radius.sm,
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
   },
   shareBtnText: { color: c.textSecondary, fontSize: 10, fontWeight: '600' },
   themeBtn: {
-    paddingVertical: 4, paddingHorizontal: 6, borderRadius: 6,
+    padding: 12, borderRadius: 6,
   },
   themeBtnPressed: { backgroundColor: c.bgElevated },
 
@@ -646,7 +672,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // Toggle chips
   toggleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: spacing.md },
   toggleChip: {
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.full,
+    paddingHorizontal: 8, paddingVertical: 10, borderRadius: radius.full,
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
   },
   toggleChipActive: { backgroundColor: c.accentDim, borderColor: c.accent },
@@ -664,10 +690,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     minHeight: 90, justifyContent: 'center',
   },
   indicatorCardPressed: { transform: [{ scale: 0.95 }], backgroundColor: c.bgElevated },
-  cardLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '600', marginBottom: 2 },
+  cardLabel: { color: c.textTertiary, fontSize: 11, fontWeight: '600', marginBottom: 2 },
   cardValue: { color: c.textPrimary, fontSize: 15, fontWeight: '700' },
   winBadge: { marginTop: 4, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
-  cardWinRate: { fontSize: 10, fontWeight: '700' },
+  cardWinRate: { fontSize: 11, fontWeight: '700' },
 
   // Highlight pills
   highlightRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.md },
@@ -698,41 +724,68 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   modalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modalTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '700' },
   modalCloseBtn: {
-    width: 32, height: 32, borderRadius: 16,
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: c.bgElevated, justifyContent: 'center', alignItems: 'center',
   },
   modalCloseBtnText: { color: c.textMuted, fontSize: 16 },
   modalScroll: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
 
-  // Aha card
-  ahaCard: {
+  // Summary tooltip button
+  summaryBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: c.bgElevated,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: c.borderLight,
+    borderColor: c.border,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
-  ahaTitle: {
+  summaryBtnText: {
+    color: c.textSecondary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // Summary modal
+  summaryModal: {
+    backgroundColor: c.bg,
+    borderRadius: 16,
+    width: '100%' as any,
+    overflow: 'hidden' as const,
+  },
+  summaryModalHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: c.border,
+  },
+  summaryModalTitle: {
     color: c.textPrimary,
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: spacing.sm,
   },
-  ahaText: {
+  summaryModalBody: {
+    padding: spacing.lg,
+  },
+  summaryModalText: {
     color: c.textSecondary,
     fontSize: 14,
     lineHeight: 22,
     marginBottom: spacing.sm,
   },
-  ahaHighlights: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  summaryModalHighlights: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: 6,
     marginTop: spacing.xs,
   },
+
+  // Aha badge (used in summary modal)
   ahaBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -741,6 +794,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   ahaBadgeText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+
+  // 52 Week section
+  week52Section: {
+    backgroundColor: c.bgCard,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
 
   // Time Machine CTA
@@ -757,7 +817,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     gap: spacing.sm,
   } as any,
   timeMachineBtnIcon: {
-    fontSize: 22,
+    fontSize: 14,
+    fontWeight: '800',
+    color: c.accent,
   },
   timeMachineBtnTitle: {
     color: c.accent,

@@ -119,7 +119,7 @@ function cardStyles(c: ThemeColors) {
 function _makeCardStyles(c: ThemeColors) {
   return StyleSheet.create({
     card: {
-      width: 144, backgroundColor: c.bgCard, borderRadius: radius.lg,
+      width: 156, minHeight: 160, backgroundColor: c.bgCard, borderRadius: radius.lg,
       padding: spacing.md, marginRight: 10, borderWidth: 1, borderColor: c.border,
       borderLeftWidth: 3,
       shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
@@ -294,6 +294,8 @@ export default function HomeScreen() {
     if (dp === dataPeriod) return;
     setDataPeriod(dp);
     AsyncStorage.setItem('data_period', dp).catch(() => {});
+    // Clear existing signals so full loading screen shows
+    setSignals([]);
     loadSignals(dp, true);
   };
 
@@ -323,14 +325,26 @@ export default function HomeScreen() {
       setSignals(sigs);
       setScannedCount(res.scanned);
       setSignalsUpdated(res.updated);
+      setServerOk(true); // signals loaded = server is alive
       if (res.calendar) {
         setCalendarEvents(res.calendar);
-        const today = new Date().getDate();
-        const todayHasEvents = res.calendar.some((ev: any) => {
-          const d = new Date(ev.date + 'T12:00:00');
-          return d.getDate() === today && d.getMonth() === new Date().getMonth();
-        });
-        if (todayHasEvents) setSelectedCalDay(today);
+        const today = new Date();
+        const todayDate = today.getDate();
+        const todayMonth = today.getMonth();
+        const todayYear = today.getFullYear();
+
+        // Find next upcoming event day in this month
+        const eventDays = res.calendar
+          .filter((ev: any) => {
+            const d = new Date(ev.date + 'T12:00:00');
+            return d.getFullYear() === todayYear && d.getMonth() === todayMonth && d.getDate() >= todayDate;
+          })
+          .map((ev: any) => new Date(ev.date + 'T12:00:00').getDate())
+          .sort((a: number, b: number) => a - b);
+
+        if (eventDays.length > 0) {
+          setSelectedCalDay(eventDays[0]); // Select next upcoming event day
+        }
       }
       if (res.flips) setFlips(res.flips);
     } catch (e: any) {
@@ -651,6 +665,37 @@ export default function HomeScreen() {
               </Pressable>
             </>
           )}
+          <Pressable
+            style={({ pressed }) => [s.refreshBtn, refreshing && { opacity: 0.5 }, pressed && { opacity: 0.7 }]}
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
+            <Text style={s.refreshBtnText}>{refreshing ? '...' : '\u21BB'}</Text>
+          </Pressable>
+        </View>
+
+        {/* Search */}
+        <View style={{ zIndex: 10, position: 'relative', marginTop: 10 }}>
+          <View style={s.searchContainer}>
+            <View style={s.searchIcon}><SearchIcon size={15} color={colors.textMuted} /></View>
+            <TextInput
+              style={s.searchInput}
+              placeholder="Search ticker or company..."
+              placeholderTextColor={colors.textMuted}
+              value={query}
+              onChangeText={handleSearch}
+              onSubmitEditing={handleSubmit}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {loading && <ActivityIndicator size="small" color={colors.accent} />}
+            {query.length > 0 && !loading && (
+              <Pressable onPress={() => { setQuery(''); setResults([]); }}>
+                <Text style={s.clearBtn}>{'\u2715'}</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
 
         {/* INDEX ETF Cards (QQQ/SPY) - always show both */}
@@ -746,29 +791,6 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Search */}
-        <View style={{ zIndex: 10, position: 'relative', marginTop: 10 }}>
-          <View style={s.searchContainer}>
-            <View style={s.searchIcon}><SearchIcon size={15} color={colors.textMuted} /></View>
-            <TextInput
-              style={s.searchInput}
-              placeholder="Search ticker or company..."
-              placeholderTextColor={colors.textMuted}
-              value={query}
-              onChangeText={handleSearch}
-              onSubmitEditing={handleSubmit}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              returnKeyType="search"
-            />
-            {loading && <ActivityIndicator size="small" color={colors.accent} />}
-            {query.length > 0 && !loading && (
-              <Pressable onPress={() => { setQuery(''); setResults([]); }}>
-                <Text style={s.clearBtn}>{'\u2715'}</Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
       </View>
 
         {/* App Install Banner (web only) */}
@@ -1153,20 +1175,21 @@ export default function HomeScreen() {
                 <View key={wi} style={s.calWeekRow}>
                   {week.map((day, di) => {
                     const events = day ? (calendarGrid.eventsByDay[day] || []) : [];
-                    const isToday = day === calendarGrid.todayDate;
+                    const isToday = day !== null && day === calendarGrid.todayDate;
                     const isPast = day !== null && day < calendarGrid.todayDate;
-                    const isSelected = day === selectedCalDay;
+                    const isSelected = day !== null && day === selectedCalDay;
                     const typeColors = CALENDAR_TYPE_COLORS;
                     return (
                       <Pressable
                         key={di}
                         style={[
                           s.calDayCell,
-                          isToday && s.calDayCellToday,
-                          isSelected && { backgroundColor: `${colors.accent}20`, borderColor: colors.accent },
-                          isPast && { opacity: 0.4 },
+                          day !== null && isToday && s.calDayCellToday,
+                          day !== null && isSelected && { backgroundColor: `${colors.accent}20`, borderColor: colors.accent },
+                          day !== null && isPast && { opacity: 0.4 },
                         ]}
-                        onPress={day && events.length > 0 ? () => setSelectedCalDay(isSelected ? null : day) : undefined}
+                        onPress={day !== null && events.length > 0 ? () => setSelectedCalDay(isSelected ? null : day) : undefined}
+                        disabled={day === null}
                       >
                         {day !== null ? (
                           <>
@@ -1199,12 +1222,16 @@ export default function HomeScreen() {
                 <Text style={s.calDetailDate}>
                   {calendarGrid.monthName} {selectedCalDay}
                 </Text>
-                {calendarGrid.eventsByDay[selectedCalDay].map((ev, i) => {
+                {calendarGrid.eventsByDay[selectedCalDay].map((ev, i, arr) => {
                   const evColor = CALENDAR_TYPE_COLORS[ev.type] || colors.textMuted;
                   return (
                     <Pressable
                       key={`${ev.type}-${i}`}
-                      style={({ pressed }) => [s.calDetailRow, pressed && ev.ticker && { opacity: 0.7 }]}
+                      style={({ pressed }) => [
+                        s.calDetailRow,
+                        i === arr.length - 1 && { borderBottomWidth: 0 },
+                        pressed && ev.ticker && { opacity: 0.7 },
+                      ]}
                       onPress={ev.ticker ? () => goToAnalysis(ev.ticker!) : undefined}
                     >
                       <View style={s.calDetailLeft}>
@@ -1294,12 +1321,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   marketBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   title: { color: c.textPrimary, fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
-  themeBtn: { padding: 6, borderRadius: 6 },
+  themeBtn: { padding: 12, borderRadius: 8 },
   themeBtnPressed: { backgroundColor: c.bgElevated },
   authBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: c.bgElevated,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -1318,12 +1345,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingTop: 6, paddingBottom: 2, flexWrap: 'wrap',
   },
   periodGroup: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  periodLabel: { color: c.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
+  periodLabel: { color: c.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
   miniPillGroup: { flexDirection: 'row', gap: 1 },
-  miniPill: { paddingHorizontal: 5, paddingVertical: 3, borderRadius: 4 },
+  miniPill: { paddingHorizontal: 8, paddingVertical: 8, borderRadius: 6 },
   miniPillActiveBlue: { backgroundColor: c.accent },
   miniPillActiveOrange: { backgroundColor: c.warning },
-  miniPillText: { color: c.textMuted, fontSize: 9, fontWeight: '600' },
+  miniPillText: { color: c.textMuted, fontSize: 10, fontWeight: '600' },
   miniPillTextActive: { color: '#fff', fontWeight: '800' },
   miniDivider: { width: 1, height: 14, backgroundColor: c.border },
   shareTopBtn: {
@@ -1331,6 +1358,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
   },
   shareTopBtnText: { color: c.textSecondary, fontSize: 10, fontWeight: '600' },
+  refreshBtn: {
+    paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6,
+    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
+  },
+  refreshBtnText: { color: c.textSecondary, fontSize: 14, fontWeight: '600' },
 
   // Install banner
   installBanner: {
@@ -1370,7 +1402,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   indexCardWinRate: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   indexCardAvg: { fontSize: 14, fontWeight: '700' },
   indexCardCases: { color: c.textSecondary, fontSize: 14, fontWeight: '600' },
-  indexCardLabel: { color: c.textMuted, fontSize: 8, fontWeight: '600', letterSpacing: 0.3, marginTop: 2 },
+  indexCardLabel: { color: c.textMuted, fontSize: 10, fontWeight: '600', letterSpacing: 0.3, marginTop: 2 },
   // ═══ SEARCHED ═══
   searchedChipWrap: { flexDirection: 'row', alignItems: 'center', marginRight: 6 },
   searchedChip: {
@@ -1378,7 +1410,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: radius.full, borderWidth: 1, borderColor: c.border,
   },
   searchedChipText: { color: c.textPrimary, fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
-  searchedDismiss: { marginLeft: -8, paddingHorizontal: 4, paddingVertical: 2 },
+  searchedDismiss: { marginLeft: -8, paddingHorizontal: 8, paddingVertical: 8 },
   searchedDismissText: { color: c.textMuted, fontSize: 10 },
 
   // ═══ SEARCH ═══
@@ -1427,7 +1459,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   watchlistChipText: { color: c.textPrimary, ...typography.bodyBold, letterSpacing: 0.5 },
 
   sectorChip: {
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full,
+    paddingHorizontal: 12, paddingVertical: 9, borderRadius: radius.full,
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border, marginRight: 6,
   },
   sectorChipActive: { backgroundColor: c.accentDim, borderColor: c.accent },
@@ -1440,7 +1472,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   sortLabel: { color: c.textMuted, fontSize: 11, fontWeight: '600', marginRight: 2 },
   sortPill: {
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full,
+    paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.full,
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
   },
   sortPillActive: { backgroundColor: c.accentDim, borderColor: c.accent },
@@ -1459,7 +1491,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: 6,
   },
-  regimeTitle: { color: c.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  regimeTitle: { color: c.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
   regimeMood: { fontSize: 11, fontWeight: '800' },
   regimeTrack: {
     height: 6, borderRadius: 3, backgroundColor: `${c.bearish}30`,
@@ -1485,7 +1517,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   heatmapSector: { fontSize: 11, fontWeight: '700', marginBottom: 2 },
   heatmapWr: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   heatmapChange: { fontSize: 10, fontWeight: '600', marginTop: 1 },
-  heatmapCount: { color: c.textMuted, fontSize: 8, fontWeight: '500', marginTop: 2 },
+  heatmapCount: { color: c.textMuted, fontSize: 10, fontWeight: '500', marginTop: 2 },
 
   // ═══ SIGNAL FLIP ═══
   flipArrow: {
@@ -1498,7 +1530,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full,
     marginTop: 2,
   },
-  flipBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  flipBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 
   // ═══ MARKET CALENDAR (Grid) ═══
   calGrid: {
@@ -1519,8 +1551,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: `${c.warning}12`, borderColor: `${c.warning}40`,
   },
   calDayNum: { color: c.textPrimary, fontSize: 14, fontWeight: '600' },
-  calEventTag: { fontSize: 9, fontWeight: '800', letterSpacing: 0.2, marginTop: 1, textAlign: 'center' as const },
-  calMoreTag: { color: c.textMuted, fontSize: 7, fontWeight: '600', marginTop: 1 },
+  calEventTag: { fontSize: 10, fontWeight: '800', letterSpacing: 0.2, marginTop: 1, textAlign: 'center' as const },
+  calMoreTag: { color: c.textMuted, fontSize: 9, fontWeight: '600', marginTop: 1 },
   calDot: { width: 5, height: 5, borderRadius: 3 },
   calDetail: {
     marginTop: spacing.sm, backgroundColor: c.bgCard,
@@ -1545,7 +1577,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
   },
   calLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  calLegendText: { color: c.textMuted, fontSize: 9, fontWeight: '600' },
+  calLegendText: { color: c.textMuted, fontSize: 10, fontWeight: '600' },
 
   disclaimer: {
     paddingHorizontal: spacing.lg,
