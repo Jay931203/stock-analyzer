@@ -631,31 +631,34 @@ export default function HomeScreen() {
                       ) : null}
                     </View>
                   </View>
-                  {wr !== null && (
-                    <>
-                      <View style={[s.indexCardDivider, { backgroundColor: `${color}30` }]} />
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
-                        <View style={{ alignItems: 'center' }}>
-                          <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
-                          <Text style={s.indexCardLabel}>Win Rate</Text>
-                        </View>
-                        {avgRet !== null && avgRet !== 0 && (
-                          <View style={{ alignItems: 'center' }}>
-                            <Text style={[s.indexCardAvg, { color: avgRet >= 0 ? colors.bullish : colors.bearish }]}>
-                              {avgRet >= 0 ? '+' : ''}{avgRet.toFixed(1)}%
-                            </Text>
-                            <Text style={s.indexCardLabel}>Avg Return</Text>
-                          </View>
-                        )}
-                        {sig && (
-                          <View style={{ alignItems: 'center' }}>
-                            <Text style={s.indexCardCases}>{sig.occurrences}</Text>
-                            <Text style={s.indexCardLabel}>Cases</Text>
-                          </View>
-                        )}
+                  <View style={[s.indexCardDivider, { backgroundColor: `${color}30` }]} />
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
+                    <View style={{ alignItems: 'center' }}>
+                      {wr !== null ? (
+                        <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
+                      ) : (
+                        <Text style={[s.indexCardWinRate, { color: colors.textMuted }]}>--</Text>
+                      )}
+                      <Text style={s.indexCardLabel}>Win Rate</Text>
+                    </View>
+                    {avgRet !== null && avgRet !== 0 ? (
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={[s.indexCardAvg, { color: avgRet >= 0 ? colors.bullish : colors.bearish }]}>
+                          {avgRet >= 0 ? '+' : ''}{avgRet.toFixed(1)}%
+                        </Text>
+                        <Text style={s.indexCardLabel}>Avg Return</Text>
                       </View>
-                    </>
-                  )}
+                    ) : (
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={[s.indexCardAvg, { color: colors.textMuted }]}>--</Text>
+                        <Text style={s.indexCardLabel}>Avg Return</Text>
+                      </View>
+                    )}
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={s.indexCardCases}>{sig?.occurrences ?? '--'}</Text>
+                      <Text style={s.indexCardLabel}>Cases</Text>
+                    </View>
+                  </View>
                 </Pressable>
               );
             })}

@@ -1065,11 +1065,14 @@ def _calc_combined(df, states: dict) -> CombinedProbability | None:
 
 _scan_data_period = "3y"  # module-level, set by signals endpoint
 
+_ALWAYS_INCLUDE = {"QQQ", "SPY"}  # Never skip these tickers
+
 def _scan_ticker_combo(ticker: str) -> dict | None:
     """Get combined probability for a ticker across all available indicators."""
     try:
         df = fetch_price_history(ticker, period=_scan_data_period)
-        if len(df) < 200:
+        min_rows = 60 if ticker in _ALWAYS_INCLUDE else 200
+        if len(df) < min_rows:
             return None
     except Exception:
         return None
