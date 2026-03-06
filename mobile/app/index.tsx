@@ -463,56 +463,38 @@ export default function HomeScreen() {
               </View>
             ) : null}
           </View>
-          <Pressable
-            onPress={cycleTheme}
-            style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}
-            accessibilityLabel={`Theme: ${themeMode}`}
-            accessibilityRole="button"
-          >
-            {themeMode === 'light' ? (
-              <SunIcon size={16} color={colors.textSecondary} />
-            ) : themeMode === 'dark' ? (
-              <MoonIcon size={16} color={colors.textSecondary} />
-            ) : (
-              <MonitorIcon size={16} color={colors.textSecondary} />
-            )}
-          </Pressable>
-        </View>
-
-        {/* Global Controls: Backtest + Window */}
-        <View style={s.globalControlsRow}>
-          <View style={s.controlGroup}>
-            <Text style={s.controlLabel}>BACKTEST</Text>
-            <View style={s.controlPills}>
+          <View style={s.topBarRight}>
+            {/* Backtest mini pills */}
+            <View style={s.miniPillGroup}>
               {(['1y', '3y', '5y', '10y'] as const).map(dp => (
-                <Pressable
-                  key={dp}
-                  style={[s.controlPill, dataPeriod === dp && s.controlPillActiveBacktest]}
-                  onPress={() => changeDataPeriod(dp)}
-                >
-                  <Text style={[s.controlPillText, dataPeriod === dp && s.controlPillTextActiveBacktest]}>
-                    {dp.toUpperCase()}
-                  </Text>
+                <Pressable key={dp} style={[s.miniPill, dataPeriod === dp && s.miniPillActiveBlue]} onPress={() => changeDataPeriod(dp)}>
+                  <Text style={[s.miniPillText, dataPeriod === dp && s.miniPillTextActive]}>{dp.toUpperCase()}</Text>
                 </Pressable>
               ))}
             </View>
-          </View>
-          <View style={s.controlDivider} />
-          <View style={s.controlGroup}>
-            <Text style={s.controlLabel}>WINDOW</Text>
-            <View style={s.controlPills}>
+            <View style={s.miniDivider} />
+            {/* Window mini pills */}
+            <View style={s.miniPillGroup}>
               {(['5d', '20d', '60d', '120d', '252d'] as const).map(p => (
-                <Pressable
-                  key={p}
-                  style={[s.controlPill, period === p && s.controlPillActiveWindow]}
-                  onPress={() => setPeriod(p)}
-                >
-                  <Text style={[s.controlPillText, period === p && s.controlPillTextActiveWindow]}>
-                    {PERIOD_LABELS[p]}
-                  </Text>
+                <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveOrange]} onPress={() => setPeriod(p)}>
+                  <Text style={[s.miniPillText, period === p && s.miniPillTextActive]}>{PERIOD_LABELS[p]}</Text>
                 </Pressable>
               ))}
             </View>
+            <Pressable
+              onPress={cycleTheme}
+              style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}
+              accessibilityLabel={`Theme: ${themeMode}`}
+              accessibilityRole="button"
+            >
+              {themeMode === 'light' ? (
+                <SunIcon size={16} color={colors.textSecondary} />
+              ) : themeMode === 'dark' ? (
+                <MoonIcon size={16} color={colors.textSecondary} />
+              ) : (
+                <MonitorIcon size={16} color={colors.textSecondary} />
+              )}
+            </Pressable>
           </View>
         </View>
 
@@ -665,60 +647,64 @@ export default function HomeScreen() {
         </View>
       </View>
 
-        {/* Recently Searched */}
+        {/* Recently Searched + Saved */}
         {(() => {
           const visible = recentSearches.filter(t => !dismissedSearches.has(t));
-          if (visible.length === 0) return null;
+          const hasSearched = visible.length > 0;
+          const hasSaved = watchlist.length > 0;
+          if (!hasSearched && !hasSaved) return null;
           return (
             <View style={s.section}>
-              <View style={s.sectionHeader}>
-                <View style={[s.sectionDot, { backgroundColor: colors.warning }]} />
-                <Text style={s.sectionLabel}>SEARCHED</Text>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {visible.slice(0, 10).map(ticker => (
-                  <View key={ticker} style={s.searchedChipWrap}>
-                    <Pressable
-                      style={({ pressed }) => [s.searchedChip, pressed && { backgroundColor: colors.bgElevated }]}
-                      onPress={() => goToAnalysis(ticker)}
-                    >
-                      <Text style={s.searchedChipText}>{ticker}</Text>
-                    </Pressable>
-                    <Pressable
-                      style={s.searchedDismiss}
-                      onPress={() => setDismissedSearches(prev => new Set([...prev, ticker]))}
-                      hitSlop={6}
-                    >
-                      <Text style={s.searchedDismissText}>{'\u2715'}</Text>
-                    </Pressable>
+              {hasSearched && (
+                <>
+                  <View style={s.sectionHeader}>
+                    <View style={[s.sectionDot, { backgroundColor: colors.warning }]} />
+                    <Text style={s.sectionLabel}>SEARCHED</Text>
                   </View>
-                ))}
-              </ScrollView>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {visible.slice(0, 10).map(ticker => (
+                      <View key={ticker} style={s.searchedChipWrap}>
+                        <Pressable
+                          style={({ pressed }) => [s.searchedChip, pressed && { backgroundColor: colors.bgElevated }]}
+                          onPress={() => goToAnalysis(ticker)}
+                        >
+                          <Text style={s.searchedChipText}>{ticker}</Text>
+                        </Pressable>
+                        <Pressable
+                          style={s.searchedDismiss}
+                          onPress={() => setDismissedSearches(prev => new Set([...prev, ticker]))}
+                          hitSlop={6}
+                        >
+                          <Text style={s.searchedDismissText}>{'\u2715'}</Text>
+                        </Pressable>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+              {hasSaved && (
+                <>
+                  <View style={[s.sectionHeader, hasSearched && { marginTop: 8 }]}>
+                    <View style={[s.sectionDot, { backgroundColor: colors.accent }]} />
+                    <Text style={s.sectionLabel}>SAVED</Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {watchlist.map((ticker) => (
+                      <Pressable
+                        key={ticker}
+                        style={({ pressed }) => [s.watchlistChip, pressed && { transform: [{ scale: 0.95 }], backgroundColor: colors.bgElevated }]}
+                        onPress={() => goToAnalysis(ticker)}
+                        onLongPress={() => removeFromWatchlist(ticker)}
+                      >
+                        <Text style={s.watchlistChipText}>{ticker}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
             </View>
           );
         })()}
-
-        {/* Watchlist */}
-        {watchlist.length > 0 && (
-          <View style={s.section}>
-            <View style={s.sectionHeader}>
-              <View style={[s.sectionDot, { backgroundColor: colors.accent }]} />
-              <Text style={s.sectionLabel}>SAVED</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {watchlist.map((ticker) => (
-                <Pressable
-                  key={ticker}
-                  style={({ pressed }) => [s.watchlistChip, pressed && { transform: [{ scale: 0.95 }], backgroundColor: colors.bgElevated }]}
-                  onPress={() => goToAnalysis(ticker)}
-                  onLongPress={() => removeFromWatchlist(ticker)}
-                >
-                  <Text style={s.watchlistChipText}>{ticker}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
 
         {/* Sector Filter */}
         {signals.length > 0 && sectors.length > 1 && (
@@ -1139,27 +1125,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statusText: { color: c.textTertiary, fontSize: 10, fontWeight: '500' },
   marketBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 },
   marketBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  themeBtn: { padding: 8, borderRadius: 6 },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  miniPillGroup: { flexDirection: 'row', gap: 1 },
+  miniPill: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 3 },
+  miniPillActiveBlue: { backgroundColor: c.accent },
+  miniPillActiveOrange: { backgroundColor: c.warning },
+  miniPillText: { color: c.textMuted, fontSize: 8, fontWeight: '600' },
+  miniPillTextActive: { color: '#fff', fontWeight: '800' },
+  miniDivider: { width: 1, height: 12, backgroundColor: c.border },
+  themeBtn: { padding: 6, borderRadius: 6 },
   themeBtnPressed: { backgroundColor: c.bgElevated },
-
-  // ═══ GLOBAL CONTROLS ═══
-  globalControlsRow: {
-    flexDirection: 'row', alignItems: 'center', marginTop: 8,
-    backgroundColor: c.bgElevated, borderRadius: radius.md, padding: 6, gap: 6,
-  },
-  controlGroup: { flex: 1, alignItems: 'center' as const, gap: 3 },
-  controlLabel: { color: c.textMuted, fontSize: 8, fontWeight: '800', letterSpacing: 1 },
-  controlPills: { flexDirection: 'row', gap: 2 },
-  controlPill: {
-    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4,
-    backgroundColor: c.bg,
-  },
-  controlPillActiveBacktest: { backgroundColor: c.accent },
-  controlPillActiveWindow: { backgroundColor: c.warning },
-  controlPillText: { color: c.textMuted, fontSize: 9, fontWeight: '600' },
-  controlPillTextActiveBacktest: { color: '#fff', fontWeight: '800' },
-  controlPillTextActiveWindow: { color: '#fff', fontWeight: '800' },
-  controlDivider: { width: 1, height: 24, backgroundColor: c.border },
 
   appName: { color: c.accent, fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginTop: 4 },
   titleRow: {

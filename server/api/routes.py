@@ -626,7 +626,7 @@ async def signal_flips():
 @router.get("/signals")
 async def get_signals(
     limit: int = Query(101, ge=1, le=150),
-    data_period: str = Query("3y", regex="^(1y|3y|5y|10y)$"),
+    data_period: str = Query("3y", pattern="^(1y|3y|5y|10y)$"),
 ):
     """
     Combined probability for popular stocks.
