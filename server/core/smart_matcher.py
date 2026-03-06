@@ -49,7 +49,15 @@ def calc_adaptive_combined(
         low = df["Low"]
         volume = df["Volume"]
 
-    forward_periods = [5, 10, 20, 60, 120, 252]
+    # Adaptive forward periods: only include periods where we can get meaningful samples
+    # Need at least 20% of data length available after indicator warmup (~200 days)
+    data_len = len(close)
+    all_periods = [5, 10, 20, 60, 120, 252]
+    # A forward period of N needs at least N+1 rows after signals, plus signals need room
+    # Practically: exclude periods that would leave fewer than 10 possible signal dates
+    forward_periods = [p for p in all_periods if p < data_len * 0.7]
+    if not forward_periods:
+        forward_periods = [5, 10, 20]  # minimum fallback
 
     # Build masks at 3 strictness levels
     tier_configs = {

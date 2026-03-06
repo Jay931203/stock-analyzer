@@ -79,7 +79,7 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
   const [showImpact, setShowImpact] = useState(false);
   const prevKey = useRef('');
 
-  const selectionKey = selectedIndicators.sort().join(',');
+  const selectionKey = [...selectedIndicators].sort().join(',');
 
   useEffect(() => {
     if (selectedIndicators.length >= 2 && selectionKey !== prevKey.current) {

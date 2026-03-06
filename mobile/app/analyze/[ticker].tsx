@@ -28,6 +28,29 @@ import { SunIcon, MoonIcon, MonitorIcon, ChevronLeftIcon, StarIcon } from '../..
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
+function TopLoadingBar({ color, bgColor }: { color: string; bgColor: string }) {
+  const anim = React.useRef(new Animated.Value(0)).current;
+  const [barWidth, setBarWidth] = React.useState(0);
+  React.useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(anim, { toValue: 1, duration: 1200, useNativeDriver: true })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  const translateX = barWidth > 0
+    ? anim.interpolate({ inputRange: [0, 1], outputRange: [-barWidth * 0.4, barWidth] })
+    : anim.interpolate({ inputRange: [0, 1], outputRange: [-100, 300] });
+  return (
+    <View
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: bgColor, zIndex: 100, overflow: 'hidden' }}
+      onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+    >
+      <Animated.View style={{ position: 'absolute', width: '40%', height: '100%', backgroundColor: color, borderRadius: 2, transform: [{ translateX }] }} />
+    </View>
+  );
+}
+
 const INDICATOR_META: Record<string, { label: string }> = {
   RSI: { label: 'RSI' },
   MACD: { label: 'MACD' },
@@ -139,6 +162,7 @@ export default function AnalyzeScreen() {
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const [data, setData] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [periodLoading, setPeriodLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [combinedIndicators, setCombinedIndicators] = useState<Set<string>>(
@@ -167,27 +191,37 @@ export default function AnalyzeScreen() {
     return () => clearInterval(interval);
   }, [ticker, period]);
 
+  const hasDataRef = useRef(false);
   const loadData = async () => {
     if (!ticker) return;
-    setLoading(true);
+    const isInitial = !hasDataRef.current;
+    if (isInitial) setLoading(true);
+    else setPeriodLoading(true);
     setError(null);
-    try { setData(await api.analyze(ticker, period)); } catch (e: any) {
-      setError(e.response?.data?.detail ?? e.message ?? 'Analysis failed');
+    try {
+      const result = await api.analyze(ticker, period);
+      setData(result);
+      hasDataRef.current = true;
+    } catch (e: any) {
+      if (isInitial) {
+        setError(e.response?.data?.detail ?? e.message ?? 'Analysis failed');
+      }
     }
     setLoading(false);
+    setPeriodLoading(false);
   };
 
   const refreshData = async () => {
     if (!ticker) return;
-    try { setData(await api.analyze(ticker, period)); } catch {}
+    try { setData(await api.analyze(ticker, period, true)); } catch {}
   };
 
-  const onRefresh = useCallback(async () => {
+  const onRefresh = async () => {
     setRefreshing(true);
     await refreshData();
     setRefreshKey(k => k + 1);
     setRefreshing(false);
-  }, [ticker, period]);
+  };
 
   const [shareMsg, setShareMsg] = useState('');
 
@@ -294,6 +328,7 @@ export default function AnalyzeScreen() {
 
   return (
     <View style={s.container}>
+      {periodLoading && <TopLoadingBar color={colors.accent} bgColor={`${colors.textMuted}15`} />}
       <ScrollView
         style={s.scroll}
         showsVerticalScrollIndicator={false}

@@ -1,10 +1,13 @@
 """FastAPI route handlers."""
 
+import os
 import time
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
+
+_IS_VERCEL = os.environ.get("VERCEL") is not None
 
 from ..core.analyzer import compute_all_indicators, get_indicator_state
 from ..core.backtester import calc_combined_probability, calc_probability
@@ -55,8 +58,9 @@ async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period:
         # Log search in background
         background_tasks.add_task(log_recent_search, ticker)
 
-        if not is_fresh:
+        if not is_fresh and not _IS_VERCEL:
             # Stale cache: return it instantly, refresh in background
+            # Skip on Vercel where background tasks may not complete
             def _bg_recompute():
                 try:
                     _recompute_analysis(ticker, period)
@@ -112,6 +116,7 @@ def _recompute_analysis(ticker: str, period: str = "10y") -> AnalysisResponse:
         "current_values": _build_current_values(indicators, states),
         "ts": time.time(),
     }
+    _evict_cache(_indicator_mem_cache, _INDICATOR_MEM_MAX)
 
     indicator_results = {}
 
@@ -371,6 +376,7 @@ async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: s
             "indicators": indicators, "states": states,
             "current_values": current_values, "ts": now,
         }
+        _evict_cache(_indicator_mem_cache, _INDICATOR_MEM_MAX)
 
     result = calc_adaptive_combined(df, selected, current_values)
 
@@ -400,6 +406,7 @@ async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: s
 
     # Cache the result
     _smart_prob_cache[sp_key] = {"result": response, "ts": now}
+    _evict_cache(_smart_prob_cache, _SMART_PROB_MAX)
     return response
 
 
@@ -553,16 +560,29 @@ _TRENDING_TTL = 300  # 5 minutes
 
 # Signal scanning cache (10 min TTL)
 _signals_cache: dict = {"data": None, "ts": 0}
-_signals_period_cache: dict = {}  # keyed by "signals_{period}", e.g. "signals_3y"
+_signals_period_cache: dict = {}  # keyed by "signals_{period}", max 4 entries (1y/3y/5y/10y)
 _SIGNALS_TTL = 600  # 10 minutes
 
 # In-memory cache for computed indicators (survives within Vercel warm instance)
 _indicator_mem_cache: dict = {}  # {ticker:period -> {indicators, states, current_values, ts}}
 _INDICATOR_MEM_TTL = 600  # 10 minutes
+_INDICATOR_MEM_MAX = 200  # max entries before eviction
 
 # In-memory cache for smart probability results
 _smart_prob_cache: dict = {}  # {ticker:period:indicators -> {result, ts}}
 _SMART_PROB_TTL = 3600  # 1 hour (indicator values barely change intraday)
+_SMART_PROB_MAX = 300  # max entries before eviction
+
+
+def _evict_cache(cache: dict, max_size: int) -> None:
+    """Evict oldest entries when cache exceeds max_size."""
+    if len(cache) <= max_size:
+        return
+    # Sort by timestamp, remove oldest half
+    sorted_keys = sorted(cache.keys(), key=lambda k: cache[k].get("ts", 0))
+    to_remove = sorted_keys[: len(sorted_keys) - max_size // 2]
+    for k in to_remove:
+        cache.pop(k, None)
 
 
 @router.get("/similar/{ticker}")
@@ -609,7 +629,7 @@ async def refresh_signals():
 
     return {
         "status": "ok",
-        "signals_count": len(valid),
+        "signals_count": len(result["signals"]),
         "scanned": len(POPULAR_TICKERS),
         "updated": result["updated"],
     }
@@ -631,8 +651,6 @@ async def get_signals(
     Combined probability for popular stocks.
     Always returns cached data instantly. Refreshes in background if stale.
     """
-    global _scan_data_period
-    _scan_data_period = data_period
     is_default = data_period == "3y"
     now = time.time()
     signals_data = None
@@ -656,6 +674,8 @@ async def get_signals(
             signals_data = supabase_data
 
     # 3. No cache: compute synchronously (first ever load)
+    # fetch_price_history caches full 10y data in SQLite and trims to period.
+    # Non-default periods just trim cached data — no yfinance network call needed.
     if not signals_data:
         try:
             signals_data = _compute_signals(data_period)
@@ -663,21 +683,16 @@ async def get_signals(
             pcache["ts"] = now
             if is_default:
                 write_cached_signals(signals_data["signals"])
-        except Exception:
-            # Computation failed (e.g. timeout) — fall back to default 3y cache
-            default_cache = _signals_period_cache.get("signals_3y", {})
-            if default_cache.get("data"):
-                signals_data = default_cache["data"]
-            else:
-                fallback = read_cached_signals()
-                if fallback:
-                    signals_data = fallback
-            if not signals_data:
-                signals_data = {"signals": [], "scanned": 0, "updated": ""}
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            signals_data = {"signals": [], "scanned": 0, "updated": ""}
 
     # Background refresh if stale (user never waits)
+    # NOTE: On Vercel serverless, BackgroundTasks may not complete after response.
+    # The cron job (/api/signals/refresh) handles periodic updates instead.
     is_stale = now - pcache["ts"] > _SIGNALS_TTL
-    if is_stale and background_tasks:
+    if is_stale and background_tasks and not _IS_VERCEL:
         def _bg_refresh():
             try:
                 fresh = _compute_signals(data_period)
@@ -718,12 +733,13 @@ async def get_signals(
 
 def _compute_signals(data_period: str) -> dict:
     """Synchronous signal computation (heavy). Called only when no cache exists."""
-    global _scan_data_period
-    _scan_data_period = data_period
     from concurrent.futures import ThreadPoolExecutor
 
+    # Pass period as part of the argument tuple to avoid race conditions
+    args_list = [(ticker, data_period) for ticker in POPULAR_TICKERS]
+
     with ThreadPoolExecutor(max_workers=6) as pool:
-        results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
+        results = list(pool.map(_scan_ticker_combo, args_list))
     valid = [r for r in results if r is not None]
     valid.sort(key=lambda x: x["strength"], reverse=True)
 
@@ -937,6 +953,32 @@ async def available_conditions():
 # ── Helpers ──
 
 
+def _get_et_now() -> datetime:
+    """Get current time in US Eastern Time, accounting for DST.
+    Uses a simple DST rule: 2nd Sunday of March to 1st Sunday of November.
+    """
+    now_utc = datetime.now(timezone.utc)
+    year = now_utc.year
+
+    # Find 2nd Sunday of March (DST starts)
+    march1 = datetime(year, 3, 1, tzinfo=timezone.utc)
+    # days until first Sunday: (6 - weekday) % 7
+    first_sun_mar = 1 + (6 - march1.weekday()) % 7
+    dst_start = datetime(year, 3, first_sun_mar + 7, 2, 0, tzinfo=timezone.utc)  # 2nd Sunday 2AM UTC(approx)
+
+    # Find 1st Sunday of November (DST ends)
+    nov1 = datetime(year, 11, 1, tzinfo=timezone.utc)
+    first_sun_nov = 1 + (6 - nov1.weekday()) % 7
+    dst_end = datetime(year, 11, first_sun_nov, 2, 0, tzinfo=timezone.utc)
+
+    if dst_start <= now_utc < dst_end:
+        offset = timedelta(hours=-4)  # EDT
+    else:
+        offset = timedelta(hours=-5)  # EST
+
+    return now_utc.astimezone(timezone(offset))
+
+
 def _is_analysis_cache_fresh(updated_at_str: str) -> bool:
     """Check if cached analysis is still fresh.
     - During market hours (Mon-Fri 9:30-16:00 ET): 15 minutes TTL
@@ -951,7 +993,7 @@ def _is_analysis_cache_fresh(updated_at_str: str) -> bool:
         age_seconds = (now_utc - updated).total_seconds()
 
         # Determine if market is currently open
-        et = now_utc.astimezone(timezone(timedelta(hours=-5)))
+        et = _get_et_now()
         is_weekday = et.weekday() < 5
         t = et.hour * 60 + et.minute
         is_market_hours = is_weekday and 570 <= t < 960  # 9:30 AM - 4:00 PM ET
@@ -966,7 +1008,7 @@ def _is_analysis_cache_fresh(updated_at_str: str) -> bool:
 
 def _get_market_state() -> str:
     """Get current US market state based on ET time."""
-    et = datetime.now(timezone(timedelta(hours=-5)))
+    et = _get_et_now()
     # Weekend
     if et.weekday() >= 5:
         return "CLOSED"
@@ -1089,20 +1131,31 @@ def _calc_combined(df, states: dict) -> CombinedProbability | None:
     )
 
 
-_scan_data_period = "3y"  # module-level, set by signals endpoint
-
 _ALWAYS_INCLUDE = {"QQQ", "SPY"}  # Never skip these tickers
 
-def _scan_ticker_combo(ticker: str) -> dict | None:
-    """Get combined probability for a ticker across all available indicators."""
+def _scan_ticker_combo(args: tuple) -> dict | None:
+    """Get combined probability for a ticker across all available indicators.
+    Accepts (ticker, data_period) tuple to avoid race conditions on global state.
+    """
+    ticker, data_period = args
     try:
-        df = fetch_price_history(ticker, period=_scan_data_period)
+        df = fetch_price_history(ticker, period=data_period)
         min_rows = 60 if ticker in _ALWAYS_INCLUDE else 200
         if len(df) < min_rows:
             return None
-    except Exception:
+    except Exception as e:
+        print(f"[signals] {ticker}: fetch failed - {e}")
         return None
 
+    try:
+        return _scan_ticker_combo_inner(ticker, data_period, df)
+    except Exception as e:
+        print(f"[signals] {ticker}: computation failed - {e}")
+        return None
+
+
+def _scan_ticker_combo_inner(ticker: str, data_period: str, df) -> dict | None:
+    """Inner logic for _scan_ticker_combo, separated for cleaner error handling."""
     indicators = compute_all_indicators(df)
     states = get_indicator_state(indicators)
 
@@ -1117,49 +1170,8 @@ def _scan_ticker_combo(ticker: str) -> dict | None:
             sector = sec
             break
 
-    # Build current_values for smart_matcher
-    current_values = {}
-    rsi_val = indicators["rsi"]["value"]
-    if rsi_val is not None:
-        current_values["rsi"] = rsi_val
-
-    macd = indicators["macd"]
-    if macd["histogram"] is not None:
-        current_values["macd_histogram"] = macd["histogram"]
-    current_values["macd_event"] = states.get("macd_event")
-
-    current_values["ma_alignment"] = indicators["ma"]["alignment"]
-
-    dd = indicators.get("drawdown", {})
-    if dd.get("from_60d_high") is not None:
-        current_values["drawdown_60d"] = dd["from_60d_high"]
-
-    adx_data = indicators.get("adx", {})
-    if adx_data.get("adx") is not None:
-        current_values["adx"] = adx_data["adx"]
-
-    bb = indicators.get("bb", {})
-    if bb.get("position") is not None:
-        current_values["bb_position"] = bb["position"]
-
-    vol = indicators.get("volume", {})
-    if vol.get("ratio") is not None:
-        current_values["volume_ratio"] = vol["ratio"]
-
-    stoch = indicators.get("stochastic", {})
-    if stoch.get("k") is not None:
-        current_values["stoch_k"] = stoch["k"]
-
-    ma_dist = indicators.get("ma_distance", {})
-    if ma_dist.get("from_sma20") is not None:
-        current_values["ma20_distance"] = ma_dist["from_sma20"]
-
-    consec = indicators.get("consecutive", {})
-    current_values["consecutive_days"] = consec.get("days", 0)
-
-    w52 = indicators.get("week52_position", {})
-    if w52.get("position_pct") is not None:
-        current_values["w52_position"] = w52["position_pct"]
+    # Build current_values for smart_matcher (reuse shared helper)
+    current_values = _build_current_values(indicators, states)
 
     # Select all indicators that have valid values
     selected = []
@@ -1242,11 +1254,12 @@ def _scan_ticker_combo(ticker: str) -> dict | None:
             "volume_level": _volume_level,
         }
 
-    p5 = best.periods.get(5, {})
-    p20 = best.periods.get(20, {})
-    p60 = best.periods.get(60, {})
-    p120 = best.periods.get(120, {})
-    p252 = best.periods.get(252, {})
+    _empty = {"win_rate": 50, "avg_return": 0, "samples": 0}
+    p5 = best.periods.get(5, _empty)
+    p20 = best.periods.get(20, _empty)
+    p60 = best.periods.get(60, _empty)
+    p120 = best.periods.get(120, _empty)
+    p252 = best.periods.get(252, _empty)
 
     MIN_CASES = 10  # Minimum cases for statistically meaningful win rate
     occ = best.occurrences

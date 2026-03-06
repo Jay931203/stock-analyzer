@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { darkColors, lightColors, type ThemeColors } from '../theme';
@@ -36,16 +36,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }).catch(() => {});
   }, []);
 
-  const cycleTheme = () => {
-    const cycle: Record<ThemeMode, ThemeMode> = {
-      light: 'dark',
-      dark: 'system',
-      system: 'light',
-    };
-    const next = cycle[themeMode];
-    setThemeMode(next);
-    AsyncStorage.setItem(THEME_KEY, next).catch(() => {});
-  };
+  const cycleTheme = useCallback(() => {
+    setThemeMode(prev => {
+      const cycle: Record<ThemeMode, ThemeMode> = {
+        light: 'dark',
+        dark: 'system',
+        system: 'light',
+      };
+      const next = cycle[prev];
+      AsyncStorage.setItem(THEME_KEY, next).catch(() => {});
+      return next;
+    });
+  }, []);
 
   const isDark = themeMode === 'system'
     ? systemScheme !== 'light'
@@ -57,7 +59,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     themeMode,
     cycleTheme,
     toggleTheme: cycleTheme,
-  }), [isDark, themeMode]);
+  }), [isDark, themeMode, cycleTheme]);
 
   return (
     <ThemeContext.Provider value={value}>

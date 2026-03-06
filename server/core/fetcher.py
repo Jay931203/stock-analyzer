@@ -282,27 +282,34 @@ def _yahoo_direct_quote(ticker: str) -> dict | None:
     }
 
 
+_PERIOD_TRADING_DAYS = {"1y": 252, "2y": 504, "3y": 756, "5y": 1260, "10y": 2520}
+
 def fetch_price_history(ticker: str, period: str = "10y") -> pd.DataFrame:
     """
     Fetch daily OHLCV data. Uses cache if fresh, otherwise fetches from yfinance.
     Falls back to direct Yahoo API on cloud environments.
+    Always trims to requested period so backtest results differ by period.
     """
     ticker = ticker.upper()
+    max_days = _PERIOD_TRADING_DAYS.get(period, 2520)
 
-    # Try cache first
+    # Try cache first — but always trim to requested period
     cached = get_cached_prices(ticker)
-    if cached is not None and len(cached) > 500:
-        return cached
+    if cached is not None and len(cached) > 100:
+        # Trim to requested period
+        trimmed = cached.iloc[-max_days:] if len(cached) > max_days else cached
+        if len(trimmed) >= 60:
+            return trimmed
 
     # Try yfinance first
     df = pd.DataFrame()
     try:
         kwargs = {"session": _session} if _session else {}
         stock = yf.Ticker(ticker, **kwargs)
-        df = stock.history(period=period, interval="1d")
+        # Always fetch max data for cache, trim later
+        df = stock.history(period="10y", interval="1d")
 
-        # Retry with shorter period if 10y fails
-        if df.empty and period == "10y":
+        if df.empty:
             for fallback in ["5y", "2y", "1y"]:
                 df = stock.history(period=fallback, interval="1d")
                 if not df.empty:
@@ -312,8 +319,8 @@ def fetch_price_history(ticker: str, period: str = "10y") -> pd.DataFrame:
 
     # Fallback: direct Yahoo API (useful on Vercel/cloud)
     if df.empty:
-        df = _yahoo_direct_history(ticker, period)
-        if df.empty and period == "10y":
+        df = _yahoo_direct_history(ticker, "10y")
+        if df.empty:
             for fallback in ["5y", "2y", "1y"]:
                 df = _yahoo_direct_history(ticker, fallback)
                 if not df.empty:
@@ -329,8 +336,12 @@ def fetch_price_history(ticker: str, period: str = "10y") -> pd.DataFrame:
     if df.index.tz is not None:
         df.index = df.index.tz_localize(None)
 
-    # Save to cache
+    # Save full data to cache (always keep maximum for future requests)
     save_prices(ticker, df)
+
+    # Trim to requested period
+    if len(df) > max_days:
+        df = df.iloc[-max_days:]
 
     return df
 

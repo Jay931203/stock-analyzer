@@ -44,10 +44,11 @@ async function getPersisted<T>(key: string): Promise<T | null> {
   try {
     const raw = await AsyncStorage.getItem(PERSIST_PREFIX + key);
     if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    const maxAge = isMarketOpen() ? 10 * 60 * 1000 : 6 * 60 * 60 * 1000; // 10min during market, 6hr otherwise
-    if (Date.now() - ts > maxAge) return null;
-    return data as T;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.ts !== 'number' || !parsed.data) return null;
+    const maxAge = isMarketOpen() ? 10 * 60 * 1000 : 6 * 60 * 60 * 1000;
+    if (Date.now() - parsed.ts > maxAge) return null;
+    return parsed.data as T;
   } catch { return null; }
 }
 
@@ -94,10 +95,12 @@ export function getBaseUrl() {
 }
 
 const api = {
-  async analyze(ticker: string, period = '10y'): Promise<AnalysisResponse> {
+  async analyze(ticker: string, period = '10y', forceRefresh = false): Promise<AnalysisResponse> {
     const cacheKey = `analyze:${ticker}:${period}`;
-    const cached = getCached(cacheKey);
-    if (cached) return cached;
+    if (!forceRefresh) {
+      const cached = getCached(cacheKey);
+      if (cached) return cached;
+    }
 
     const res = await axios.get(`${BASE_URL}/api/analyze/${ticker}`, {
       params: { period },

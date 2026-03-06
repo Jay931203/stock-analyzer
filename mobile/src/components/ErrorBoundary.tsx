@@ -1,5 +1,5 @@
 import React, { Component, type ReactNode } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, useColorScheme } from 'react-native';
 
 interface Props {
   children: ReactNode;
@@ -8,6 +8,31 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+}
+
+function ErrorFallback({ error, onReset }: { error: Error | null; onReset: () => void }) {
+  const scheme = useColorScheme();
+  const isDark = scheme !== 'light';
+  const bg = isDark ? '#060612' : '#f4f5f9';
+  const cardBg = isDark ? '#0f0f23' : '#ffffff';
+  const textColor = isDark ? '#eaeaff' : '#1a1a2e';
+  const mutedColor = isDark ? '#9090b0' : '#7a7a96';
+  const btnBg = isDark ? '#1a1a36' : '#e8e9f0';
+  const accentColor = isDark ? '#5c6bc0' : '#4a5ab8';
+  return (
+    <View style={[styles.container, { backgroundColor: bg }]}>
+      <View style={[styles.card, { backgroundColor: cardBg, borderColor: '#f4433630' }]}>
+        <Text style={styles.icon}>!</Text>
+        <Text style={[styles.title, { color: textColor }]}>Something went wrong</Text>
+        <Text style={[styles.message, { color: mutedColor }]}>
+          {error?.message ?? 'An unexpected error occurred'}
+        </Text>
+        <Pressable style={[styles.button, { backgroundColor: btnBg }]} onPress={onReset}>
+          <Text style={[styles.buttonText, { color: accentColor }]}>Try Again</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
@@ -23,20 +48,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      return (
-        <View style={styles.container}>
-          <View style={styles.card}>
-            <Text style={styles.icon}>!</Text>
-            <Text style={styles.title}>Something went wrong</Text>
-            <Text style={styles.message}>
-              {this.state.error?.message ?? 'An unexpected error occurred'}
-            </Text>
-            <Pressable style={styles.button} onPress={this.handleReset}>
-              <Text style={styles.buttonText}>Try Again</Text>
-            </Pressable>
-          </View>
-        </View>
-      );
+      return <ErrorFallback error={this.state.error} onReset={this.handleReset} />;
     }
 
     return this.props.children;
@@ -48,17 +60,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0a0a0a',
     padding: 24,
   },
   card: {
-    backgroundColor: '#12122a',
     borderRadius: 20,
     padding: 32,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#f4433630',
-    width: '85%',
+    width: '85%' as any,
     maxWidth: 360,
   },
   icon: {
@@ -75,26 +84,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   title: {
-    color: '#e0e0e0',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 8,
   },
   message: {
-    color: '#888',
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
   },
   button: {
-    backgroundColor: '#1a3a5c',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12,
   },
   buttonText: {
-    color: '#6c9bd1',
     fontSize: 15,
     fontWeight: '600',
   },

@@ -66,7 +66,11 @@ def calc_probability(
         low = df["Low"]
         volume = df["Volume"]
 
-    forward_periods = [5, 10, 20, 60, 120, 252]
+    # Adaptive forward periods based on data length
+    data_len = len(close)
+    forward_periods = [p for p in [5, 10, 20, 60, 120, 252] if p < data_len * 0.7]
+    if not forward_periods:
+        forward_periods = [5, 10, 20]
 
     if indicator == "rsi":
         return _rsi_probability(close, float(current_value), forward_periods)
@@ -123,7 +127,11 @@ def calc_combined_probability(
         low = df["Low"]
         volume = df["Volume"]
 
-    forward_periods = [5, 10, 20, 60, 120, 252]
+    # Adaptive forward periods based on data length
+    data_len = len(close)
+    forward_periods = [p for p in [5, 10, 20, 60, 120, 252] if p < data_len * 0.7]
+    if not forward_periods:
+        forward_periods = [5, 10, 20]
 
     masks = []
     condition_labels = []
@@ -501,26 +509,28 @@ def _week52_probability(
 
 
 def _calc_consecutive_series(returns: pd.Series) -> pd.Series:
-    """Build a series of consecutive up/down day counts."""
-    sign = returns.apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
-    result = pd.Series(0, index=returns.index, dtype=int)
+    """Build a series of consecutive up/down day counts. Uses numpy for speed."""
+    sign_arr = np.sign(returns.values)
+    sign_arr[np.isnan(sign_arr)] = 0
+    n = len(sign_arr)
+    consec_arr = np.zeros(n, dtype=int)
 
     prev = 0
-    for i in range(len(sign)):
-        s = sign.iloc[i]
+    for i in range(n):
+        s = sign_arr[i]
         if s == 0:
             prev = 0
         elif prev == 0:
-            prev = s
+            prev = int(s)
         elif (prev > 0 and s > 0):
-            prev = prev + 1
+            prev += 1
         elif (prev < 0 and s < 0):
-            prev = prev - 1
+            prev -= 1
         else:
-            prev = s
-        result.iloc[i] = prev
+            prev = int(s)
+        consec_arr[i] = prev
 
-    return result
+    return pd.Series(consec_arr, index=returns.index)
 
 
 # ── Core forward returns calculator ─────────────────────────────────────
@@ -533,12 +543,34 @@ def _calc_forward_returns(
     forward_periods: list[int],
 ) -> ProbabilityResult:
     mask = mask.fillna(False)
-    signal_dates = mask[mask].index
 
-    max_fwd = max(forward_periods)
-    valid_signals = signal_dates[signal_dates <= close.index[-max_fwd - 1]] if len(close) > max_fwd else pd.DatetimeIndex([])
+    # Use numpy arrays for vectorized computation
+    close_arr = close.values.astype(float)
+    mask_arr = mask.values.astype(bool)
+    n = len(close_arr)
 
-    occurrences = len(valid_signals)
+    # Filter forward_periods to only those that can have valid samples
+    # A period of N days needs at least N+1 data points after some signal
+    usable_periods = [p for p in forward_periods if p < n]
+    if not usable_periods:
+        return ProbabilityResult(
+            condition=condition_label,
+            occurrences=0,
+            periods={p: _empty_stats() for p in forward_periods},
+            warning="Insufficient data for forward return calculation",
+        )
+
+    max_fwd = max(usable_periods)
+
+    # Get signal indices (integer positions, not dates)
+    signal_indices = np.where(mask_arr)[0]
+
+    # Only keep signals that have room for at least the shortest forward period
+    min_fwd = min(usable_periods)
+    valid_mask = signal_indices <= (n - min_fwd - 1)
+    signal_indices = signal_indices[valid_mask]
+
+    occurrences = len(signal_indices)
     warning = None
 
     if occurrences == 0:
@@ -552,38 +584,55 @@ def _calc_forward_returns(
     if occurrences < 10:
         warning = f"Low sample size ({occurrences}). Results may not be statistically significant."
 
-    case_returns = {}
-    for sig_date in valid_signals:
-        idx = close.index.get_loc(sig_date)
-        case_returns[sig_date] = {}
-        for n_days in forward_periods:
-            if idx + n_days < len(close):
-                entry_price = close.iloc[idx]
-                exit_price = close.iloc[idx + n_days]
-                ret = (exit_price - entry_price) / entry_price * 100
-                case_returns[sig_date][n_days] = round(float(ret), 2)
+    # Vectorized forward return computation
+    entry_prices = close_arr[signal_indices]
 
     periods_result = {}
-    for n_days in forward_periods:
-        returns = [cr[n_days] for cr in case_returns.values() if n_days in cr]
-        if returns:
-            returns_arr = np.array(returns)
-            periods_result[n_days] = {
-                "samples": len(returns),
-                "win_rate": round(float(np.mean(returns_arr > 0) * 100), 1),
-                "avg_return": round(float(np.mean(returns_arr)), 2),
-                "median_return": round(float(np.median(returns_arr)), 2),
-                "best": round(float(np.max(returns_arr)), 2),
-                "worst": round(float(np.min(returns_arr)), 2),
-                "std_dev": round(float(np.std(returns_arr)), 2),
-            }
-        else:
+    # Pre-compute all period returns in bulk
+    period_returns_map = {}
+    for n_days in usable_periods:
+        # Which signals have enough room for this period?
+        valid = signal_indices + n_days < n
+        valid_idx = signal_indices[valid]
+        if len(valid_idx) == 0:
             periods_result[n_days] = _empty_stats()
+            period_returns_map[n_days] = (np.array([]), np.array([], dtype=bool))
+            continue
 
+        exit_prices = close_arr[valid_idx + n_days]
+        entries = close_arr[valid_idx]
+        returns_arr = (exit_prices - entries) / entries * 100
+
+        periods_result[n_days] = {
+            "samples": len(returns_arr),
+            "win_rate": round(float(np.mean(returns_arr > 0) * 100), 1),
+            "avg_return": round(float(np.mean(returns_arr)), 2),
+            "median_return": round(float(np.median(returns_arr)), 2),
+            "best": round(float(np.max(returns_arr)), 2),
+            "worst": round(float(np.min(returns_arr)), 2),
+            "std_dev": round(float(np.std(returns_arr)), 2),
+        }
+        period_returns_map[n_days] = (returns_arr, valid)
+
+    # Add empty stats for periods that were filtered out
+    for p in forward_periods:
+        if p not in periods_result:
+            periods_result[p] = _empty_stats()
+
+    # Build case records (limit to last 50 to avoid huge payloads)
+    case_limit = min(occurrences, 50)
+    case_indices = signal_indices[-case_limit:]  # most recent cases
     cases = []
-    for sig_date, rets in case_returns.items():
+    close_index = close.index
+    for idx in case_indices:
+        sig_date = close_index[idx]
         date_str = sig_date.strftime("%Y-%m-%d") if hasattr(sig_date, "strftime") else str(sig_date)
-        entry_price = round(float(close.loc[sig_date]), 2)
+        entry_price = round(float(close_arr[idx]), 2)
+        rets = {}
+        for n_days in usable_periods:
+            if idx + n_days < n:
+                ret = (close_arr[idx + n_days] - close_arr[idx]) / close_arr[idx] * 100
+                rets[n_days] = round(float(ret), 2)
         cases.append(CaseRecord(date=date_str, entry_price=entry_price, returns=rets))
 
     return ProbabilityResult(

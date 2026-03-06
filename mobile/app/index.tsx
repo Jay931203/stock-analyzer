@@ -12,7 +12,7 @@ import {
   Share,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { initServerUrl } from '../src/api/client';
@@ -26,17 +26,23 @@ const PERIOD_LABELS: Record<string, string> = { '5d': '1W', '20d': '1M', '60d': 
 
 function TopLoadingBar({ color, bgColor }: { color: string; bgColor: string }) {
   const anim = useRef(new Animated.Value(0)).current;
+  const [barWidth, setBarWidth] = useState(0);
   useEffect(() => {
     const loop = Animated.loop(
-      Animated.timing(anim, { toValue: 1, duration: 1200, useNativeDriver: false })
+      Animated.timing(anim, { toValue: 1, duration: 1200, useNativeDriver: true })
     );
     loop.start();
     return () => loop.stop();
   }, []);
-  const left = anim.interpolate({ inputRange: [0, 1], outputRange: ['-40%' as any, '100%' as any] });
+  const translateX = barWidth > 0
+    ? anim.interpolate({ inputRange: [0, 1], outputRange: [-barWidth * 0.4, barWidth] })
+    : anim.interpolate({ inputRange: [0, 1], outputRange: [-100, 300] });
   return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: bgColor, zIndex: 100, overflow: 'hidden' }}>
-      <Animated.View style={{ position: 'absolute', width: '40%', height: '100%', backgroundColor: color, borderRadius: 2, left }} />
+    <View
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: bgColor, zIndex: 100, overflow: 'hidden' }}
+      onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+    >
+      <Animated.View style={{ position: 'absolute', width: '40%', height: '100%', backgroundColor: color, borderRadius: 2, transform: [{ translateX }] }} />
     </View>
   );
 }
@@ -172,6 +178,7 @@ export default function HomeScreen() {
   const [watchlist, setWatchlist] = useState(getWatchlist());
   const [signals, setSignals] = useState<SignalItem[]>([]);
   const [signalsLoading, setSignalsLoading] = useState(false);
+  const [signalsError, setSignalsError] = useState<string | null>(null);
   const [signalsUpdated, setSignalsUpdated] = useState('');
   const [scannedCount, setScannedCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -230,6 +237,24 @@ export default function HomeScreen() {
     init();
     return subscribe(() => setWatchlist(getWatchlist()));
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      Promise.all([
+        AsyncStorage.getItem('data_period'),
+        AsyncStorage.getItem('window_period'),
+      ]).then(([savedDp, savedWp]) => {
+        if (savedDp && ['1y', '3y', '5y', '10y'].includes(savedDp) && savedDp !== dataPeriod) {
+          setDataPeriod(savedDp);
+          loadSignals(savedDp, true);
+        }
+        if (savedWp && ['5d', '20d', '60d', '120d', '252d'].includes(savedWp) && savedWp !== period) {
+          setPeriod(savedWp);
+        }
+      }).catch(() => {});
+      setWatchlist(getWatchlist());
+    }, [dataPeriod, period])
+  );
 
   const [shareMsg, setShareMsg] = useState('');
 
@@ -293,6 +318,7 @@ export default function HomeScreen() {
   const loadSignals = async (dp?: string, forceRefresh = false) => {
     const usePeriod = dp ?? dataPeriod;
     setSignalsLoading(true);
+    setSignalsError(null);
     try {
       const res = await api.signals(50, usePeriod, forceRefresh);
       let sigs = res.signals;
@@ -325,8 +351,10 @@ export default function HomeScreen() {
         if (todayHasEvents) setSelectedCalDay(today);
       }
       if (res.flips) setFlips(res.flips);
-    } catch (e) {
-      console.log('Signals load error', e);
+    } catch (e: any) {
+      if (signals.length === 0) {
+        setSignalsError(e.response?.data?.detail ?? e.message ?? 'Failed to load signals');
+      }
     }
     setSignalsLoading(false);
   };
@@ -347,7 +375,7 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadSignals(), loadMarketIndices(), loadRecentSearches()]);
+    await Promise.all([loadSignals(undefined, true), loadMarketIndices(), loadRecentSearches()]);
     setRefreshing(false);
   };
 
@@ -417,8 +445,8 @@ export default function HomeScreen() {
     return base.filter(s => s.ticker !== 'QQQ' && s.ticker !== 'SPY' && !LEVERAGED_TICKERS.has(s.ticker));
   }, [signals, activeSector]);
   const leveraged = useMemo(() => {
-    return signals.filter(s => LEVERAGED_TICKERS.has(s.ticker)).sort((a, b) => b.win_rate_20d - a.win_rate_20d);
-  }, [signals]);
+    return signals.filter(s => LEVERAGED_TICKERS.has(s.ticker)).sort((a, b) => getWinRateForPeriod(b, period) - getWinRateForPeriod(a, period));
+  }, [signals, period]);
   const unusualVolume = useMemo(() => {
     return signals
       .filter(s => !LEVERAGED_TICKERS.has(s.ticker) && s.ticker !== 'QQQ' && s.ticker !== 'SPY' && s.volume_ratio !== undefined && (s.volume_ratio >= 2.0 || s.volume_ratio <= 0.5))
@@ -813,6 +841,21 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
             ))}
+          </View>
+        )}
+
+        {/* Error state */}
+        {signalsError && signals.length === 0 && !signalsLoading && (
+          <View style={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.xxl, alignItems: 'center' }}>
+            <Text style={{ color: colors.bearish, fontSize: 14, fontWeight: '600', marginBottom: spacing.sm, textAlign: 'center' }}>
+              {signalsError}
+            </Text>
+            <Pressable
+              style={{ backgroundColor: colors.bgCard, paddingHorizontal: 24, paddingVertical: 10, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border }}
+              onPress={() => loadSignals()}
+            >
+              <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '600' }}>Retry</Text>
+            </Pressable>
           </View>
         )}
 
