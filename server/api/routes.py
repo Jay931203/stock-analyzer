@@ -44,19 +44,38 @@ router = APIRouter(prefix="/api")
 @router.get("/analyze/{ticker}", response_model=AnalysisResponse)
 async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period: str = "10y"):
     """Full analysis: all indicators + historical probabilities.
-    Uses Supabase cache to avoid recomputing on every request.
+    Always returns cached data instantly if available. Recomputes in background if stale.
     """
-    # ── Check Supabase cache first ──
+    # ── Always return cache if available (even if stale) ──
     cached = read_cached_analysis(ticker)
     if cached and cached.get("data"):
         updated_at = cached.get("updated_at", "")
-        if _is_analysis_cache_fresh(updated_at):
-            return cached["data"]
+        is_fresh = _is_analysis_cache_fresh(updated_at)
 
-    # ── Cache miss or stale: compute fresh ──
+        # Log search in background
+        background_tasks.add_task(log_recent_search, ticker)
+
+        if not is_fresh:
+            # Stale cache: return it instantly, refresh in background
+            def _bg_recompute():
+                try:
+                    _recompute_analysis(ticker, period)
+                except Exception:
+                    pass
+            background_tasks.add_task(_bg_recompute)
+
+        return cached["data"]
+
+    # ── No cache at all: must compute (first ever visit) ──
+    response = _recompute_analysis(ticker, period)
+    background_tasks.add_task(log_recent_search, ticker)
+    return response
+
+
+def _recompute_analysis(ticker: str, period: str = "10y") -> AnalysisResponse:
+    """Heavy computation for a ticker. Called synchronously only on first visit, or in background."""
     from concurrent.futures import ThreadPoolExecutor
 
-    # Parallel fetch: price history + ticker info
     with ThreadPoolExecutor(max_workers=2) as pool:
         future_df = pool.submit(lambda: fetch_price_history(ticker, period=period))
         future_info = pool.submit(get_ticker_info, ticker)
@@ -74,7 +93,6 @@ async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period:
         except Exception:
             ticker_info = TickerInfo(ticker=ticker.upper(), name=ticker.upper())
 
-    # Price info
     close = df["Close"]
     current = float(close.iloc[-1])
     prev = float(close.iloc[-2]) if len(close) > 1 else current
@@ -86,11 +104,9 @@ async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period:
         low_52w=round(float(close.tail(252).min()), 2) if len(close) >= 252 else None,
     )
 
-    # Compute all indicators
     indicators = compute_all_indicators(df)
     states = get_indicator_state(indicators)
 
-    # Cache indicators for smart-probability reuse (avoids recomputation)
     _indicator_mem_cache[f"{ticker.upper()}:{period}"] = {
         "indicators": indicators, "states": states,
         "current_values": _build_current_values(indicators, states),
@@ -156,8 +172,6 @@ async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period:
     indicator_results["stochastic"] = StochasticData(
         k=stoch["k"], d=stoch["d"], probability=stoch_prob,
     )
-
-    # ── NEW INDICATORS ──
 
     # Drawdown
     dd = indicators["drawdown"]
@@ -230,10 +244,7 @@ async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period:
         price_distribution=price_distribution,
     )
 
-    # Combined probability
     combined = _calc_combined(df, states)
-
-    # Data range info
     data_range = f"{df.index[0].strftime('%Y-%m-%d')} ~ {df.index[-1].strftime('%Y-%m-%d')} ({len(df)} days)"
 
     response = AnalysisResponse(
@@ -245,16 +256,13 @@ async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period:
         data_range=data_range,
     )
 
-    # ── Background tasks (non-blocking) ──
-    def _bg_cache():
-        try:
-            rd = response.model_dump()
-            _strip_cases(rd)
-            write_cached_analysis(ticker, rd)
-        except Exception:
-            pass
-    background_tasks.add_task(_bg_cache)
-    background_tasks.add_task(log_recent_search, ticker)
+    # Save to Supabase cache
+    try:
+        rd = response.model_dump()
+        _strip_cases(rd)
+        write_cached_analysis(ticker, rd)
+    except Exception:
+        pass
 
     return response
 
@@ -586,28 +594,18 @@ async def refresh_signals():
     Force recompute signals and update Supabase cache.
     Called by Vercel Cron every 15 minutes.
     """
-    global _scan_data_period
-    _scan_data_period = "3y"
-    from concurrent.futures import ThreadPoolExecutor
+    result = _compute_signals("3y")
+    snapshot_and_detect(result["signals"])
 
-    with ThreadPoolExecutor(max_workers=12) as pool:
-        results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
-    valid = [r for r in results if r is not None]
-    valid.sort(key=lambda x: x["strength"], reverse=True)
-
-    # Detect signal flips before caching
-    snapshot_and_detect(valid)
-
-    result = {
-        "signals": valid,
-        "scanned": len(POPULAR_TICKERS),
-        "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }
-
-    # Update both caches
+    # Update all caches
+    cache_key = "signals_3y"
+    if cache_key not in _signals_period_cache:
+        _signals_period_cache[cache_key] = {"data": None, "ts": 0}
+    _signals_period_cache[cache_key]["data"] = result
+    _signals_period_cache[cache_key]["ts"] = time.time()
     _signals_cache["data"] = result
     _signals_cache["ts"] = time.time()
-    write_cached_signals(valid)
+    write_cached_signals(result["signals"])
 
     return {
         "status": "ok",
@@ -627,12 +625,11 @@ async def signal_flips():
 async def get_signals(
     limit: int = Query(101, ge=1, le=150),
     data_period: str = Query("3y", pattern="^(1y|3y|5y|10y)$"),
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Combined probability for popular stocks.
-    Uses Supabase cache for fast loading, falls back to computation.
-    Also includes calendar and flips data to avoid extra cold-start API calls.
-    data_period controls how many years of historical data to use for backtesting.
+    Always returns cached data instantly. Refreshes in background if stale.
     """
     global _scan_data_period
     _scan_data_period = data_period
@@ -646,11 +643,11 @@ async def get_signals(
         _signals_period_cache[cache_key] = {"data": None, "ts": 0}
     pcache = _signals_period_cache[cache_key]
 
-    # 1. Try in-memory cache first (fastest)
-    if pcache["data"] and now - pcache["ts"] < _SIGNALS_TTL:
+    # 1. In-memory cache (any age — always use if available)
+    if pcache["data"]:
         signals_data = pcache["data"]
 
-    # 2. Try Supabase cache (only for default 3y period)
+    # 2. Supabase cache fallback (only for default 3y)
     if not signals_data and is_default:
         supabase_data = read_cached_signals()
         if supabase_data:
@@ -658,32 +655,31 @@ async def get_signals(
             pcache["ts"] = now
             signals_data = supabase_data
 
-    # 3. Full computation (slow, only on cache miss)
+    # 3. Only compute synchronously if NO cache at all (first ever load)
     if not signals_data:
-        from concurrent.futures import ThreadPoolExecutor
-
-        with ThreadPoolExecutor(max_workers=6) as pool:
-            results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
-        valid = [r for r in results if r is not None]
-        valid.sort(key=lambda x: x["strength"], reverse=True)
-
-        if is_default:
-            snapshot_and_detect(valid)
-
-        signals_data = {
-            "signals": valid,
-            "scanned": len(POPULAR_TICKERS),
-            "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        }
-
+        signals_data = _compute_signals(data_period)
         pcache["data"] = signals_data
         pcache["ts"] = now
         if is_default:
-            write_cached_signals(valid)
+            write_cached_signals(signals_data["signals"])
 
-    # Bundle calendar + flips to avoid extra cold-start API calls
+    # Background refresh if stale (user never waits)
+    is_stale = now - pcache["ts"] > _SIGNALS_TTL
+    if is_stale and background_tasks:
+        def _bg_refresh():
+            try:
+                fresh = _compute_signals(data_period)
+                pcache["data"] = fresh
+                pcache["ts"] = time.time()
+                if is_default:
+                    snapshot_and_detect(fresh["signals"])
+                    write_cached_signals(fresh["signals"])
+            except Exception:
+                pass
+        background_tasks.add_task(_bg_refresh)
+
+    # Bundle calendar + flips
     calendar_events = get_economic_events(days_ahead=30)
-    # Add cached earnings if available
     if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
         for e in _earnings_cache["data"].get("earnings", []):
             if 0 <= e["days_until"] <= 30:
@@ -705,6 +701,24 @@ async def get_signals(
         "market_state": _get_market_state(),
         "calendar": calendar_events,
         "flips": flips_data,
+    }
+
+
+def _compute_signals(data_period: str) -> dict:
+    """Synchronous signal computation (heavy). Called only when no cache exists."""
+    global _scan_data_period
+    _scan_data_period = data_period
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
+    valid = [r for r in results if r is not None]
+    valid.sort(key=lambda x: x["strength"], reverse=True)
+
+    return {
+        "signals": valid,
+        "scanned": len(POPULAR_TICKERS),
+        "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
 
 
