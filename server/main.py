@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router
+from .api.og import og_image_router, share_router
 
 app = FastAPI(
     title="Stock Analyzer API",
@@ -24,6 +25,8 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(og_image_router, prefix="/api")
+app.include_router(share_router)
 
 
 @app.get("/health")

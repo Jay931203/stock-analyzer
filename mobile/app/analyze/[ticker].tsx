@@ -29,19 +29,19 @@ import { doShare } from '../../src/utils/share';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-const INDICATOR_META: Record<string, { label: string }> = {
-  RSI: { label: 'RSI' },
-  MACD: { label: 'MACD' },
-  MA: { label: 'MA' },
-  BB: { label: 'BB' },
-  Vol: { label: 'Vol' },
-  Stoch: { label: 'Stoch' },
-  Drawdown: { label: 'DD' },
-  ADX: { label: 'ADX' },
-  MADist: { label: 'MADist' },
-  Consec: { label: 'Streak' },
-  W52: { label: '52W' },
-  ATR: { label: 'ATR' },
+const INDICATOR_META: Record<string, { label: string; labelKo: string }> = {
+  RSI: { label: 'RSI', labelKo: '과매수/과매도' },
+  MACD: { label: 'MACD', labelKo: '모멘텀' },
+  MA: { label: 'MA', labelKo: '추세' },
+  BB: { label: 'BB', labelKo: '변동폭' },
+  Vol: { label: 'Vol', labelKo: '거래량' },
+  Stoch: { label: 'Stoch', labelKo: '스토캐스틱' },
+  Drawdown: { label: 'DD', labelKo: '고점대비' },
+  ADX: { label: 'ADX', labelKo: '추세강도' },
+  MADist: { label: 'MADist', labelKo: '이격도' },
+  Consec: { label: 'Streak', labelKo: '연속일' },
+  W52: { label: '52W', labelKo: '52주 위치' },
+  ATR: { label: 'ATR', labelKo: '변동성' },
 };
 
 const ALL_INDICATORS = Object.keys(INDICATOR_META);
@@ -89,41 +89,41 @@ function getIndicatorHighlights(data: AnalysisResponse): IndicatorHighlight[] {
 
   // RSI
   if (ind.rsi.value !== null && ind.rsi.value !== undefined) {
-    if (ind.rsi.value > 70) highlights.push({ text: `Overbought (RSI ${ind.rsi.value.toFixed(0)})`, type: 'bearish' });
-    else if (ind.rsi.value < 30) highlights.push({ text: `Oversold (RSI ${ind.rsi.value.toFixed(0)})`, type: 'bullish' });
+    if (ind.rsi.value > 70) highlights.push({ text: `과매수 (RSI ${ind.rsi.value.toFixed(0)})`, type: 'bearish' });
+    else if (ind.rsi.value < 30) highlights.push({ text: `과매도 (RSI ${ind.rsi.value.toFixed(0)})`, type: 'bullish' });
   }
 
   // MACD
-  if (ind.macd.event === 'golden_cross') highlights.push({ text: 'MACD Golden Cross', type: 'bullish' });
-  else if (ind.macd.event === 'dead_cross') highlights.push({ text: 'MACD Dead Cross', type: 'bearish' });
+  if (ind.macd.event === 'golden_cross') highlights.push({ text: '모멘텀 상승 전환', type: 'bullish' });
+  else if (ind.macd.event === 'dead_cross') highlights.push({ text: '모멘텀 하락 전환', type: 'bearish' });
 
   // MA alignment
-  if (ind.ma.alignment === 'bullish') highlights.push({ text: 'Uptrend (MA aligned)', type: 'bullish' });
-  else if (ind.ma.alignment === 'bearish') highlights.push({ text: 'Downtrend (MA aligned)', type: 'bearish' });
+  if (ind.ma.alignment === 'bullish') highlights.push({ text: '상승 추세 (이평선 정배열)', type: 'bullish' });
+  else if (ind.ma.alignment === 'bearish') highlights.push({ text: '하락 추세 (이평선 역배열)', type: 'bearish' });
 
   // Volume spike
   if (ind.volume.ratio !== null && ind.volume.ratio !== undefined && ind.volume.ratio > 2.0) {
-    highlights.push({ text: `Volume Spike (${ind.volume.ratio.toFixed(1)}x)`, type: 'bullish' });
+    highlights.push({ text: `거래량 급증 (${ind.volume.ratio.toFixed(1)}x)`, type: 'bullish' });
   }
 
   // Drawdown
   if (ind.drawdown.from_60d_high !== null && ind.drawdown.from_60d_high !== undefined && ind.drawdown.from_60d_high < -20) {
-    highlights.push({ text: `Deep Pullback (${ind.drawdown.from_60d_high.toFixed(0)}%)`, type: 'bearish' });
+    highlights.push({ text: `고점 대비 급락 (${ind.drawdown.from_60d_high.toFixed(0)}%)`, type: 'bearish' });
   }
 
   // Consecutive days
-  if (ind.consecutive.days >= 5) highlights.push({ text: `${ind.consecutive.days}-day winning streak`, type: 'bullish' });
-  else if (ind.consecutive.days <= -5) highlights.push({ text: `${Math.abs(ind.consecutive.days)}-day losing streak`, type: 'bearish' });
+  if (ind.consecutive.days >= 5) highlights.push({ text: `${ind.consecutive.days}일 연속 상승`, type: 'bullish' });
+  else if (ind.consecutive.days <= -5) highlights.push({ text: `${Math.abs(ind.consecutive.days)}일 연속 하락`, type: 'bearish' });
 
   // ADX
   if (ind.adx.adx !== null && ind.adx.adx !== undefined && ind.adx.adx > 40) {
-    highlights.push({ text: 'Very Strong Trend', type: 'bullish' });
+    highlights.push({ text: '매우 강한 추세', type: 'bullish' });
   }
 
   // Stochastic
   if (ind.stochastic.k !== null && ind.stochastic.k !== undefined) {
-    if (ind.stochastic.k < 20) highlights.push({ text: 'Stoch Oversold', type: 'bullish' });
-    else if (ind.stochastic.k > 80) highlights.push({ text: 'Stoch Overbought', type: 'bearish' });
+    if (ind.stochastic.k < 20) highlights.push({ text: '스토캐스틱 과매도', type: 'bullish' });
+    else if (ind.stochastic.k > 80) highlights.push({ text: '스토캐스틱 과매수', type: 'bearish' });
   }
 
   return highlights.slice(0, 3);
@@ -285,6 +285,7 @@ export default function AnalyzeScreen() {
 
   const { ticker_info, price, indicators } = data;
   const activeForCombined = ALL_INDICATORS.filter(k => combinedIndicators.has(k) && k !== 'ATR');
+  const highlights = getIndicatorHighlights(data);
 
   return (
     <View style={s.container}>
@@ -381,7 +382,52 @@ export default function AnalyzeScreen() {
           {price.high_52w && price.low_52w && (
             <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
           )}
+        </View>
 
+        {/* Aha moment summary card */}
+        {data.combined && data.combined.probability?.periods?.[WINDOW_KEY_MAP[windowPeriod]] && (
+          <View style={s.ahaCard}>
+            <Text style={s.ahaTitle}>
+              {ticker_info.ticker} 지금 어떤 상태?
+            </Text>
+            <Text style={s.ahaText}>
+              {(() => {
+                const wp = WINDOW_KEY_MAP[windowPeriod];
+                const p = data.combined.probability.periods[wp];
+                if (!p) return '';
+                const occ = data.combined.probability.occurrences;
+                const wins = Math.round(occ * p.win_rate / 100);
+                const periodLabel = PERIOD_LABELS[windowPeriod] || windowPeriod;
+                const direction = p.win_rate >= 50 ? '상승' : '하락';
+                return `과거 ${data.combined.probability.data_period || '10년'}간 지금과 비슷한 상황이 ${occ}번 있었고, 그 중 ${wins}번(${p.win_rate.toFixed(0)}%) ${periodLabel} 후 ${direction}했습니다.`;
+              })()}
+            </Text>
+            {highlights.length > 0 && (
+              <View style={s.ahaHighlights}>
+                {highlights.slice(0, 3).map((h, i) => (
+                  <View key={i} style={[s.ahaBadge, { backgroundColor: h.type === 'bullish' ? `${colors.bullish}20` : `${colors.bearish}20` }]}>
+                    <Text style={[s.ahaBadgeText, { color: h.type === 'bullish' ? colors.bullish : colors.bearish }]}>{h.text}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Time Machine CTA */}
+        <Pressable
+          style={({ pressed }) => [s.timeMachineBtn, pressed && { opacity: 0.8 }]}
+          onPress={() => router.push(`/time-machine/${ticker}`)}
+        >
+          <Text style={s.timeMachineBtnIcon}>⏳</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.timeMachineBtnTitle}>시그널 타임머신</Text>
+            <Text style={s.timeMachineBtnSub}>과거 날짜의 시그널과 실제 결과 비교</Text>
+          </View>
+          <Text style={{ color: colors.accent, fontSize: 16 }}>›</Text>
+        </Pressable>
+
+        <View style={s.headerBlock}>
           {/* COMBINED ANALYSIS */}
           <View style={s.combinedSection}>
             <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
@@ -396,7 +442,7 @@ export default function AnalyzeScreen() {
                     onPress={() => toggleCombinedIndicator(key)}
                   >
                     <Text style={[s.toggleChipText, active && s.toggleChipTextActive]}>
-                      {INDICATOR_META[key].label}
+                      {INDICATOR_META[key].labelKo}
                     </Text>
                   </Pressable>
                 );
@@ -421,21 +467,17 @@ export default function AnalyzeScreen() {
           <Text style={s.hintText}>Tap any indicator for details</Text>
 
           {/* Indicator highlight pills */}
-          {(() => {
-            const highlights = getIndicatorHighlights(data);
-            if (highlights.length === 0) return null;
-            return (
-              <View style={s.highlightRow}>
-                {highlights.map((h, i) => (
-                  <View key={i} style={[s.highlightPill, { backgroundColor: h.type === 'bullish' ? `${colors.bullish}18` : `${colors.bearish}18` }]}>
-                    <Text style={[s.highlightPillText, { color: h.type === 'bullish' ? colors.bullish : colors.bearish }]}>
-                      {h.text}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            );
-          })()}
+          {highlights.length > 0 && (
+            <View style={s.highlightRow}>
+              {highlights.map((h, i) => (
+                <View key={i} style={[s.highlightPill, { backgroundColor: h.type === 'bullish' ? `${colors.bullish}18` : `${colors.bearish}18` }]}>
+                  <Text style={[s.highlightPillText, { color: h.type === 'bullish' ? colors.bullish : colors.bearish }]}>
+                    {h.text}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           <View style={s.cardGrid}>
             {ALL_INDICATORS.map(key => {
@@ -451,7 +493,7 @@ export default function AnalyzeScreen() {
                   ]}
                   onPress={() => openModal(key)}
                 >
-                  <Text style={s.cardLabel}>{meta.label}</Text>
+                  <Text style={s.cardLabel}>{meta.labelKo}</Text>
                   <Text style={s.cardValue}>{value}</Text>
                   {winRate !== null && (
                     <View style={[s.winBadge, { backgroundColor: winRate >= 50 ? `${colors.bullish}18` : `${colors.bearish}18` }]}>
@@ -468,6 +510,12 @@ export default function AnalyzeScreen() {
 
         <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
           <Text style={s.footerText}>Updated: {data.analysis_date}</Text>
+        </View>
+
+        <View style={s.disclaimer}>
+          <Text style={s.disclaimerText}>
+            본 분석은 과거 데이터 기반 통계이며 투자 조언이 아닙니다. 투자 결정은 본인 판단하에 이루어져야 합니다.
+          </Text>
         </View>
       </ScrollView>
 
@@ -492,7 +540,7 @@ export default function AnalyzeScreen() {
             <View style={s.modalHeader}>
               <View style={s.modalTitleRow}>
                 <Text style={s.modalTitle}>
-                  {modalIndicator ? INDICATOR_META[modalIndicator]?.label : ''} Detail
+                  {modalIndicator ? `${INDICATOR_META[modalIndicator]?.labelKo} (${INDICATOR_META[modalIndicator]?.label})` : ''}
                 </Text>
               </View>
               <Pressable style={s.modalCloseBtn} onPress={closeModal}>
@@ -652,4 +700,83 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   modalCloseBtnText: { color: c.textMuted, fontSize: 16 },
   modalScroll: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+
+  // Aha card
+  ahaCard: {
+    backgroundColor: c.bgElevated,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: c.borderLight,
+  },
+  ahaTitle: {
+    color: c.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: spacing.sm,
+  },
+  ahaText: {
+    color: c.textSecondary,
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: spacing.sm,
+  },
+  ahaHighlights: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: spacing.xs,
+  },
+  ahaBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  ahaBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Time Machine CTA
+  timeMachineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.md,
+    padding: spacing.md,
+    backgroundColor: `${c.accent}12`,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: `${c.accent}30`,
+    gap: spacing.sm,
+  } as any,
+  timeMachineBtnIcon: {
+    fontSize: 22,
+  },
+  timeMachineBtnTitle: {
+    color: c.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  timeMachineBtnSub: {
+    color: c.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  // Disclaimer
+  disclaimer: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    marginTop: spacing.lg,
+  },
+  disclaimerText: {
+    color: c.textMuted,
+    fontSize: 10,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
 });

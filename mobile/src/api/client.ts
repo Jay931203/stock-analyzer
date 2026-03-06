@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AnalysisResponse, CalendarEvent, EarningsItem, FlipItem, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TrendingStock } from '../types/analysis';
+import type { AnalysisResponse, CalendarEvent, EarningsItem, FlipItem, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TimeMachineRange, TimeMachineResponse, TrendingStock } from '../types/analysis';
 
 // Simple in-memory cache for analysis results (avoids redundant server calls)
 const _cache = new Map<string, { data: any; ts: number }>();
@@ -259,6 +259,31 @@ const api = {
       timeout: 5000,
     });
     return res.data.tickers;
+  },
+
+  async timeMachine(ticker: string, date: string, period = '3y'): Promise<TimeMachineResponse> {
+    const cacheKey = `tm:${ticker}:${date}:${period}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
+    const res = await axios.get(`${BASE_URL}/api/time-machine/${ticker}`, {
+      params: { date, period },
+      timeout: 30000,
+    });
+    setCache(cacheKey, res.data);
+    return res.data;
+  },
+
+  async timeMachineRange(ticker: string): Promise<TimeMachineRange> {
+    const cacheKey = `tm-range:${ticker}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
+    const res = await axios.get(`${BASE_URL}/api/time-machine/${ticker}/range`, {
+      timeout: 10000,
+    });
+    setCache(cacheKey, res.data);
+    return res.data;
   },
 
   async health(): Promise<boolean> {

@@ -4,6 +4,7 @@ import os
 import time
 from datetime import datetime, timezone, timedelta
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 
@@ -38,6 +39,8 @@ from .schemas import (
     SearchResult,
     StochasticData,
     TickerInfo,
+    TimeMachineRangeResponse,
+    TimeMachineResponse,
     VolumeData,
     Week52Data,
 )
@@ -432,6 +435,11 @@ _smart_prob_cache: dict = {}  # {ticker:period:indicators -> {result, ts}}
 _SMART_PROB_TTL = 3600  # 1 hour (indicator values barely change intraday)
 _SMART_PROB_MAX = 300  # max entries before eviction
 
+# In-memory cache for time machine results
+_time_machine_cache: dict = {}  # {ticker:date:period -> {result, ts}}
+_TIME_MACHINE_TTL = 3600  # 1 hour
+_TIME_MACHINE_MAX = 200  # max entries before eviction
+
 
 def _evict_cache(cache: dict, max_size: int) -> None:
     """Evict oldest entries when cache exceeds max_size."""
@@ -807,6 +815,325 @@ async def available_conditions():
             "states": ["far_below_5pct", "below_2_5pct", "near_ma20", "above_2_5pct", "far_above_5pct"],
         },
     }
+
+
+# ── Time Machine ──
+
+
+@router.get("/time-machine/{ticker}/range", response_model=TimeMachineRangeResponse)
+async def time_machine_range(ticker: str):
+    """Return the available date range for the time machine feature."""
+    try:
+        df = fetch_price_history(ticker, period="10y")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Data fetch error: {e}")
+
+    if len(df) < 205:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient data for {ticker.upper()}. Need at least 205 trading days, got {len(df)}.",
+        )
+
+    # First usable date: need 200 data points before it for meaningful indicators
+    first_date = str(df.index[200].date())
+    # Last usable date: need at least 5 trading days after it for forward returns
+    last_date = str(df.index[-6].date()) if len(df) >= 6 else str(df.index[0].date())
+
+    return TimeMachineRangeResponse(
+        ticker=ticker.upper(),
+        first_date=first_date,
+        last_date=last_date,
+        total_days=len(df),
+    )
+
+
+@router.get("/time-machine/{ticker}", response_model=TimeMachineResponse)
+async def time_machine(
+    ticker: str,
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    period: str = Query("3y", pattern="^(1y|3y|5y|10y)$"),
+):
+    """
+    Signal Time Machine: shows what signals would have been generated on a past date,
+    then compares with what ACTUALLY happened afterward.
+
+    - Fetches full price history (always 10y for maximum forward return data)
+    - Truncates to the given date to simulate "what the app would have seen"
+    - Computes indicators and combined probability on the truncated data
+    - Calculates actual forward returns using the full (future) data
+    - Returns accuracy comparison
+    """
+    ticker = ticker.upper()
+
+    # ── Cache check ──
+    now = time.time()
+    cache_key = f"{ticker}:{date}:{period}"
+    cached = _time_machine_cache.get(cache_key)
+    if cached and now - cached["ts"] < _TIME_MACHINE_TTL:
+        return cached["result"]
+
+    # ── Validate date ──
+    try:
+        as_of = pd.Timestamp(date)
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {date}")
+
+    # Must be a weekday (Mon-Fri)
+    if as_of.weekday() >= 5:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Date {date} falls on a weekend. Please select a weekday.",
+        )
+
+    # Must be at least 5 trading days ago
+    five_days_ago = pd.Timestamp.now().normalize() - pd.Timedelta(days=7)  # ~5 trading days
+    if as_of > five_days_ago:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Date {date} is too recent. Select a date at least 5 trading days ago.",
+        )
+
+    # ── Fetch full price history (always 10y for maximum forward data) ──
+    try:
+        df_full = fetch_price_history(ticker, period="10y")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Data fetch error: {e}")
+
+    # ── Truncate data to the given date ──
+    df_past = df_full[df_full.index <= as_of].copy()
+
+    # If exact date not found, snap to nearest earlier trading day
+    if len(df_past) == 0 or df_past.index[-1].date() != as_of.date():
+        if len(df_past) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No trading data available on or before {date} for {ticker}.",
+            )
+        # Use the last available date before as_of
+        actual_date = df_past.index[-1]
+        as_of = actual_date
+
+    actual_date_str = str(as_of.date())
+
+    # Need at least 200 data points before the date for meaningful indicators
+    if len(df_past) < 200:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient historical data before {actual_date_str}. "
+                   f"Need at least 200 trading days, got {len(df_past)}. "
+                   f"Try a later date.",
+        )
+
+    # ── Apply period trimming to past data (for backtest consistency) ──
+    period_days = {"1y": 252, "3y": 756, "5y": 1260, "10y": 2520}
+    max_days = period_days.get(period, 756)
+    if len(df_past) > max_days:
+        df_past = df_past.iloc[-max_days:]
+
+    # ── Compute indicators on truncated data ──
+    indicators = compute_all_indicators(df_past)
+    states = get_indicator_state(indicators)
+
+    price_at_date = float(df_past["Close"].iloc[-1])
+    current_price = float(df_full["Close"].iloc[-1])
+
+    # ── Compute combined probability on truncated data ──
+    conditions = []
+    if "rsi_bin" in states:
+        conditions.append({"indicator": "rsi", "state": states["rsi_bin"]})
+    if states.get("macd_event"):
+        conditions.append({"indicator": "macd_event", "state": states["macd_event"]})
+    if states.get("ma_alignment") and states["ma_alignment"] != "none":
+        conditions.append({"indicator": "ma_alignment", "state": states["ma_alignment"]})
+    if states.get("bb_zone"):
+        conditions.append({"indicator": "bb_zone", "state": states["bb_zone"]})
+    if states.get("volume_level") and states["volume_level"] != "normal":
+        conditions.append({"indicator": "volume_level", "state": states["volume_level"]})
+    if states.get("drawdown_60d"):
+        conditions.append({"indicator": "drawdown_60d", "state": states["drawdown_60d"]})
+    if states.get("adx_trend"):
+        conditions.append({"indicator": "adx_trend", "state": states["adx_trend"]})
+
+    # Determine signal direction and win rate from combined probability
+    signal_direction = "neutral"
+    win_rate_20d = None
+    occurrences = 0
+
+    if len(conditions) >= 2:
+        combo_result = calc_combined_probability(df_past, conditions)
+        occurrences = combo_result.occurrences
+        p20 = combo_result.periods.get(20, {})
+        if isinstance(p20, dict):
+            win_rate_20d = p20.get("win_rate")
+        if win_rate_20d is not None:
+            if win_rate_20d >= 55:
+                signal_direction = "bullish"
+            elif win_rate_20d <= 45:
+                signal_direction = "bearish"
+            else:
+                signal_direction = "neutral"
+
+    signal = {
+        "direction": signal_direction,
+        "win_rate_20d": round(win_rate_20d, 1) if win_rate_20d is not None else None,
+        "occurrences": occurrences,
+        "conditions": [{"indicator": c["indicator"], "state": c["state"]} for c in conditions],
+    }
+
+    # ── Compute ACTUAL forward returns ──
+    df_future = df_full[df_full.index > as_of]
+    actual_returns = {}
+    for days in [5, 10, 20, 60, 120]:
+        if len(df_future) >= days:
+            future_price = float(df_future["Close"].iloc[days - 1])
+            actual_returns[str(days)] = {
+                "return_pct": round(((future_price - price_at_date) / price_at_date) * 100, 2),
+                "end_price": round(future_price, 2),
+                "went_up": future_price > price_at_date,
+            }
+
+    # ── Compute accuracy ──
+    accuracy = None
+    if signal_direction in ("bullish", "bearish") and "20" in actual_returns:
+        actual_went_up = actual_returns["20"]["went_up"]
+        actual_dir = "up" if actual_went_up else "down"
+        was_correct = (
+            (signal_direction == "bullish" and actual_went_up)
+            or (signal_direction == "bearish" and not actual_went_up)
+        )
+        accuracy = {
+            "predicted_direction": signal_direction,
+            "actual_direction": actual_dir,
+            "was_correct": was_correct,
+        }
+
+    # ── Build indicators at date ──
+    indicators_at_date = {
+        "rsi": indicators["rsi"]["value"],
+        "macd_histogram": indicators["macd"]["histogram"],
+        "macd_event": states.get("macd_event"),
+        "ma_alignment": states.get("ma_alignment"),
+        "bb_zone": states.get("bb_zone"),
+        "bb_position": indicators["bb"]["position"],
+        "volume_ratio": indicators["volume"]["ratio"],
+        "volume_level": states.get("volume_level"),
+        "sma20": indicators["ma"]["sma20"],
+        "sma50": indicators["ma"]["sma50"],
+        "sma200": indicators["ma"]["sma200"],
+        "adx": indicators.get("adx", {}).get("adx"),
+        "adx_trend": states.get("adx_trend"),
+        "atr_pct": indicators.get("atr", {}).get("atr_pct"),
+        "drawdown_60d": indicators.get("drawdown", {}).get("from_60d_high"),
+        "drawdown_state": states.get("drawdown_60d"),
+        "consecutive_days": indicators.get("consecutive", {}).get("days", 0),
+        "ma20_distance": indicators.get("ma_distance", {}).get("from_sma20"),
+        "week52_position": indicators.get("week52_position", {}).get("position_pct"),
+    }
+
+    # ── Build highlights ──
+    highlights = _build_time_machine_highlights(indicators, states, actual_returns)
+
+    # ── Build response ──
+    response = TimeMachineResponse(
+        ticker=ticker,
+        date=actual_date_str,
+        price_at_date=round(price_at_date, 2),
+        current_price=round(current_price, 2),
+        signal=signal,
+        actual=actual_returns,
+        accuracy=accuracy,
+        indicators_at_date=indicators_at_date,
+        highlights=highlights,
+    )
+
+    # ── Cache the result ──
+    _time_machine_cache[cache_key] = {"result": response, "ts": now}
+    _evict_cache(_time_machine_cache, _TIME_MACHINE_MAX)
+
+    return response
+
+
+def _build_time_machine_highlights(
+    indicators: dict, states: dict, actual_returns: dict
+) -> list[dict]:
+    """Build human-readable highlight bullets from indicators and actual outcomes."""
+    highlights = []
+
+    # RSI extremes
+    rsi = indicators["rsi"]["value"]
+    if rsi is not None:
+        if rsi < 30:
+            highlights.append({"text": f"RSI was oversold at {rsi:.1f}", "type": "bullish"})
+        elif rsi > 70:
+            highlights.append({"text": f"RSI was overbought at {rsi:.1f}", "type": "bearish"})
+
+    # MACD cross events
+    macd_event = states.get("macd_event")
+    if macd_event == "golden_cross":
+        highlights.append({"text": "MACD golden cross was occurring", "type": "bullish"})
+    elif macd_event == "dead_cross":
+        highlights.append({"text": "MACD dead cross was occurring", "type": "bearish"})
+
+    # MA alignment
+    alignment = states.get("ma_alignment")
+    if alignment == "bullish":
+        highlights.append({"text": "Moving averages were in bullish alignment (20 > 50 > 200)", "type": "bullish"})
+    elif alignment == "bearish":
+        highlights.append({"text": "Moving averages were in bearish alignment (20 < 50 < 200)", "type": "bearish"})
+
+    # Bollinger Band extremes
+    bb_zone = states.get("bb_zone")
+    if bb_zone == "below_lower":
+        highlights.append({"text": "Price was below the lower Bollinger Band", "type": "bullish"})
+    elif bb_zone == "above_upper":
+        highlights.append({"text": "Price was above the upper Bollinger Band", "type": "bearish"})
+
+    # Volume spike
+    vol_ratio = indicators["volume"]["ratio"]
+    if vol_ratio is not None and vol_ratio >= 2.0:
+        highlights.append({"text": f"Volume was {vol_ratio:.1f}x above average (spike)", "type": "bearish"})
+
+    # Drawdown
+    dd_state = states.get("drawdown_60d")
+    dd_60 = indicators.get("drawdown", {}).get("from_60d_high")
+    if dd_state == "crash_20pct_plus" and dd_60 is not None:
+        highlights.append({"text": f"Stock was down {abs(dd_60):.1f}% from 60-day high (crash territory)", "type": "bullish"})
+    elif dd_state == "correction_10_20" and dd_60 is not None:
+        highlights.append({"text": f"Stock was in correction, down {abs(dd_60):.1f}% from 60-day high", "type": "bullish"})
+
+    # ADX trend strength
+    adx_trend = states.get("adx_trend")
+    adx_val = indicators.get("adx", {}).get("adx")
+    if adx_trend == "very_strong_trend" and adx_val is not None:
+        highlights.append({"text": f"ADX was {adx_val:.1f} (very strong trend)", "type": "bullish"})
+
+    # Consecutive days
+    consec_days = indicators.get("consecutive", {}).get("days", 0)
+    if consec_days >= 5:
+        highlights.append({"text": f"{consec_days} consecutive up days", "type": "bearish"})
+    elif consec_days <= -5:
+        highlights.append({"text": f"{abs(consec_days)} consecutive down days", "type": "bullish"})
+
+    # Actual outcome highlights
+    if "20" in actual_returns:
+        ret = actual_returns["20"]["return_pct"]
+        if ret > 10:
+            highlights.append({"text": f"Stock actually rose {ret:.1f}% in 20 days", "type": "bullish"})
+        elif ret < -10:
+            highlights.append({"text": f"Stock actually fell {abs(ret):.1f}% in 20 days", "type": "bearish"})
+
+    if "60" in actual_returns:
+        ret = actual_returns["60"]["return_pct"]
+        if ret > 20:
+            highlights.append({"text": f"Stock surged {ret:.1f}% over 60 days", "type": "bullish"})
+        elif ret < -20:
+            highlights.append({"text": f"Stock dropped {abs(ret):.1f}% over 60 days", "type": "bearish"})
+
+    return highlights
 
 
 # ── Helpers ──

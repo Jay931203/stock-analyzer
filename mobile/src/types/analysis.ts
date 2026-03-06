@@ -20,6 +20,7 @@ export interface ProbabilityData {
   periods: Record<string, PeriodStats>;
   cases?: CaseRecord[];
   warning?: string;
+  data_period?: string;
 }
 
 export interface RSIData {
@@ -266,4 +267,38 @@ export interface SignalsResponse {
   market_state: string;
   calendar?: CalendarEvent[];
   flips?: FlipItem[];
+}
+
+export interface TimeMachineActual {
+  return_pct: number;
+  end_price: number;
+  went_up: boolean;
+}
+
+export interface TimeMachineResponse {
+  ticker: string;
+  date: string;
+  price_at_date: number;
+  current_price: number;
+  signal: {
+    direction: string;
+    win_rate_20d: number;
+    occurrences: number;
+    conditions: { indicator: string; state: string }[];
+  };
+  actual: Record<string, TimeMachineActual>;
+  accuracy: {
+    predicted_direction: string;
+    actual_direction: string;
+    was_correct: boolean;
+  };
+  indicators_at_date: Record<string, any>;
+  highlights: { text: string; type: string }[];
+}
+
+export interface TimeMachineRange {
+  ticker: string;
+  first_date: string;
+  last_date: string;
+  total_days: number;
 }

@@ -1149,6 +1149,13 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
+        {/* Disclaimer */}
+        <View style={s.disclaimer}>
+          <Text style={s.disclaimerText}>
+            본 분석은 과거 데이터 기반 통계이며 투자 조언이 아닙니다. 투자 결정은 본인 판단하에 이루어져야 합니다. This is not investment advice.
+          </Text>
+        </View>
+
         <View style={{ height: insets.bottom + 20 }} />
       </ScrollView>
     </View>
@@ -1400,4 +1407,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   calLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   calLegendText: { color: c.textMuted, fontSize: 9, fontWeight: '600' },
+
+  disclaimer: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    marginTop: spacing.lg,
+  },
+  disclaimerText: {
+    color: c.textMuted,
+    fontSize: 10,
+    textAlign: 'center' as const,
+    lineHeight: 16,
+  },
 });

@@ -168,3 +168,49 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     results: list[SearchResult]
+
+
+# ── Time Machine models ──
+
+
+class ActualReturn(BaseModel):
+    return_pct: float = Field(description="Actual return percentage")
+    end_price: float = Field(description="Price at end of period")
+    went_up: bool = Field(description="Whether price went up")
+
+
+class TimeMachineSignal(BaseModel):
+    direction: str = Field(description="bullish, bearish, or neutral")
+    win_rate_20d: float | None = Field(default=None, description="Predicted 20-day win rate at that date")
+    occurrences: int = Field(default=0, description="Number of historical occurrences")
+    conditions: list[dict] = Field(default_factory=list, description="Indicator conditions used")
+
+
+class TimeMachineAccuracy(BaseModel):
+    predicted_direction: str = Field(description="bullish or bearish")
+    actual_direction: str = Field(description="up or down")
+    was_correct: bool = Field(description="Whether prediction matched reality")
+
+
+class TimeMachineHighlight(BaseModel):
+    text: str
+    type: str = Field(description="bullish or bearish")
+
+
+class TimeMachineResponse(BaseModel):
+    ticker: str
+    date: str
+    price_at_date: float
+    current_price: float
+    signal: TimeMachineSignal
+    actual: dict[str, ActualReturn] = Field(description="Forward returns by period (5, 10, 20, 60, 120 days)")
+    accuracy: TimeMachineAccuracy | None = None
+    indicators_at_date: dict = Field(default_factory=dict, description="Indicator values at the selected date")
+    highlights: list[TimeMachineHighlight] = Field(default_factory=list)
+
+
+class TimeMachineRangeResponse(BaseModel):
+    ticker: str
+    first_date: str
+    last_date: str
+    total_days: int

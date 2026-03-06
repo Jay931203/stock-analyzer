@@ -28,6 +28,10 @@ function InnerLayout() {
           options={{ title: 'Analysis', headerShown: false }}
         />
         <Stack.Screen
+          name="time-machine/[ticker]"
+          options={{ title: 'Time Machine', headerShown: false }}
+        />
+        <Stack.Screen
           name="settings"
           options={{ title: 'Settings' }}
         />
