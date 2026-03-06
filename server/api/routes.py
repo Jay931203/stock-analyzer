@@ -646,7 +646,7 @@ async def get_signals(limit: int = Query(101, ge=1, le=150)):
     if not signals_data:
         from concurrent.futures import ThreadPoolExecutor
 
-        with ThreadPoolExecutor(max_workers=12) as pool:
+        with ThreadPoolExecutor(max_workers=6) as pool:
             results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
         valid = [r for r in results if r is not None]
         valid.sort(key=lambda x: x["strength"], reverse=True)
@@ -1048,7 +1048,7 @@ def _calc_combined(df, states: dict) -> CombinedProbability | None:
 def _scan_ticker_combo(ticker: str) -> dict | None:
     """Get combined probability for a ticker across all available indicators."""
     try:
-        df = fetch_price_history(ticker, period="10y")
+        df = fetch_price_history(ticker, period="3y")
         if len(df) < 200:
             return None
     except Exception:
