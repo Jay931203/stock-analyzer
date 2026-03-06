@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, type ViewStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Platform, type ViewStyle } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePremium } from '../contexts/PremiumContext';
 import { spacing, radius, typography } from '../theme';
@@ -12,20 +12,55 @@ interface AdSlotProps {
 }
 
 const AD_HEIGHTS: Record<AdSize, number> = {
-  banner: 50,
+  banner: 90,
   'medium-rect': 250,
   inline: 100,
 };
+
+const AD_FORMATS: Record<AdSize, string> = {
+  banner: 'horizontal',
+  'medium-rect': 'rectangle',
+  inline: 'fluid',
+};
+
+function WebAdSlot({ size }: { size: AdSize }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      try {
+        const adsbygoogle = (window as any).adsbygoogle || [];
+        adsbygoogle.push({});
+      } catch {}
+    }
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{ textAlign: 'center', margin: '8px 16px' }}>
+      <ins
+        className="adsbygoogle"
+        style={{ display: 'block' }}
+        data-ad-client="ca-pub-5053429721285857"
+        data-ad-format={AD_FORMATS[size]}
+        data-full-width-responsive="true"
+      />
+    </div>
+  );
+}
 
 export default function AdSlot({ size, style }: AdSlotProps) {
   const { colors } = useTheme();
   const { isPremium } = usePremium();
 
-  // Premium users see no ads
   if (isPremium) return null;
 
-  const height = AD_HEIGHTS[size];
+  // On web: render actual AdSense
+  if (Platform.OS === 'web') {
+    return <WebAdSlot size={size} />;
+  }
 
+  // On native: placeholder (AdMob integration later)
+  const height = AD_HEIGHTS[size];
   return (
     <View
       style={[
@@ -38,7 +73,7 @@ export default function AdSlot({ size, style }: AdSlotProps) {
         style,
       ]}
     >
-      <Text style={[styles.label, { color: colors.textMuted }]}>Sponsored</Text>
+      <Text style={[styles.label, { color: colors.textMuted }]}>Ad</Text>
     </View>
   );
 }
