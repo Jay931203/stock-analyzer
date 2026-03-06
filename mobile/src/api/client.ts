@@ -26,6 +26,35 @@ function setCache(key: string, data: any): void {
   }
 }
 
+// Persistent cache (survives page refresh / app restart)
+const PERSIST_PREFIX = 'cache:';
+
+function isMarketOpen(): boolean {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun
+  if (day === 0 || day === 6) return false;
+  const h = now.getUTCHours();
+  const m = now.getUTCMinutes();
+  const mins = h * 60 + m;
+  // Market: 14:30-21:00 UTC (9:30 AM - 4:00 PM ET)
+  return mins >= 14 * 60 + 30 && mins <= 21 * 60;
+}
+
+async function getPersisted<T>(key: string): Promise<T | null> {
+  try {
+    const raw = await AsyncStorage.getItem(PERSIST_PREFIX + key);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    const maxAge = isMarketOpen() ? 10 * 60 * 1000 : 6 * 60 * 60 * 1000; // 10min during market, 6hr otherwise
+    if (Date.now() - ts > maxAge) return null;
+    return data as T;
+  } catch { return null; }
+}
+
+function setPersisted(key: string, data: any): void {
+  AsyncStorage.setItem(PERSIST_PREFIX + key, JSON.stringify({ data, ts: Date.now() })).catch(() => {});
+}
+
 const STORAGE_KEY = 'stock_analyzer_server_url';
 
 // Smart default: deployed web uses same origin, local dev uses localhost:8000
@@ -125,10 +154,21 @@ const api = {
   },
 
   async signals(limit = 20): Promise<SignalsResponse> {
+    // Try persistent cache first (instant, survives refresh)
+    const persisted = await getPersisted<SignalsResponse>('signals');
+    if (persisted) {
+      // Return cached data, refresh in background
+      axios.get(`${BASE_URL}/api/signals`, { params: { limit }, timeout: 120000 })
+        .then(res => setPersisted('signals', res.data))
+        .catch(() => {});
+      return persisted;
+    }
+
     const res = await axios.get(`${BASE_URL}/api/signals`, {
       params: { limit },
       timeout: 120000,
     });
+    setPersisted('signals', res.data);
     return res.data;
   },
 
