@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../src/api/client';
 import type { AnalysisResponse } from '../../src/types/analysis';
 import IndicatorCard from '../../src/components/IndicatorCard';
@@ -139,8 +140,15 @@ export default function AnalyzeScreen() {
   );
   const [modalIndicator, setModalIndicator] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(isInWatchlist(ticker ?? ''));
-  const [period, setPeriod] = useState<string>('10y');
+  const [period, setPeriod] = useState<string>('3y');
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Load global data period setting
+  useEffect(() => {
+    AsyncStorage.getItem('data_period').then(saved => {
+      if (saved && ['1y', '3y', '5y', '10y'].includes(saved)) setPeriod(saved);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -295,8 +303,8 @@ export default function AnalyzeScreen() {
           {/* Backtest period */}
           <View style={s.periodRow}>
             <Text style={s.periodLabel}>Backtest</Text>
-            {['6m', '1y', '2y', '5y', '10y'].map((p) => (
-              <Pressable key={p} style={({ pressed }) => [s.periodPill, period === p && s.periodPillActive, pressed && { opacity: 0.7 }]} onPress={() => setPeriod(p)}>
+            {['1y', '3y', '5y', '10y'].map((p) => (
+              <Pressable key={p} style={({ pressed }) => [s.periodPill, period === p && s.periodPillActive, pressed && { opacity: 0.7 }]} onPress={() => { setPeriod(p); AsyncStorage.setItem('data_period', p).catch(() => {}); }}>
                 <Text style={[s.periodPillText, period === p && s.periodPillTextActive]}>{p.toUpperCase()}</Text>
               </Pressable>
             ))}

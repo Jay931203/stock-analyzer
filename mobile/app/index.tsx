@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { initServerUrl } from '../src/api/client';
 import type { CalendarEvent, FlipItem, SearchResult, SignalItem } from '../src/types/analysis';
 import { getWatchlist, removeFromWatchlist, subscribe, initWatchlist } from '../src/store/watchlist';
@@ -156,6 +157,8 @@ export default function HomeScreen() {
   const [activeSector, setActiveSector] = useState<string | null>('All');
   const [sortBy, setSortBy] = useState<'win_rate' | 'avg_return' | 'change'>('win_rate');
   const [period, setPeriod] = useState<string>('20d');
+  const [dataPeriod, setDataPeriod] = useState<string>('3y'); // backtest data range
+  const [qqqPeriod, setQqqPeriod] = useState<string>('20d'); // QQQ/SPY independent period
   const [loadingProgress, setLoadingProgress] = useState('');
   const [marketIndices, setMarketIndices] = useState<Record<string, { price: number; change_pct: number }>>({});
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -171,6 +174,14 @@ export default function HomeScreen() {
       await initServerUrl();
       await initWatchlist();
       setWatchlist(getWatchlist());
+
+      // Load saved data period
+      try {
+        const saved = await AsyncStorage.getItem('data_period');
+        if (saved && ['1y', '3y', '5y', '10y'].includes(saved)) {
+          setDataPeriod(saved);
+        }
+      } catch {}
 
       // Try health check, but load data regardless (with retry)
       let ok = false;
@@ -198,11 +209,19 @@ export default function HomeScreen() {
     return subscribe(() => setWatchlist(getWatchlist()));
   }, []);
 
-  const loadSignals = async () => {
+  const changeDataPeriod = (dp: string) => {
+    setDataPeriod(dp);
+    AsyncStorage.setItem('data_period', dp).catch(() => {});
+    // Reload signals with new data period
+    loadSignals(dp);
+  };
+
+  const loadSignals = async (dp?: string) => {
+    const usePeriod = dp ?? dataPeriod;
     setSignalsLoading(true);
-    setLoadingProgress('Loading signals...');
+    setLoadingProgress(`Loading signals (${usePeriod} data)...`);
     try {
-      const res = await api.signals(50);
+      const res = await api.signals(50, usePeriod);
       setLoadingProgress('Processing data...');
       let sigs = res.signals;
       const mState = res.market_state ?? '';
@@ -445,20 +464,36 @@ export default function HomeScreen() {
               </View>
             ) : null}
           </View>
-          <Pressable
-            onPress={cycleTheme}
-            style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}
-            accessibilityLabel={`Theme: ${themeMode}`}
-            accessibilityRole="button"
-          >
-            {themeMode === 'light' ? (
-              <SunIcon size={16} color={colors.textSecondary} />
-            ) : themeMode === 'dark' ? (
-              <MoonIcon size={16} color={colors.textSecondary} />
-            ) : (
-              <MonitorIcon size={16} color={colors.textSecondary} />
-            )}
-          </Pressable>
+          <View style={s.topBarRight}>
+            {/* Data Period Selector */}
+            <View style={s.dataPeriodRow}>
+              {(['1y', '3y', '5y', '10y'] as const).map(dp => (
+                <Pressable
+                  key={dp}
+                  style={[s.dataPeriodPill, dataPeriod === dp && s.dataPeriodPillActive]}
+                  onPress={() => changeDataPeriod(dp)}
+                >
+                  <Text style={[s.dataPeriodText, dataPeriod === dp && s.dataPeriodTextActive]}>
+                    {dp.toUpperCase()}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              onPress={cycleTheme}
+              style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}
+              accessibilityLabel={`Theme: ${themeMode}`}
+              accessibilityRole="button"
+            >
+              {themeMode === 'light' ? (
+                <SunIcon size={16} color={colors.textSecondary} />
+              ) : themeMode === 'dark' ? (
+                <MoonIcon size={16} color={colors.textSecondary} />
+              ) : (
+                <MonitorIcon size={16} color={colors.textSecondary} />
+              )}
+            </Pressable>
+          </View>
         </View>
 
         {/* App Name + Title + Summary */}
@@ -504,58 +539,74 @@ export default function HomeScreen() {
           }
           if (etfs.length === 0) return null;
           return (
-            <View style={s.indexCardsRow}>
-              {etfs.map(sig => {
-                const liveData = marketIndices[sig.ticker];
-                const price = liveData?.price ?? sig.price;
-                const changePct = liveData?.change_pct ?? sig.change_pct;
-                const wr = getWinRateForPeriod(sig, period);
-                const avgRet = getAvgReturnForPeriod(sig, period);
-                const color = wr >= 50 ? colors.bullish : colors.bearish;
-                const name = sig.ticker === 'QQQ' ? 'Invesco QQQ' : sig.ticker === 'SPY' ? 'S&P 500 ETF' : sig.name;
-                return (
+            <View>
+              {/* QQQ/SPY period selector */}
+              <View style={s.indexPeriodRow}>
+                {(['5d', '20d', '60d', '120d', '252d'] as const).map(p => (
                   <Pressable
-                    key={sig.ticker}
-                    style={({ pressed }) => [
-                      s.indexCard,
-                      pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
-                    ]}
-                    onPress={() => goToAnalysis(sig.ticker)}
+                    key={p}
+                    style={[s.indexPeriodPill, qqqPeriod === p && s.indexPeriodPillActive]}
+                    onPress={() => setQqqPeriod(p)}
                   >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <View>
-                        <Text style={s.indexCardTicker}>{sig.ticker}</Text>
-                        <Text style={s.indexCardName}>{name}</Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={s.indexCardPrice}>${price.toFixed(2)}</Text>
-                        <Text style={[s.indexCardChange, { color: getDirectionColor(changePct, colors) }]}>
-                          {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={[s.indexCardDivider, { backgroundColor: `${color}30` }]} />
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
-                        <Text style={s.indexCardLabel}>{PERIOD_LABELS[period]} Win</Text>
-                      </View>
-                      {avgRet !== undefined && avgRet !== 0 && (
-                        <View style={{ alignItems: 'center' }}>
-                          <Text style={[s.indexCardAvg, { color: avgRet >= 0 ? colors.bullish : colors.bearish }]}>
-                            {avgRet >= 0 ? '+' : ''}{avgRet.toFixed(1)}%
-                          </Text>
-                          <Text style={s.indexCardLabel}>Avg Return</Text>
-                        </View>
-                      )}
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={s.indexCardCases}>{sig.occurrences}</Text>
-                        <Text style={s.indexCardLabel}>Cases</Text>
-                      </View>
-                    </View>
+                    <Text style={[s.indexPeriodText, qqqPeriod === p && s.indexPeriodTextActive]}>
+                      {PERIOD_LABELS[p]}
+                    </Text>
                   </Pressable>
-                );
-              })}
+                ))}
+              </View>
+              <View style={s.indexCardsRow}>
+                {etfs.map(sig => {
+                  const liveData = marketIndices[sig.ticker];
+                  const price = liveData?.price ?? sig.price;
+                  const changePct = liveData?.change_pct ?? sig.change_pct;
+                  const wr = getWinRateForPeriod(sig, qqqPeriod);
+                  const avgRet = getAvgReturnForPeriod(sig, qqqPeriod);
+                  const color = wr >= 50 ? colors.bullish : colors.bearish;
+                  const name = sig.ticker === 'QQQ' ? 'Invesco QQQ' : sig.ticker === 'SPY' ? 'S&P 500 ETF' : sig.name;
+                  return (
+                    <Pressable
+                      key={sig.ticker}
+                      style={({ pressed }) => [
+                        s.indexCard,
+                        pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
+                      ]}
+                      onPress={() => goToAnalysis(sig.ticker)}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View>
+                          <Text style={s.indexCardTicker}>{sig.ticker}</Text>
+                          <Text style={s.indexCardName}>{name}</Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={s.indexCardPrice}>${price.toFixed(2)}</Text>
+                          <Text style={[s.indexCardChange, { color: getDirectionColor(changePct, colors) }]}>
+                            {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={[s.indexCardDivider, { backgroundColor: `${color}30` }]} />
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
+                          <Text style={s.indexCardLabel}>{PERIOD_LABELS[qqqPeriod]} Win</Text>
+                        </View>
+                        {avgRet !== undefined && avgRet !== 0 && (
+                          <View style={{ alignItems: 'center' }}>
+                            <Text style={[s.indexCardAvg, { color: avgRet >= 0 ? colors.bullish : colors.bearish }]}>
+                              {avgRet >= 0 ? '+' : ''}{avgRet.toFixed(1)}%
+                            </Text>
+                            <Text style={s.indexCardLabel}>Avg Return</Text>
+                          </View>
+                        )}
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={s.indexCardCases}>{sig.occurrences}</Text>
+                          <Text style={s.indexCardLabel}>Cases</Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
           );
         })()}
@@ -1068,7 +1119,7 @@ export default function HomeScreen() {
         {signalsUpdated ? (
           <View style={s.scanInfo}>
             <Text style={s.scanInfoText}>
-              Scanned {scannedCount} stocks  |  Updated {signalsUpdated}
+              Scanned {scannedCount} stocks  |  {dataPeriod.toUpperCase()} data  |  Updated {signalsUpdated}
             </Text>
           </View>
         ) : null}
@@ -1100,6 +1151,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statusText: { color: c.textTertiary, fontSize: 10, fontWeight: '500' },
   marketBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 },
   marketBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dataPeriodRow: { flexDirection: 'row', gap: 2, backgroundColor: c.bgElevated, borderRadius: radius.md, padding: 2 },
+  dataPeriodPill: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
+  dataPeriodPillActive: { backgroundColor: c.accent },
+  dataPeriodText: { color: c.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
+  dataPeriodTextActive: { color: '#fff', fontWeight: '800' },
   themeBtn: { padding: 8, borderRadius: 6 },
   themeBtnPressed: { backgroundColor: c.bgElevated },
 
@@ -1119,7 +1176,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   summaryText: { fontSize: 12, fontWeight: '700' },
 
   // ═══ MARKET INDICES ═══
-  indexCardsRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  indexPeriodRow: {
+    flexDirection: 'row', justifyContent: 'center', gap: 4, marginTop: 10, marginBottom: 6,
+  },
+  indexPeriodPill: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full,
+    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
+  },
+  indexPeriodPillActive: { backgroundColor: c.accentDim, borderColor: c.accent },
+  indexPeriodText: { color: c.textMuted, fontSize: 10, fontWeight: '500' },
+  indexPeriodTextActive: { color: c.accent, fontWeight: '700' },
+  indexCardsRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
   indexCard: {
     flex: 1, backgroundColor: c.bgCard, borderRadius: radius.lg,
     padding: spacing.md, borderWidth: 1, borderColor: `${c.accent}30`,

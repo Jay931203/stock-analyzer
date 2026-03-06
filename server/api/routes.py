@@ -545,6 +545,7 @@ _TRENDING_TTL = 300  # 5 minutes
 
 # Signal scanning cache (10 min TTL)
 _signals_cache: dict = {"data": None, "ts": 0}
+_signals_period_cache: dict = {}  # keyed by "signals_{period}", e.g. "signals_3y"
 _SIGNALS_TTL = 600  # 10 minutes
 
 # In-memory cache for computed indicators (survives within Vercel warm instance)
@@ -585,6 +586,8 @@ async def refresh_signals():
     Force recompute signals and update Supabase cache.
     Called by Vercel Cron every 15 minutes.
     """
+    global _scan_data_period
+    _scan_data_period = "3y"
     from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor(max_workers=12) as pool:
@@ -621,25 +624,38 @@ async def signal_flips():
 
 
 @router.get("/signals")
-async def get_signals(limit: int = Query(101, ge=1, le=150)):
+async def get_signals(
+    limit: int = Query(101, ge=1, le=150),
+    data_period: str = Query("3y", regex="^(1y|3y|5y|10y)$"),
+):
     """
     Combined probability for popular stocks.
     Uses Supabase cache for fast loading, falls back to computation.
     Also includes calendar and flips data to avoid extra cold-start API calls.
+    data_period controls how many years of historical data to use for backtesting.
     """
+    global _scan_data_period
+    _scan_data_period = data_period
+    is_default = data_period == "3y"
     now = time.time()
     signals_data = None
 
-    # 1. Try in-memory cache first (fastest)
-    if _signals_cache["data"] and now - _signals_cache["ts"] < _SIGNALS_TTL:
-        signals_data = _signals_cache["data"]
+    # Per-period in-memory cache
+    cache_key = f"signals_{data_period}"
+    if cache_key not in _signals_period_cache:
+        _signals_period_cache[cache_key] = {"data": None, "ts": 0}
+    pcache = _signals_period_cache[cache_key]
 
-    # 2. Try Supabase cache (fast, survives cold starts)
-    if not signals_data:
+    # 1. Try in-memory cache first (fastest)
+    if pcache["data"] and now - pcache["ts"] < _SIGNALS_TTL:
+        signals_data = pcache["data"]
+
+    # 2. Try Supabase cache (only for default 3y period)
+    if not signals_data and is_default:
         supabase_data = read_cached_signals()
         if supabase_data:
-            _signals_cache["data"] = supabase_data
-            _signals_cache["ts"] = now
+            pcache["data"] = supabase_data
+            pcache["ts"] = now
             signals_data = supabase_data
 
     # 3. Full computation (slow, only on cache miss)
@@ -651,7 +667,8 @@ async def get_signals(limit: int = Query(101, ge=1, le=150)):
         valid = [r for r in results if r is not None]
         valid.sort(key=lambda x: x["strength"], reverse=True)
 
-        snapshot_and_detect(valid)
+        if is_default:
+            snapshot_and_detect(valid)
 
         signals_data = {
             "signals": valid,
@@ -659,9 +676,10 @@ async def get_signals(limit: int = Query(101, ge=1, le=150)):
             "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
 
-        _signals_cache["data"] = signals_data
-        _signals_cache["ts"] = now
-        write_cached_signals(valid)
+        pcache["data"] = signals_data
+        pcache["ts"] = now
+        if is_default:
+            write_cached_signals(valid)
 
     # Bundle calendar + flips to avoid extra cold-start API calls
     calendar_events = get_economic_events(days_ahead=30)
@@ -1045,10 +1063,12 @@ def _calc_combined(df, states: dict) -> CombinedProbability | None:
     )
 
 
+_scan_data_period = "3y"  # module-level, set by signals endpoint
+
 def _scan_ticker_combo(ticker: str) -> dict | None:
     """Get combined probability for a ticker across all available indicators."""
     try:
-        df = fetch_price_history(ticker, period="3y")
+        df = fetch_price_history(ticker, period=_scan_data_period)
         if len(df) < 200:
             return None
     except Exception:
