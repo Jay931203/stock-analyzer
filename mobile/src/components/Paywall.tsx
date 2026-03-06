@@ -71,20 +71,15 @@ export default function Paywall() {
             </View>
 
             {/* CTA */}
-            <Pressable
-              style={({ pressed }) => [
+            <View
+              style={[
                 styles.ctaBtn,
-                { backgroundColor: colors.accent },
-                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                { backgroundColor: colors.textMuted, opacity: 0.5 },
               ]}
-              onPress={() => {
-                // TODO: integrate with RevenueCat / Stripe
-                hidePaywall();
-              }}
             >
-              <Text style={styles.ctaText}>Start 7-Day Free Trial</Text>
-              <Text style={styles.ctaSubText}>7일 무료 체험 시작하기</Text>
-            </Pressable>
+              <Text style={styles.ctaText}>Coming Soon</Text>
+              <Text style={styles.ctaSubText}>곧 출시 예정</Text>
+            </View>
 
             {/* Dismiss */}
             <Pressable

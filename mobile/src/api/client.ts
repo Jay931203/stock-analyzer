@@ -125,7 +125,7 @@ const api = {
   },
 
   async search(query: string): Promise<SearchResult[]> {
-    const res = await axios.get(`${BASE_URL}/api/search/${query}`, {
+    const res = await axios.get(`${BASE_URL}/api/search/${encodeURIComponent(query)}`, {
       timeout: 10000,
     });
     return res.data.results;

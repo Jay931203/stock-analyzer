@@ -499,7 +499,9 @@ async def refresh_signals(authorization: str = Header(None)):
     Called by Vercel Cron every 15 minutes.
     """
     cron_secret = os.environ.get("CRON_SECRET", "")
-    if cron_secret and authorization != f"Bearer {cron_secret}":
+    if not cron_secret:
+        raise HTTPException(status_code=503, detail="CRON_SECRET not configured")
+    if authorization != f"Bearer {cron_secret}":
         raise HTTPException(status_code=401, detail="Unauthorized")
     result = _compute_signals("3y")
     snapshot_and_detect(result["signals"])

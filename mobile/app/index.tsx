@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,13 +63,13 @@ function SignalCard({ sig, colors, bullishColor, onPress, onLongPress, period = 
     >
       <View style={cardStyles(colors).topRow}>
         <Text style={cardStyles(colors).ticker}>{sig.ticker}</Text>
-        <Text style={[cardStyles(colors).change, { color: getDirectionColor(sig.change_pct, colors) }]}>
-          {sig.change_pct >= 0 ? '+' : ''}{sig.change_pct.toFixed(1)}%
+        <Text style={[cardStyles(colors).change, { color: getDirectionColor(sig.change_pct ?? 0, colors) }]}>
+          {(sig.change_pct ?? 0) >= 0 ? '+' : ''}{(sig.change_pct ?? 0).toFixed(1)}%
         </Text>
       </View>
       {sig.name && <Text style={cardStyles(colors).companyName} numberOfLines={1}>{sig.name}</Text>}
       <View style={cardStyles(colors).priceRow}>
-        <Text style={cardStyles(colors).price}>${sig.price.toFixed(2)}</Text>
+        <Text style={cardStyles(colors).price}>${(sig.price ?? 0).toFixed(2)}</Text>
         {sig.market_cap_b ? (
           <Text style={cardStyles(colors).mcap}>
             {sig.market_cap_b >= 1000 ? `${(sig.market_cap_b / 1000).toFixed(1)}T` : `${sig.market_cap_b}B`}
@@ -475,6 +476,13 @@ export default function HomeScreen() {
       {signalsLoading && <TopLoadingBar color={colors.accent} bgColor={`${colors.textMuted}15`} />}
 
       {/* Search dropdown overlay (above everything) */}
+      {query.length >= 1 && !loading && results.length === 0 && (
+        <View style={[s.dropdown, { top: insets.top + 100 }]}>
+          <View style={[s.dropdownItem, { justifyContent: 'center' }]}>
+            <Text style={[s.dropdownName, { textAlign: 'center' }]}>No results for "{query}"</Text>
+          </View>
+        </View>
+      )}
       {results.length > 0 && (
         <View style={[s.dropdown, { top: insets.top + 100 }]}>
           {results.map((item) => (
@@ -493,9 +501,26 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {/* Full-screen loading when no data yet */}
+      {signals.length === 0 && signalsLoading && (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+          <ActivityIndicator size="large" color={colors.accent} />
+          <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 16 }}>Scanning market signals...</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 6 }}>Analyzing {LEVERAGED_TICKERS.size + 100}+ stocks</Text>
+        </View>
+      )}
+
+      {/* Empty state when scan complete but no signals */}
+      {signals.length === 0 && !signalsLoading && !signalsError && (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '600' }}>No signals found</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 8, textAlign: 'center' }}>Pull down to refresh or try a different period</Text>
+        </View>
+      )}
+
       {/* ═══ SINGLE SCROLLVIEW (header + content) ═══ */}
       <ScrollView
-        style={s.mainScroll}
+        style={[s.mainScroll, signals.length === 0 && signalsLoading && { display: 'none' }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
         keyboardShouldPersistTaps="handled"
@@ -571,14 +596,14 @@ export default function HomeScreen() {
                   {user.user_metadata?.avatar_url ? '' : (user.email?.charAt(0).toUpperCase() || 'U')}
                 </Text>
               </Pressable>
-            ) : (
+            ) : Platform.OS === 'web' ? (
               <Pressable
                 style={({ pressed }) => [s.authBtn, s.authBtnLogin, pressed && { opacity: 0.7 }]}
                 onPress={signInWithGoogle}
               >
                 <Text style={[s.authBtnText, { color: colors.accent }]}>Login</Text>
               </Pressable>
-            )}
+            ) : null}
           </View>
         </View>
 
@@ -1191,7 +1216,7 @@ export default function HomeScreen() {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
+  container: { flex: 1, backgroundColor: c.bg, maxWidth: 600, width: '100%', alignSelf: 'center' as const },
 
   // ═══ HEADER BLOCK ═══
   headerBlock: {
