@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, Response
 from ..core.analyzer import compute_all_indicators, get_indicator_state
 from ..core.backtester import calc_combined_probability
 from ..core.fetcher import fetch_price_history
-from .constants import TICKER_NAMES
+from .constants import POPULAR_TICKERS, TICKER_NAMES
 
 # Router for /api/og/{ticker} (included with /api prefix in main.py)
 og_image_router = APIRouter()
@@ -354,4 +354,41 @@ async def share_page(ticker: str, request: Request):
         headers={
             "Cache-Control": "public, max-age=3600",
         },
+    )
+
+
+@share_router.get("/s/{ticker}", response_class=HTMLResponse)
+async def share_page_short(ticker: str, request: Request):
+    """Short URL redirect for sharing — serves the same OG page as /share/{ticker}."""
+    return await share_page(ticker, request)
+
+
+@share_router.get("/sitemap.xml")
+async def sitemap(request: Request):
+    """Generate a basic sitemap.xml for SEO."""
+    host = request.headers.get("host", "")
+    scheme = request.headers.get("x-forwarded-proto", "https")
+    base_url = f"{scheme}://{host}" if host else ""
+
+    urls = []
+    # Home page
+    urls.append(f"  <url><loc>{base_url}/</loc><priority>1.0</priority></url>")
+    # Share pages for all tracked tickers
+    for ticker in POPULAR_TICKERS:
+        urls.append(
+            f"  <url><loc>{base_url}/share/{ticker}</loc>"
+            f"<changefreq>daily</changefreq><priority>0.7</priority></url>"
+        )
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(urls)
+        + "\n</urlset>"
+    )
+
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=86400"},
     )

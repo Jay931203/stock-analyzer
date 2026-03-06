@@ -21,6 +21,8 @@
     { "src": "/api/(.*)", "dest": "/api/index.py" },
     { "src": "/health", "dest": "/api/index.py" },
     { "src": "/share/(.*)", "dest": "/api/index.py" },
+    { "src": "/s/(.*)", "dest": "/api/index.py" },
+    { "src": "/sitemap\\.xml", "dest": "/api/index.py" },
     { "src": "/(.*\\.[a-z]+)$", "dest": "/mobile/$1" },
     { "src": "/(.*)", "dest": "/mobile/index.html" }
   ]

@@ -231,7 +231,10 @@ export default function AnalyzeScreen() {
   const handleShare = async () => {
     const text = buildShareText();
     if (!text) return;
-    await doShare(text, (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(''), 2000); });
+    const shareUrl = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? `${window.location.origin}/share/${ticker}`
+      : undefined;
+    await doShare(text, (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(''), 2000); }, shareUrl);
   };
 
   const toggleCombinedIndicator = (key: string) => {

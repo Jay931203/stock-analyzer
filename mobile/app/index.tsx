@@ -1154,6 +1154,11 @@ export default function HomeScreen() {
           <Text style={s.disclaimerText}>
             본 분석은 과거 데이터 기반 통계이며 투자 조언이 아닙니다. 투자 결정은 본인 판단하에 이루어져야 합니다. This is not investment advice.
           </Text>
+          <Pressable onPress={() => router.push('/privacy')} style={{ marginTop: 8 }}>
+            <Text style={[s.disclaimerText, { color: colors.accent, textDecorationLine: 'underline' }]}>
+              개인정보처리방침 / Privacy Policy
+            </Text>
+          </Pressable>
         </View>
 
         <View style={{ height: insets.bottom + 20 }} />
