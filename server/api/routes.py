@@ -655,13 +655,25 @@ async def get_signals(
             pcache["ts"] = now
             signals_data = supabase_data
 
-    # 3. Only compute synchronously if NO cache at all (first ever load)
+    # 3. No cache: compute synchronously (first ever load)
     if not signals_data:
-        signals_data = _compute_signals(data_period)
-        pcache["data"] = signals_data
-        pcache["ts"] = now
-        if is_default:
-            write_cached_signals(signals_data["signals"])
+        try:
+            signals_data = _compute_signals(data_period)
+            pcache["data"] = signals_data
+            pcache["ts"] = now
+            if is_default:
+                write_cached_signals(signals_data["signals"])
+        except Exception:
+            # Computation failed (e.g. timeout) — fall back to default 3y cache
+            default_cache = _signals_period_cache.get("signals_3y", {})
+            if default_cache.get("data"):
+                signals_data = default_cache["data"]
+            else:
+                fallback = read_cached_signals()
+                if fallback:
+                    signals_data = fallback
+            if not signals_data:
+                signals_data = {"signals": [], "scanned": 0, "updated": ""}
 
     # Background refresh if stale (user never waits)
     is_stale = now - pcache["ts"] > _SIGNALS_TTL

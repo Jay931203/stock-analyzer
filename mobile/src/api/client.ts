@@ -153,16 +153,20 @@ const api = {
     return res.data;
   },
 
-  async signals(limit = 20, dataPeriod = '3y'): Promise<SignalsResponse> {
+  async signals(limit = 20, dataPeriod = '3y', forceRefresh = false): Promise<SignalsResponse> {
     const cacheKey = `signals:${dataPeriod}`;
-    // Try persistent cache first (instant, survives refresh)
-    const persisted = await getPersisted<SignalsResponse>(cacheKey);
-    if (persisted) {
-      // Return cached data, refresh in background
-      axios.get(`${BASE_URL}/api/signals`, { params: { limit, data_period: dataPeriod }, timeout: 120000 })
-        .then(res => setPersisted(cacheKey, res.data))
-        .catch(() => {});
-      return persisted;
+
+    // On explicit period change (forceRefresh), always fetch from server
+    // On initial load, use persistent cache for instant display
+    if (!forceRefresh) {
+      const persisted = await getPersisted<SignalsResponse>(cacheKey);
+      if (persisted) {
+        // Return cached data, refresh in background
+        axios.get(`${BASE_URL}/api/signals`, { params: { limit, data_period: dataPeriod }, timeout: 120000 })
+          .then(res => setPersisted(cacheKey, res.data))
+          .catch(() => {});
+        return persisted;
+      }
     }
 
     const res = await axios.get(`${BASE_URL}/api/signals`, {

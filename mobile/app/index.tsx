@@ -284,17 +284,17 @@ export default function HomeScreen() {
   };
 
   const changeDataPeriod = (dp: string) => {
+    if (dp === dataPeriod) return;
     setDataPeriod(dp);
     AsyncStorage.setItem('data_period', dp).catch(() => {});
-    // Reload signals with new data period
-    loadSignals(dp);
+    loadSignals(dp, true);
   };
 
-  const loadSignals = async (dp?: string) => {
+  const loadSignals = async (dp?: string, forceRefresh = false) => {
     const usePeriod = dp ?? dataPeriod;
     setSignalsLoading(true);
     try {
-      const res = await api.signals(50, usePeriod);
+      const res = await api.signals(50, usePeriod, forceRefresh);
       let sigs = res.signals;
       const mState = res.market_state ?? '';
       setMarketState(mState);
@@ -317,7 +317,6 @@ export default function HomeScreen() {
       setSignalsUpdated(res.updated);
       if (res.calendar) {
         setCalendarEvents(res.calendar);
-        // Auto-select today if it has events
         const today = new Date().getDate();
         const todayHasEvents = res.calendar.some((ev: any) => {
           const d = new Date(ev.date + 'T12:00:00');
