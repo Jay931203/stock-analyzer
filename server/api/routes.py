@@ -985,6 +985,7 @@ async def time_machine(
     signal_direction = "neutral"
     win_rate_20d = None
     occurrences = 0
+    combo_result = None
 
     if len(conditions) >= 2:
         combo_result = calc_combined_probability(df_past, conditions)
@@ -1000,9 +1001,19 @@ async def time_machine(
             else:
                 signal_direction = "neutral"
 
+    win_rates = {}
+    if len(conditions) >= 2 and combo_result is not None:
+        for p_key in [5, 20, 60, 120]:
+            p_data = combo_result.periods.get(p_key, {})
+            if isinstance(p_data, dict):
+                wr = p_data.get("win_rate")
+                if wr is not None:
+                    win_rates[str(p_key)] = round(wr, 1)
+
     signal = {
         "direction": signal_direction,
         "win_rate_20d": round(win_rate_20d, 1) if win_rate_20d is not None else None,
+        "win_rates": win_rates,
         "occurrences": occurrences,
         "conditions": [{"indicator": c["indicator"], "state": c["state"]} for c in conditions],
     }

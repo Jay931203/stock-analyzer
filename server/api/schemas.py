@@ -182,6 +182,7 @@ class ActualReturn(BaseModel):
 class TimeMachineSignal(BaseModel):
     direction: str = Field(description="bullish, bearish, or neutral")
     win_rate_20d: float | None = Field(default=None, description="Predicted 20-day win rate at that date")
+    win_rates: dict[str, float] = Field(default_factory=dict, description="Win rates for all computed periods {5: 62.3, 20: 58.1, ...}")
     occurrences: int = Field(default=0, description="Number of historical occurrences")
     conditions: list[dict] = Field(default_factory=list, description="Indicator conditions used")
 

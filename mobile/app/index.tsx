@@ -14,7 +14,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { initServerUrl } from '../src/api/client';
-import type { CalendarEvent, FlipItem, SearchResult, SignalItem } from '../src/types/analysis';
+import type { CalendarEvent, EarningsItem, FlipItem, SearchResult, SignalItem } from '../src/types/analysis';
 import { getWatchlist, removeFromWatchlist, subscribe, initWatchlist } from '../src/store/watchlist';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../src/theme';
@@ -176,7 +176,7 @@ export default function HomeScreen() {
   const [marketIndices, setMarketIndices] = useState<Record<string, { price: number; change_pct: number }>>({});
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [dismissedSearches, setDismissedSearches] = useState<Set<string>>(new Set());
-  // earnings data comes from calendar API, no separate state needed
+  const [earnings, setEarnings] = useState<EarningsItem[]>([]);
   const [flips, setFlips] = useState<FlipItem[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [selectedCalDay, setSelectedCalDay] = useState<number | null>(null);
@@ -203,6 +203,7 @@ export default function HomeScreen() {
       loadSignals();
       loadMarketIndices();
       loadRecentSearches();
+      loadEarnings();
 
       // Health check with aggressive retry
       const tryHealth = async () => {
@@ -364,12 +365,20 @@ export default function HomeScreen() {
     } catch {}
   };
 
+  const loadEarnings = async () => {
+    try {
+      const res = await api.earningsCalendar();
+      setEarnings(res.earnings);
+    } catch {}
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    const [, , , healthOk] = await Promise.all([
+    const [, , , , healthOk] = await Promise.all([
       loadSignals(undefined, true),
       loadMarketIndices(),
       loadRecentSearches(),
+      loadEarnings(),
       api.health().catch(() => false),
     ]);
     setServerOk(healthOk);
@@ -426,15 +435,30 @@ export default function HomeScreen() {
       .sort((a, b) => b.avgWinRate - a.avgWinRate);
   }, [sectorMomentum]);
 
+  const sectorStats = useMemo(() => {
+    const stats: Record<string, { bullish: number; bearish: number; total: number; avgWr: number }> = {};
+    signals.forEach(sig => {
+      if (!sig.sector) return;
+      if (!stats[sig.sector]) stats[sig.sector] = { bullish: 0, bearish: 0, total: 0, avgWr: 0 };
+      const s = stats[sig.sector];
+      s.total++;
+      const wr = getWinRateForPeriod(sig, period);
+      if (wr >= 55) s.bullish++;
+      if (wr <= 45) s.bearish++;
+      s.avgWr += wr;
+    });
+    Object.values(stats).forEach(s => { if (s.total) s.avgWr = s.avgWr / s.total; });
+    return stats;
+  }, [signals, period]);
   const sectors = useMemo(() => {
     const uniqueSectors = [...new Set(signals.map(s => s.sector).filter(Boolean))];
     uniqueSectors.sort((a, b) => {
-      const wrA = sectorMomentum[a]?.avgWinRate ?? 50;
-      const wrB = sectorMomentum[b]?.avgWinRate ?? 50;
+      const wrA = sectorStats[a]?.avgWr ?? 50;
+      const wrB = sectorStats[b]?.avgWr ?? 50;
       return wrB - wrA;
     });
     return ['All', ...uniqueSectors];
-  }, [signals, sectorMomentum]);
+  }, [signals, sectorStats]);
   const filtered = useMemo(() => {
     const base = activeSector && activeSector !== 'All' ? signals.filter(s => s.sector === activeSector) : signals;
     return base.filter(s => s.ticker !== 'QQQ' && s.ticker !== 'SPY' && !LEVERAGED_TICKERS.has(s.ticker));
@@ -444,8 +468,9 @@ export default function HomeScreen() {
   }, [signals, period]);
   const unusualVolume = useMemo(() => {
     return signals
-      .filter(s => !LEVERAGED_TICKERS.has(s.ticker) && s.ticker !== 'QQQ' && s.ticker !== 'SPY' && s.volume_ratio !== undefined && (s.volume_ratio >= 2.0 || s.volume_ratio <= 0.5))
-      .sort((a, b) => (b.volume_ratio ?? 1) - (a.volume_ratio ?? 1));
+      .filter(s => !LEVERAGED_TICKERS.has(s.ticker) && s.ticker !== 'QQQ' && s.ticker !== 'SPY' && s.volume_ratio !== undefined && (s.volume_ratio >= 2.0 || s.volume_ratio <= 0.3))
+      .sort((a, b) => (b.volume_ratio ?? 1) - (a.volume_ratio ?? 1))
+      .slice(0, 10);
   }, [signals]);
 
   // Build calendar grid (current month view)
@@ -867,6 +892,7 @@ export default function HomeScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {sectors.map(sec => {
                 const isActive = (activeSector ?? 'All') === sec;
+                const stats = sec !== 'All' ? sectorStats[sec] : null;
                 return (
                   <Pressable
                     key={sec}
@@ -876,6 +902,12 @@ export default function HomeScreen() {
                     <Text style={[s.sectorChipText, isActive && s.sectorChipTextActive]}>
                       {sec === 'All' ? `All (${signals.length})` : sec}
                     </Text>
+                    {stats && stats.total > 0 && (
+                      <View style={s.sectorChipStats}>
+                        <Text style={s.sectorBullCount}>{'\u25B2'}{stats.bullish}</Text>
+                        <Text style={s.sectorBearCount}>{'\u25BC'}{stats.bearish}</Text>
+                      </View>
+                    )}
                   </Pressable>
                 );
               })}
@@ -1065,52 +1097,111 @@ export default function HomeScreen() {
         {unusualVolume.length > 0 && (
           <View style={s.section}>
             <View style={s.sectionHeader}>
-              <View style={[s.sectionDot, { backgroundColor: '#8B5CF6' }]} />
+              <View style={[s.sectionDot, { backgroundColor: '#F97316' }]} />
               <Text style={s.sectionLabel}>UNUSUAL VOLUME</Text>
               <Text style={s.sectionCount}>{unusualVolume.length}</Text>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
               {unusualVolume.map((sig) => {
                 const wr = getWinRateForPeriod(sig, period);
-                const volColor = wr >= 50 ? colors.bullish : colors.bearish;
+                const avgReturn = getAvgReturnForPeriod(sig, period);
+                const isSpike = (sig.volume_ratio ?? 1) >= 2.0;
                 return (
                   <Pressable
                     key={sig.ticker}
                     style={({ pressed }) => [
-                      cardStyles(colors).card,
-                      { borderLeftColor: '#8B5CF6' },
+                      s.volumeCard,
                       pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
                     ]}
                     onPress={() => goToAnalysis(sig.ticker)}
                   >
-                    <View style={cardStyles(colors).topRow}>
-                      <Text style={cardStyles(colors).ticker}>{sig.ticker}</Text>
-                      <Text style={[cardStyles(colors).change, { color: getDirectionColor(sig.change_pct, colors) }]}>
-                        {sig.change_pct >= 0 ? '+' : ''}{sig.change_pct.toFixed(1)}%
-                      </Text>
-                    </View>
+                    <Text style={cardStyles(colors).ticker}>{sig.ticker}</Text>
                     {sig.name && <Text style={cardStyles(colors).companyName} numberOfLines={1}>{sig.name}</Text>}
-                    <View style={cardStyles(colors).priceRow}>
-                      <Text style={cardStyles(colors).price}>${sig.price.toFixed(2)}</Text>
-                    </View>
-                    <View style={cardStyles(colors).divider} />
-                    <View style={[cardStyles(colors).avgBadge, {
-                      backgroundColor: (sig.volume_ratio ?? 1) >= 2.0 ? '#8B5CF620' : `${colors.warning}20`,
-                      alignSelf: 'center',
-                      marginBottom: 4,
+                    <View style={[s.volumeBadge, {
+                      backgroundColor: isSpike ? '#F9731620' : '#3B82F620',
                     }]}>
-                      <Text style={[cardStyles(colors).avgText, {
-                        color: (sig.volume_ratio ?? 1) >= 2.0 ? '#8B5CF6' : colors.warning,
-                        fontSize: 14,
-                        fontWeight: '800',
+                      <Text style={[s.volumeBadgeText, {
+                        color: isSpike ? '#F97316' : '#3B82F6',
                       }]}>
                         Vol {(sig.volume_ratio ?? 1).toFixed(1)}x
                       </Text>
                     </View>
-                    <Text style={[cardStyles(colors).winRate, { color: volColor, fontSize: 22 }]}>
+                    <View style={cardStyles(colors).divider} />
+                    <Text style={[cardStyles(colors).winRate, { color: wr >= 50 ? colors.bullish : colors.bearish, fontSize: 22 }]}>
                       {wr.toFixed(0)}%
                     </Text>
                     <Text style={cardStyles(colors).probLabel}>Win Rate</Text>
+                    {avgReturn !== undefined && avgReturn !== 0 && sig.occurrences > 0 && (
+                      <View style={[cardStyles(colors).avgBadge, {
+                        backgroundColor: avgReturn >= 0 ? `${colors.bullish}15` : `${colors.bearish}15`,
+                      }]}>
+                        <Text style={[cardStyles(colors).avgText, {
+                          color: avgReturn >= 0 ? colors.bullish : colors.bearish,
+                        }]}>
+                          Avg {avgReturn >= 0 ? '+' : ''}{avgReturn.toFixed(1)}%
+                        </Text>
+                      </View>
+                    )}
+                    <View style={cardStyles(colors).priceRow}>
+                      <Text style={cardStyles(colors).price}>${sig.price.toFixed(2)}</Text>
+                      <Text style={[cardStyles(colors).change, { color: getDirectionColor(sig.change_pct, colors) }]}>
+                        {sig.change_pct >= 0 ? '+' : ''}{sig.change_pct.toFixed(1)}%
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Earnings Calendar */}
+        {earnings.length > 0 && (
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <View style={[s.sectionDot, { backgroundColor: '#8B5CF6' }]} />
+              <Text style={s.sectionLabel}>EARNINGS CALENDAR</Text>
+              <Text style={s.sectionCount}>{earnings.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
+              {earnings.map((item) => {
+                const earnDate = new Date(item.earnings_date + 'T12:00:00');
+                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const dateLabel = `${monthNames[earnDate.getMonth()]} ${earnDate.getDate()}`;
+                return (
+                  <Pressable
+                    key={`${item.ticker}-${item.earnings_date}`}
+                    style={({ pressed }) => [
+                      s.earningsCard,
+                      pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
+                    ]}
+                    onPress={() => goToAnalysis(item.ticker)}
+                  >
+                    <Text style={s.earningsTicker}>{item.ticker}</Text>
+                    <Text style={s.earningsName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={s.earningsDate}>{dateLabel}</Text>
+                    <View style={{ flexDirection: 'row', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                      <View style={s.earningsDday}>
+                        <Text style={[s.earningsDdayText, { color: colors.accent }]}>
+                          D-{item.days_until}
+                        </Text>
+                      </View>
+                      {item.time_of_day ? (
+                        <View style={s.earningsTime}>
+                          <Text style={s.earningsTimeText}>{item.time_of_day}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {item.price !== undefined && (
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                        <Text style={cardStyles(colors).price}>${item.price.toFixed(2)}</Text>
+                        {item.change_pct !== undefined && (
+                          <Text style={[cardStyles(colors).change, { color: getDirectionColor(item.change_pct, colors) }]}>
+                            {item.change_pct >= 0 ? '+' : ''}{item.change_pct.toFixed(1)}%
+                          </Text>
+                        )}
+                      </View>
+                    )}
                   </Pressable>
                 );
               })}
@@ -1413,12 +1504,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   watchlistChipText: { color: c.textPrimary, ...typography.bodyBold, letterSpacing: 0.5 },
 
   sectorChip: {
-    paddingHorizontal: 12, paddingVertical: 9, borderRadius: radius.full,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full,
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border, marginRight: 6,
+    alignItems: 'center' as const,
   },
   sectorChipActive: { backgroundColor: c.accentDim, borderColor: c.accent },
   sectorChipText: { color: c.textMuted, fontSize: 11, fontWeight: '500' },
   sectorChipTextActive: { color: c.accent, fontWeight: '700' },
+  sectorChipStats: { flexDirection: 'row', gap: 4, marginTop: 2, justifyContent: 'center' },
+  sectorBullCount: { color: '#22C55E', fontSize: 10, fontWeight: '600' },
+  sectorBearCount: { color: '#EF4444', fontSize: 10, fontWeight: '600' },
 
   sortRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -1472,6 +1567,42 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   heatmapWr: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   heatmapChange: { fontSize: 10, fontWeight: '600', marginTop: 1 },
   heatmapCount: { color: c.textMuted, fontSize: 10, fontWeight: '500', marginTop: 2 },
+
+  // ═══ UNUSUAL VOLUME ═══
+  volumeCard: {
+    width: 156, minHeight: 160, backgroundColor: c.bgCard, borderRadius: radius.lg,
+    padding: spacing.md, marginRight: 10, borderWidth: 1, borderColor: c.border,
+    borderLeftWidth: 3, borderLeftColor: '#F97316',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 3,
+  },
+  volumeBadge: {
+    alignSelf: 'center' as const, marginTop: 6, marginBottom: 4,
+    paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.full,
+  },
+  volumeBadgeText: { fontSize: 13, fontWeight: '800' },
+
+  // ═══ EARNINGS CALENDAR ═══
+  earningsCard: {
+    width: 156, minHeight: 140, backgroundColor: c.bgCard, borderRadius: radius.lg,
+    padding: spacing.md, marginRight: 10, borderWidth: 1, borderColor: c.border,
+    borderLeftWidth: 3, borderLeftColor: '#8B5CF6',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 3,
+  },
+  earningsTicker: { color: c.textPrimary, fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+  earningsName: { color: c.textMuted, fontSize: 10, fontWeight: '500', marginTop: 1 },
+  earningsDate: { color: c.textSecondary, fontSize: 13, fontWeight: '700', marginTop: 6 },
+  earningsDday: {
+    backgroundColor: `${c.accent}15`, paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: radius.full,
+  },
+  earningsDdayText: { fontSize: 11, fontWeight: '700' },
+  earningsTime: {
+    backgroundColor: `${c.textMuted}15`, paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: radius.full,
+  },
+  earningsTimeText: { color: c.textMuted, fontSize: 11, fontWeight: '600' },
 
   // ═══ SIGNAL FLIP ═══
   flipArrow: {

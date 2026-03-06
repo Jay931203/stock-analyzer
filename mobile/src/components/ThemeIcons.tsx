@@ -76,6 +76,19 @@ export function ChevronLeftIcon({ size = 16, color = '#666' }: IconProps) {
 }
 
 /**
+ * Lucide-style Share icon (box with arrow pointing up).
+ */
+export function ShareIcon({ size = 16, color = '#666' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <Path d="M16 6l-4-4-4 4" />
+      <Path d="M12 2v13" />
+    </Svg>
+  );
+}
+
+/**
  * Lucide-style Star icon.
  */
 export function StarIcon({ size = 16, color = '#666', filled = false }: IconProps & { filled?: boolean }) {

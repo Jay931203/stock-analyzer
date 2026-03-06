@@ -283,6 +283,7 @@ export interface TimeMachineResponse {
   signal: {
     direction: string;
     win_rate_20d: number;
+    win_rates?: Record<string, number>;
     occurrences: number;
     conditions: { indicator: string; state: string }[];
   };
