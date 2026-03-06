@@ -9,7 +9,8 @@ import {
   RefreshControl,
   Modal,
   Animated,
-  Dimensions,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,8 +27,6 @@ import { SunIcon, MoonIcon, MonitorIcon, ChevronLeftIcon, StarIcon } from '../..
 import TopLoadingBar from '../../src/components/TopLoadingBar';
 import { PERIOD_LABELS } from '../../src/constants/ui';
 import { doShare } from '../../src/utils/share';
-
-const { height: SCREEN_H } = Dimensions.get('window');
 
 const INDICATOR_META: Record<string, { label: string; labelKo: string }> = {
   RSI: { label: 'RSI', labelKo: '과매수/과매도' },
@@ -132,9 +131,16 @@ function getIndicatorHighlights(data: AnalysisResponse): IndicatorHighlight[] {
 export default function AnalyzeScreen() {
   const { colors, themeMode, cycleTheme } = useTheme();
   const insets = useSafeAreaInsets();
-  const s = useMemo(() => makeStyles(colors), [colors]);
+  const { height: screenH } = useWindowDimensions();
+  const s = useMemo(() => makeStyles(colors, screenH), [colors, screenH]);
   const router = useRouter();
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
+
+  useEffect(() => {
+    return () => {
+      scaleAnim.stopAnimation();
+    };
+  }, []);
 
   const { ticker } = useLocalSearchParams<{ ticker: string }>();
   const [data, setData] = useState<AnalysisResponse | null>(null);
@@ -163,14 +169,9 @@ export default function AnalyzeScreen() {
     }).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    loadData();
-    const interval = setInterval(() => refreshData(), 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [ticker, period]);
-
   const hasDataRef = useRef(false);
-  const loadData = async () => {
+
+  const loadData = useCallback(async (forceRefresh = false) => {
     if (!ticker) return;
     const isInitial = !hasDataRef.current;
     if (isInitial) setLoading(true);
@@ -187,12 +188,18 @@ export default function AnalyzeScreen() {
     }
     setLoading(false);
     setPeriodLoading(false);
-  };
+  }, [ticker, period]);
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     if (!ticker) return;
     try { setData(await api.analyze(ticker, period, true)); } catch {}
-  };
+  }, [ticker, period]);
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(() => refreshData(), 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [loadData, refreshData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -232,7 +239,7 @@ export default function AnalyzeScreen() {
   const handleShare = async () => {
     const text = buildShareText();
     if (!text) return;
-    const shareUrl = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    const shareUrl = Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname !== 'localhost'
       ? `${window.location.origin}/share/${ticker}`
       : undefined;
     await doShare(text, (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(''), 2000); }, shareUrl);
@@ -280,7 +287,7 @@ export default function AnalyzeScreen() {
     return (
       <View style={s.center}>
         <Text style={s.errorText}>{error ?? 'Unknown error'}</Text>
-        <Pressable style={s.retryBtn} onPress={loadData}>
+        <Pressable style={s.retryBtn} onPress={() => loadData()}>
           <Text style={s.retryBtnText}>Retry</Text>
         </Pressable>
       </View>
@@ -595,7 +602,7 @@ export default function AnalyzeScreen() {
   );
 }
 
-const makeStyles = (c: ThemeColors) => StyleSheet.create({
+const makeStyles = (c: ThemeColors, screenH: number) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   scroll: { flex: 1 },
   center: {
@@ -714,7 +721,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   modalSheet: {
     backgroundColor: c.bg, borderRadius: 16, width: '100%',
-    maxHeight: SCREEN_H * 0.75, overflow: 'hidden',
+    maxHeight: screenH * 0.75, overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

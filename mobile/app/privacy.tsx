@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { spacing, radius, typography, type ThemeColors } from '../src/theme';
+import { ChevronLeftIcon } from '../src/components/ThemeIcons';
 
 const EFFECTIVE_DATE = '2026-03-07';
 
@@ -12,7 +13,7 @@ export default function PrivacyScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const s = styles(colors);
+  const s = useMemo(() => styles(colors), [colors]);
 
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
@@ -22,7 +23,10 @@ export default function PrivacyScreen() {
           onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
           style={({ pressed }) => [s.backButton, pressed && { opacity: 0.6 }]}
         >
-          <Text style={s.backText}>{'<'} Back</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <ChevronLeftIcon size={14} color={colors.accent} />
+            <Text style={s.backText}>Back</Text>
+          </View>
         </Pressable>
         <Text style={s.headerTitle}>Privacy Policy</Text>
         <View style={{ width: 60 }} />

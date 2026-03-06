@@ -41,6 +41,7 @@ function WebAdSlot({ size }: { size: AdSize }) {
         className="adsbygoogle"
         style={{ display: 'block' }}
         data-ad-client="ca-pub-5053429721285857"
+        data-ad-slot="REPLACE_WITH_ACTUAL_SLOT_ID" // TODO: Get actual slot ID from AdSense dashboard
         data-ad-format={AD_FORMATS[size]}
         data-full-width-responsive="true"
       />
