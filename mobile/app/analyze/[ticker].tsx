@@ -345,21 +345,23 @@ export default function AnalyzeScreen() {
               >
                 <Text style={s.shareBtnText}>{shareMsg || 'Share'}</Text>
               </Pressable>
-              <Pressable
-                style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
-                onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <StarIcon size={13} color={inWatchlist ? colors.accent : colors.textTertiary} filled={inWatchlist} />
-                  <Text style={[s.saveBtnText, inWatchlist && s.saveBtnTextActive]}>
-                    {inWatchlist ? 'Saved' : 'Save'}
-                  </Text>
-                </View>
-              </Pressable>
             </View>
           </View>
 
-          <Text style={s.tickerLabel}>{ticker_info.ticker}</Text>
+          <View style={s.tickerRow}>
+            <Text style={s.tickerLabel}>{ticker_info.ticker}</Text>
+            <Pressable
+              style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
+              onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <StarIcon size={13} color={inWatchlist ? colors.accent : colors.textTertiary} filled={inWatchlist} />
+                <Text style={[s.saveBtnText, inWatchlist && s.saveBtnTextActive]}>
+                  {inWatchlist ? 'Saved' : 'Save'}
+                </Text>
+              </View>
+            </Pressable>
+          </View>
           <Text style={s.tickerName} numberOfLines={1}>{ticker_info.name}</Text>
 
           <View style={s.priceRow}>
@@ -574,6 +576,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   themeBtnPressed: { backgroundColor: c.bgElevated },
 
+  tickerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   tickerLabel: { color: c.accent, ...typography.label, letterSpacing: 1 },
   tickerName: { color: c.textTertiary, ...typography.labelSm, marginTop: 1, maxWidth: 280, marginBottom: spacing.xs },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
