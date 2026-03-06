@@ -162,13 +162,17 @@ export default function HomeScreen() {
       } catch {}
       setServerOk(ok);
 
-      // Always attempt to load data - even if health failed (might be transient)
+      // Critical data first (signals drives the whole UI)
       loadSignals();
       loadMarketIndices();
       loadRecentSearches();
-      loadEarnings();
-      loadFlips();
-      loadCalendar();
+
+      // Secondary data: defer 1s so critical stuff renders first
+      setTimeout(() => {
+        loadEarnings();
+        loadFlips();
+        loadCalendar();
+      }, 1000);
 
       // If health failed, retry once after 3s
       if (!ok) {
@@ -176,10 +180,6 @@ export default function HomeScreen() {
           try {
             const retry = await api.health();
             setServerOk(retry);
-            if (retry) {
-              loadSignals();
-              loadCalendar();
-            }
           } catch {}
         }, 3000);
       }
@@ -974,14 +974,18 @@ export default function HomeScreen() {
                             <Text style={[s.calDayNum, isToday && { color: colors.warning, fontWeight: '800' }]}>
                               {day}
                             </Text>
-                            {events.length > 0 && (
-                              <View style={s.calDotRow}>
-                                {events.slice(0, 3).map((ev, ei) => (
-                                  <View key={ei} style={[s.calDot, { backgroundColor: typeColors[ev.type] || colors.textMuted }]} />
-                                ))}
-                              </View>
+                            {events.slice(0, 2).map((ev, ei) => (
+                              <Text
+                                key={ei}
+                                style={[s.calEventTag, { color: typeColors[ev.type] || colors.textMuted }]}
+                                numberOfLines={1}
+                              >
+                                {ev.type === 'EARNINGS' ? (ev.ticker || 'EARN') : ev.type}
+                              </Text>
+                            ))}
+                            {events.length > 2 && (
+                              <Text style={s.calMoreTag}>+{events.length - 2}</Text>
                             )}
-                            {hasHigh && <Text style={s.calHighMark}>!</Text>}
                           </>
                         ) : null}
                       </Pressable>
@@ -1276,16 +1280,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   calHeaderText: { color: c.textTertiary, fontSize: 10, fontWeight: '700' },
   calDayCell: {
     flex: 1, alignItems: 'center' as const, justifyContent: 'flex-start' as const,
-    minHeight: 44, paddingVertical: 4, borderRadius: 6,
+    minHeight: 56, paddingVertical: 3, paddingHorizontal: 1, borderRadius: 6,
     borderWidth: 1, borderColor: 'transparent',
   },
   calDayCellToday: {
     backgroundColor: `${c.warning}12`, borderColor: `${c.warning}40`,
   },
   calDayNum: { color: c.textPrimary, fontSize: 12, fontWeight: '600' },
-  calDotRow: { flexDirection: 'row', gap: 2, marginTop: 2 },
+  calEventTag: { fontSize: 7, fontWeight: '800', letterSpacing: 0.2, marginTop: 1, textAlign: 'center' as const },
+  calMoreTag: { color: c.textMuted, fontSize: 7, fontWeight: '600', marginTop: 1 },
   calDot: { width: 5, height: 5, borderRadius: 3 },
-  calHighMark: { color: '#EF4444', fontSize: 8, fontWeight: '800', marginTop: -1 },
   calDetail: {
     marginTop: spacing.sm, backgroundColor: c.bgCard,
     borderRadius: radius.md, padding: spacing.md,
