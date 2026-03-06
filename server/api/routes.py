@@ -549,11 +549,11 @@ _SIGNALS_TTL = 600  # 10 minutes
 
 # In-memory cache for computed indicators (survives within Vercel warm instance)
 _indicator_mem_cache: dict = {}  # {ticker:period -> {indicators, states, current_values, ts}}
-_INDICATOR_MEM_TTL = 300  # 5 minutes
+_INDICATOR_MEM_TTL = 600  # 10 minutes
 
 # In-memory cache for smart probability results
 _smart_prob_cache: dict = {}  # {ticker:period:indicators -> {result, ts}}
-_SMART_PROB_TTL = 300  # 5 minutes
+_SMART_PROB_TTL = 3600  # 1 hour (indicator values barely change intraday)
 
 
 @router.get("/similar/{ticker}")

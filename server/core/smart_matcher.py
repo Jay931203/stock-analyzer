@@ -24,6 +24,7 @@ def calc_adaptive_combined(
     selected_indicators: list[str],
     current_values: dict,
     lookback_days: int = 1200,
+    compute_impact: bool = False,
 ) -> dict:
     """
     Smart combined probability with adaptive bin widening.
@@ -103,9 +104,9 @@ def calc_adaptive_combined(
             prob = _calc_forward_returns(close, mask, label, forward_periods)
             individuals[ind_key] = prob
 
-    # Calculate impact: what happens if we DROP each indicator
+    # Calculate impact: what happens if we DROP each indicator (expensive, optional)
     impact = {}
-    if len(selected_indicators) >= 2:
+    if compute_impact and len(selected_indicators) >= 2:
         for drop_key in selected_indicators:
             remaining = [k for k in selected_indicators if k != drop_key]
             masks = []
@@ -158,25 +159,27 @@ def _compute_series(close, high, low, volume):
 
     cache["ma20_dist"] = (close - cache["sma20"]) / cache["sma20"] * 100
 
-    # Consecutive days
-    daily_ret = close.pct_change()
-    sign = daily_ret.apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
-    consec = pd.Series(0, index=close.index, dtype=int)
+    # Consecutive days (vectorized with numpy for speed)
+    daily_ret = close.pct_change().values
+    n = len(daily_ret)
+    sign_arr = np.sign(daily_ret)
+    sign_arr[np.isnan(sign_arr)] = 0
+    consec_arr = np.zeros(n, dtype=int)
     prev = 0
-    for i in range(len(sign)):
-        s = sign.iloc[i]
+    for i in range(n):
+        s = sign_arr[i]
         if s == 0:
             prev = 0
         elif prev == 0:
-            prev = s
+            prev = int(s)
         elif (prev > 0 and s > 0):
             prev += 1
         elif (prev < 0 and s < 0):
             prev -= 1
         else:
-            prev = s
-        consec.iloc[i] = prev
-    cache["consecutive"] = consec
+            prev = int(s)
+        consec_arr[i] = prev
+    cache["consecutive"] = pd.Series(consec_arr, index=close.index)
 
     # 52-week position
     h252 = close.rolling(window=252).max()

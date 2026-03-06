@@ -250,6 +250,9 @@ export interface CalendarEvent {
   ticker?: string;
   name?: string;
   time_of_day?: string;
+  avg_move?: number;
+  bullish_pct?: number;
+  desc?: string;
 }
 
 export interface SignalsResponse {

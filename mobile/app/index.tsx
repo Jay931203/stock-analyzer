@@ -146,6 +146,7 @@ export default function HomeScreen() {
   const [earnings, setEarnings] = useState<EarningsItem[]>([]);
   const [flips, setFlips] = useState<FlipItem[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [selectedCalDay, setSelectedCalDay] = useState<number | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
@@ -153,15 +154,34 @@ export default function HomeScreen() {
       await initServerUrl();
       await initWatchlist();
       setWatchlist(getWatchlist());
-      const ok = await api.health();
+
+      // Try health check, but load data regardless (with retry)
+      let ok = false;
+      try {
+        ok = await api.health();
+      } catch {}
       setServerOk(ok);
-      if (ok) {
-        loadSignals();
-        loadMarketIndices();
-        loadRecentSearches();
-        loadEarnings();
-        loadFlips();
-        loadCalendar();
+
+      // Always attempt to load data - even if health failed (might be transient)
+      loadSignals();
+      loadMarketIndices();
+      loadRecentSearches();
+      loadEarnings();
+      loadFlips();
+      loadCalendar();
+
+      // If health failed, retry once after 3s
+      if (!ok) {
+        setTimeout(async () => {
+          try {
+            const retry = await api.health();
+            setServerOk(retry);
+            if (retry) {
+              loadSignals();
+              loadCalendar();
+            }
+          } catch {}
+        }, 3000);
       }
     }
     init();
@@ -313,18 +333,41 @@ export default function HomeScreen() {
       .sort((a, b) => (b.volume_ratio ?? 1) - (a.volume_ratio ?? 1));
   }, [signals]);
 
-  // Group calendar events by date for calendar view
-  const calendarDays = useMemo(() => {
-    if (calendarEvents.length === 0) return [];
-    const grouped: Record<string, CalendarEvent[]> = {};
+  // Build calendar grid (current month view)
+  const calendarGrid = useMemo(() => {
+    if (calendarEvents.length === 0) return null;
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayDate = today.getDate();
+    const monthName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month];
+
+    // Map events by day-of-month
+    const eventsByDay: Record<number, CalendarEvent[]> = {};
     for (const ev of calendarEvents) {
-      if (!grouped[ev.date]) grouped[ev.date] = [];
-      grouped[ev.date].push(ev);
+      const d = new Date(ev.date + 'T12:00:00');
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        const day = d.getDate();
+        if (!eventsByDay[day]) eventsByDay[day] = [];
+        eventsByDay[day].push(ev);
+      }
     }
-    return Object.entries(grouped)
-      .map(([date, events]) => ({ date, events, days_until: events[0].days_until }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(0, 14); // Show next 14 distinct days
+
+    // Build weeks
+    const weeks: (number | null)[][] = [];
+    let week: (number | null)[] = Array(firstDay).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      week.push(d);
+      if (week.length === 7) { weeks.push(week); week = []; }
+    }
+    if (week.length > 0) {
+      while (week.length < 7) week.push(null);
+      weeks.push(week);
+    }
+
+    return { year, month, monthName, todayDate, weeks, eventsByDay, daysInMonth };
   }, [calendarEvents]);
 
   const getWinRate = useCallback((s: SignalItem) => {
@@ -885,54 +928,125 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Market Calendar */}
-        {calendarDays.length > 0 && (
+        {/* Market Calendar - Grid */}
+        {calendarGrid && (
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <View style={[s.sectionDot, { backgroundColor: '#F59E0B' }]} />
               <Text style={s.sectionLabel}>MARKET CALENDAR</Text>
-              <Text style={s.sectionCount}>{calendarEvents.length} events</Text>
+              <Text style={s.sectionCount}>{calendarGrid.monthName} {calendarGrid.year}</Text>
             </View>
-            {calendarDays.map(({ date, events, days_until }) => {
-              const d = new Date(date + 'T12:00:00');
-              const dayLabel = days_until === 0 ? 'TODAY' : days_until === 1 ? 'TOMORROW' : days_until === -1 ? 'YESTERDAY' : '';
-              const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
-              const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
-              const isToday = days_until === 0;
-              const isPast = days_until < 0;
-              return (
-                <View key={date} style={[s.calDay, isToday && { borderLeftColor: colors.warning, borderLeftWidth: 3 }, isPast && { opacity: 0.5 }]}>
-                  <View style={s.calDateCol}>
-                    <Text style={[s.calDateNum, isToday && { color: colors.warning }]}>{d.getDate()}</Text>
-                    <Text style={s.calDateWeekday}>{dayLabel || `${weekday}`}</Text>
-                    <Text style={s.calDateMonth}>{month}</Text>
+            <View style={s.calGrid}>
+              {/* Weekday headers */}
+              <View style={s.calWeekRow}>
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                  <View key={i} style={s.calHeaderCell}>
+                    <Text style={[s.calHeaderText, (i === 0 || i === 6) && { color: colors.textMuted }]}>{d}</Text>
                   </View>
-                  <View style={s.calEventsCol}>
-                    {events.map((ev, i) => {
-                      const typeColors: Record<string, string> = {
-                        FOMC: '#EF4444', CPI: '#F59E0B', PPI: '#F97316',
-                        PMI: '#8B5CF6', NFP: '#3B82F6', EARNINGS: '#10B981',
-                      };
-                      const evColor = typeColors[ev.type] || colors.textMuted;
-                      return (
-                        <Pressable
-                          key={`${ev.type}-${i}`}
-                          style={({ pressed }) => [s.calEvent, pressed && ev.ticker && { opacity: 0.7 }]}
-                          onPress={ev.ticker ? () => goToAnalysis(ev.ticker!) : undefined}
-                        >
-                          <View style={[s.calEventDot, { backgroundColor: evColor }]} />
-                          <View style={[s.calEventBadge, { backgroundColor: `${evColor}18` }]}>
-                            <Text style={[s.calEventType, { color: evColor }]}>{ev.type}</Text>
-                          </View>
-                          <Text style={s.calEventLabel} numberOfLines={1}>{ev.label}</Text>
-                          {ev.impact === 'high' && <Text style={s.calEventImpact}>!</Text>}
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                ))}
+              </View>
+              {/* Week rows */}
+              {calendarGrid.weeks.map((week, wi) => (
+                <View key={wi} style={s.calWeekRow}>
+                  {week.map((day, di) => {
+                    const events = day ? (calendarGrid.eventsByDay[day] || []) : [];
+                    const isToday = day === calendarGrid.todayDate;
+                    const isPast = day !== null && day < calendarGrid.todayDate;
+                    const isSelected = day === selectedCalDay;
+                    const hasHigh = events.some(e => e.impact === 'high');
+                    const typeColors: Record<string, string> = {
+                      FOMC: '#EF4444', CPI: '#F59E0B', PPI: '#F97316',
+                      PMI: '#8B5CF6', NFP: '#3B82F6', EARNINGS: '#10B981',
+                    };
+                    return (
+                      <Pressable
+                        key={di}
+                        style={[
+                          s.calDayCell,
+                          isToday && s.calDayCellToday,
+                          isSelected && { backgroundColor: `${colors.accent}20`, borderColor: colors.accent },
+                          isPast && { opacity: 0.4 },
+                        ]}
+                        onPress={day && events.length > 0 ? () => setSelectedCalDay(isSelected ? null : day) : undefined}
+                      >
+                        {day !== null ? (
+                          <>
+                            <Text style={[s.calDayNum, isToday && { color: colors.warning, fontWeight: '800' }]}>
+                              {day}
+                            </Text>
+                            {events.length > 0 && (
+                              <View style={s.calDotRow}>
+                                {events.slice(0, 3).map((ev, ei) => (
+                                  <View key={ei} style={[s.calDot, { backgroundColor: typeColors[ev.type] || colors.textMuted }]} />
+                                ))}
+                              </View>
+                            )}
+                            {hasHigh && <Text style={s.calHighMark}>!</Text>}
+                          </>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
                 </View>
-              );
-            })}
+              ))}
+            </View>
+            {/* Selected day detail */}
+            {selectedCalDay && calendarGrid.eventsByDay[selectedCalDay] && (
+              <View style={s.calDetail}>
+                <Text style={s.calDetailDate}>
+                  {calendarGrid.monthName} {selectedCalDay}
+                </Text>
+                {calendarGrid.eventsByDay[selectedCalDay].map((ev, i) => {
+                  const typeColors: Record<string, string> = {
+                    FOMC: '#EF4444', CPI: '#F59E0B', PPI: '#F97316',
+                    PMI: '#8B5CF6', NFP: '#3B82F6', EARNINGS: '#10B981',
+                  };
+                  const evColor = typeColors[ev.type] || colors.textMuted;
+                  return (
+                    <Pressable
+                      key={`${ev.type}-${i}`}
+                      style={({ pressed }) => [s.calDetailRow, pressed && ev.ticker && { opacity: 0.7 }]}
+                      onPress={ev.ticker ? () => goToAnalysis(ev.ticker!) : undefined}
+                    >
+                      <View style={s.calDetailLeft}>
+                        <View style={[s.calDetailBadge, { backgroundColor: `${evColor}20` }]}>
+                          <Text style={[s.calDetailType, { color: evColor }]}>{ev.type}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.calDetailLabel} numberOfLines={1}>{ev.label}</Text>
+                          {ev.desc ? <Text style={s.calDetailDesc} numberOfLines={2}>{ev.desc}</Text> : null}
+                        </View>
+                      </View>
+                      {(ev.avg_move || ev.bullish_pct) && (
+                        <View style={s.calDetailStats}>
+                          {ev.avg_move ? (
+                            <Text style={s.calDetailMove}>±{ev.avg_move.toFixed(1)}%</Text>
+                          ) : null}
+                          {ev.bullish_pct ? (
+                            <Text style={[s.calDetailBull, { color: ev.bullish_pct >= 50 ? colors.bullish : colors.bearish }]}>
+                              {ev.bullish_pct}% bull
+                            </Text>
+                          ) : null}
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+            {/* Legend */}
+            <View style={s.calLegend}>
+              {[
+                { type: 'FOMC', color: '#EF4444' }, { type: 'CPI', color: '#F59E0B' },
+                { type: 'PPI', color: '#F97316' }, { type: 'PMI', color: '#8B5CF6' },
+                { type: 'NFP', color: '#3B82F6' }, { type: 'EARN', color: '#10B981' },
+              ].map(({ type, color }) => (
+                <View key={type} style={s.calLegendItem}>
+                  <View style={[s.calDot, { backgroundColor: color }]} />
+                  <Text style={s.calLegendText}>{type}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
 
@@ -1150,30 +1264,50 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   flipBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
 
-  // ═══ MARKET CALENDAR ═══
-  calDay: {
-    flexDirection: 'row', gap: 12,
-    paddingVertical: 10, paddingHorizontal: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border,
-    borderLeftWidth: 0, borderLeftColor: 'transparent',
+  // ═══ MARKET CALENDAR (Grid) ═══
+  calGrid: {
+    backgroundColor: c.bgElevated, borderRadius: radius.md,
+    padding: spacing.sm, overflow: 'hidden' as const,
   },
-  calDateCol: {
-    width: 42, alignItems: 'center' as const, justifyContent: 'flex-start' as const,
-    paddingTop: 2,
+  calWeekRow: { flexDirection: 'row' },
+  calHeaderCell: {
+    flex: 1, alignItems: 'center' as const, paddingVertical: 4,
   },
-  calDateNum: { color: c.textPrimary, fontSize: 20, fontWeight: '800', lineHeight: 22 },
-  calDateWeekday: { color: c.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 0.3, marginTop: 1 },
-  calDateMonth: { color: c.textMuted, fontSize: 8, fontWeight: '500' },
-  calEventsCol: { flex: 1, gap: 4 },
-  calEvent: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingVertical: 3,
+  calHeaderText: { color: c.textTertiary, fontSize: 10, fontWeight: '700' },
+  calDayCell: {
+    flex: 1, alignItems: 'center' as const, justifyContent: 'flex-start' as const,
+    minHeight: 44, paddingVertical: 4, borderRadius: 6,
+    borderWidth: 1, borderColor: 'transparent',
   },
-  calEventDot: { width: 5, height: 5, borderRadius: 3 },
-  calEventBadge: {
-    paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3,
+  calDayCellToday: {
+    backgroundColor: `${c.warning}12`, borderColor: `${c.warning}40`,
   },
-  calEventType: { fontSize: 8, fontWeight: '800', letterSpacing: 0.3 },
-  calEventLabel: { color: c.textSecondary, fontSize: 12, fontWeight: '500', flex: 1 },
-  calEventImpact: { color: '#EF4444', fontSize: 12, fontWeight: '800' },
+  calDayNum: { color: c.textPrimary, fontSize: 12, fontWeight: '600' },
+  calDotRow: { flexDirection: 'row', gap: 2, marginTop: 2 },
+  calDot: { width: 5, height: 5, borderRadius: 3 },
+  calHighMark: { color: '#EF4444', fontSize: 8, fontWeight: '800', marginTop: -1 },
+  calDetail: {
+    marginTop: spacing.sm, backgroundColor: c.bgCard,
+    borderRadius: radius.md, padding: spacing.md,
+    borderWidth: 1, borderColor: c.border,
+  },
+  calDetailDate: { color: c.textPrimary, fontSize: 14, fontWeight: '800', marginBottom: 8 },
+  calDetailRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border,
+  },
+  calDetailLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, flex: 1 },
+  calDetailBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 1 },
+  calDetailType: { fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+  calDetailLabel: { color: c.textPrimary, fontSize: 13, fontWeight: '600' },
+  calDetailDesc: { color: c.textMuted, fontSize: 10, fontWeight: '400', marginTop: 2 },
+  calDetailStats: { alignItems: 'flex-end' as const, marginLeft: 8 },
+  calDetailMove: { color: c.textSecondary, fontSize: 13, fontWeight: '800' },
+  calDetailBull: { fontSize: 10, fontWeight: '600', marginTop: 1 },
+  calLegend: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8,
+    paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
+  },
+  calLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  calLegendText: { color: c.textMuted, fontSize: 9, fontWeight: '600' },
 });
