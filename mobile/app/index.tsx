@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
+  Animated,
   ScrollView,
   RefreshControl,
   Share,
@@ -22,6 +23,23 @@ import { spacing, radius, typography, getDirectionColor, type ThemeColors } from
 import { SunIcon, MoonIcon, MonitorIcon, SearchIcon } from '../src/components/ThemeIcons';
 
 const PERIOD_LABELS: Record<string, string> = { '5d': '1W', '20d': '1M', '60d': '3M', '120d': '6M', '252d': '1Y' };
+
+function TopLoadingBar({ color, bgColor }: { color: string; bgColor: string }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(anim, { toValue: 1, duration: 1200, useNativeDriver: false })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  const left = anim.interpolate({ inputRange: [0, 1], outputRange: ['-40%' as any, '100%' as any] });
+  return (
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: bgColor, zIndex: 100, overflow: 'hidden' }}>
+      <Animated.View style={{ position: 'absolute', width: '40%', height: '100%', backgroundColor: color, borderRadius: 2, left }} />
+    </View>
+  );
+}
 
 function getWinRateForPeriod(sig: SignalItem, period: string): number {
   if (period === '5d') return sig.win_rate_5d;
@@ -162,7 +180,6 @@ export default function HomeScreen() {
   const [sortBy, setSortBy] = useState<'win_rate' | 'avg_return' | 'change'>('win_rate');
   const [period, setPeriod] = useState<string>('20d'); // forward return window (global)
   const [dataPeriod, setDataPeriod] = useState<string>('3y'); // backtest data range (global)
-  const [loadingProgress, setLoadingProgress] = useState('');
   const [marketIndices, setMarketIndices] = useState<Record<string, { price: number; change_pct: number }>>({});
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [dismissedSearches, setDismissedSearches] = useState<Set<string>>(new Set());
@@ -276,16 +293,13 @@ export default function HomeScreen() {
   const loadSignals = async (dp?: string) => {
     const usePeriod = dp ?? dataPeriod;
     setSignalsLoading(true);
-    setLoadingProgress(`Loading signals (${usePeriod} data)...`);
     try {
       const res = await api.signals(50, usePeriod);
-      setLoadingProgress('Processing data...');
       let sigs = res.signals;
       const mState = res.market_state ?? '';
       setMarketState(mState);
 
       if ((mState === 'PRE' || mState === 'AFTER') && sigs.length > 0) {
-        setLoadingProgress('Updating live prices...');
         try {
           const tickers = sigs.map(s => s.ticker);
           const live = await api.livePrices(tickers);
@@ -316,7 +330,6 @@ export default function HomeScreen() {
       console.log('Signals load error', e);
     }
     setSignalsLoading(false);
-    setLoadingProgress('');
   };
 
   const loadMarketIndices = async () => {
@@ -471,6 +484,9 @@ export default function HomeScreen() {
 
   return (
     <View style={s.container}>
+      {/* Top loading bar (thin, non-intrusive) */}
+      {signalsLoading && <TopLoadingBar color={colors.accent} bgColor={`${colors.textMuted}15`} />}
+
       {/* Search dropdown overlay (above everything) */}
       {results.length > 0 && (
         <View style={[s.dropdown, { top: insets.top + 100 }]}>
@@ -579,69 +595,51 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* INDEX ETF Cards (QQQ/SPY) */}
-        {(() => {
-          const etfs = signals.filter(s => s.ticker === 'QQQ' || s.ticker === 'SPY');
-          if (etfs.length === 0 && (marketIndices['QQQ'] || marketIndices['SPY'])) {
-            return (
-              <View style={s.indicesRow}>
-                {['QQQ', 'SPY'].map(sym => {
-                  const idx = marketIndices[sym];
-                  if (!idx) return null;
-                  const color = idx.change_pct >= 0 ? colors.bullish : colors.bearish;
-                  return (
-                    <Pressable key={sym} style={s.indexChip} onPress={() => goToAnalysis(sym)}>
-                      <Text style={s.indexLabel}>{sym}</Text>
-                      <Text style={s.indexPrice}>${idx.price.toFixed(2)}</Text>
-                      <Text style={[s.indexChange, { color }]}>
-                        {idx.change_pct >= 0 ? '+' : ''}{idx.change_pct.toFixed(2)}%
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            );
-          }
-          if (etfs.length === 0) return null;
-          return (
-            <View>
-              <View style={s.indexCardsRow}>
-                {etfs.map(sig => {
-                  const liveData = marketIndices[sig.ticker];
-                  const price = liveData?.price ?? sig.price;
-                  const changePct = liveData?.change_pct ?? sig.change_pct;
-                  const wr = getWinRateForPeriod(sig, period);
-                  const avgRet = getAvgReturnForPeriod(sig, period);
-                  const color = wr >= 50 ? colors.bullish : colors.bearish;
-                  const name = sig.ticker === 'QQQ' ? 'Invesco QQQ' : sig.ticker === 'SPY' ? 'S&P 500 ETF' : sig.name;
-                  return (
-                    <Pressable
-                      key={sig.ticker}
-                      style={({ pressed }) => [
-                        s.indexCard,
-                        pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
-                      ]}
-                      onPress={() => goToAnalysis(sig.ticker)}
-                    >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <View>
-                          <Text style={s.indexCardTicker}>{sig.ticker}</Text>
-                          <Text style={s.indexCardName}>{name}</Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                          <Text style={s.indexCardPrice}>${price.toFixed(2)}</Text>
-                          <Text style={[s.indexCardChange, { color: getDirectionColor(changePct, colors) }]}>
-                            {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%
-                          </Text>
-                        </View>
-                      </View>
+        {/* INDEX ETF Cards (QQQ/SPY) - always show both */}
+        {(signals.length > 0 || marketIndices['QQQ'] || marketIndices['SPY']) && (
+          <View style={s.indexCardsRow}>
+            {['QQQ', 'SPY'].map(sym => {
+              const sig = signals.find(s => s.ticker === sym);
+              const live = marketIndices[sym];
+              const price = live?.price ?? sig?.price;
+              const changePct = live?.change_pct ?? sig?.change_pct;
+              if (!price && !sig) return null;
+              const wr = sig ? getWinRateForPeriod(sig, period) : null;
+              const avgRet = sig ? getAvgReturnForPeriod(sig, period) : null;
+              const color = wr !== null ? (wr >= 50 ? colors.bullish : colors.bearish) : colors.textMuted;
+              const name = sym === 'QQQ' ? 'Invesco QQQ' : 'S&P 500 ETF';
+              return (
+                <Pressable
+                  key={sym}
+                  style={({ pressed }) => [
+                    s.indexCard,
+                    pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
+                  ]}
+                  onPress={() => goToAnalysis(sym)}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View>
+                      <Text style={s.indexCardTicker}>{sym}</Text>
+                      <Text style={s.indexCardName}>{name}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      {price ? <Text style={s.indexCardPrice}>${price.toFixed(2)}</Text> : null}
+                      {changePct !== undefined ? (
+                        <Text style={[s.indexCardChange, { color: getDirectionColor(changePct, colors) }]}>
+                          {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                  {wr !== null && (
+                    <>
                       <View style={[s.indexCardDivider, { backgroundColor: `${color}30` }]} />
                       <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
                         <View style={{ alignItems: 'center' }}>
                           <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
                           <Text style={s.indexCardLabel}>Win Rate</Text>
                         </View>
-                        {avgRet !== undefined && avgRet !== 0 && (
+                        {avgRet !== null && avgRet !== 0 && (
                           <View style={{ alignItems: 'center' }}>
                             <Text style={[s.indexCardAvg, { color: avgRet >= 0 ? colors.bullish : colors.bearish }]}>
                               {avgRet >= 0 ? '+' : ''}{avgRet.toFixed(1)}%
@@ -649,18 +647,20 @@ export default function HomeScreen() {
                             <Text style={s.indexCardLabel}>Avg Return</Text>
                           </View>
                         )}
-                        <View style={{ alignItems: 'center' }}>
-                          <Text style={s.indexCardCases}>{sig.occurrences}</Text>
-                          <Text style={s.indexCardLabel}>Cases</Text>
-                        </View>
+                        {sig && (
+                          <View style={{ alignItems: 'center' }}>
+                            <Text style={s.indexCardCases}>{sig.occurrences}</Text>
+                            <Text style={s.indexCardLabel}>Cases</Text>
+                          </View>
+                        )}
                       </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          );
-        })()}
+                    </>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {/* Market Regime Bar */}
         {marketRegime && (
@@ -811,20 +811,6 @@ export default function HomeScreen() {
                 </Text>
               </Pressable>
             ))}
-          </View>
-        )}
-
-        {/* Loading progress */}
-        {signalsLoading && signals.length === 0 && (
-          <View style={s.section}>
-            <View style={s.loadingBox}>
-              <ActivityIndicator size="small" color={colors.accent} />
-              <Text style={s.loadingText}>{loadingProgress || 'Loading...'}</Text>
-              <View style={s.loadingBar}>
-                <View style={[s.loadingBarFill, { backgroundColor: colors.accent }]} />
-              </View>
-              <Text style={s.loadingHint}>First load may take longer if data is being refreshed</Text>
-            </View>
           </View>
         )}
 
@@ -1236,16 +1222,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   indexCardAvg: { fontSize: 14, fontWeight: '700' },
   indexCardCases: { color: c.textSecondary, fontSize: 14, fontWeight: '600' },
   indexCardLabel: { color: c.textMuted, fontSize: 8, fontWeight: '600', letterSpacing: 0.3, marginTop: 2 },
-  indicesRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  indexChip: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: c.bgElevated, borderRadius: radius.md,
-    paddingHorizontal: 10, paddingVertical: 8,
-  },
-  indexLabel: { color: c.textMuted, fontSize: 11, fontWeight: '700' },
-  indexPrice: { color: c.textPrimary, fontSize: 12, fontWeight: '600' },
-  indexChange: { fontSize: 11, fontWeight: '700' },
-
   // ═══ SEARCHED ═══
   searchedChipWrap: { flexDirection: 'row', alignItems: 'center', marginRight: 6 },
   searchedChip: {
@@ -1322,21 +1298,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sortPillActive: { backgroundColor: c.accentDim, borderColor: c.accent },
   sortPillText: { color: c.textMuted, fontSize: 10, fontWeight: '500' },
   sortPillTextActive: { color: c.accent, fontWeight: '700' },
-
-  // ═══ LOADING PROGRESS ═══
-  loadingBox: {
-    backgroundColor: c.bgElevated, borderRadius: radius.md,
-    padding: spacing.lg, alignItems: 'center' as const, gap: 10,
-  },
-  loadingText: { color: c.textPrimary, fontSize: 13, fontWeight: '600' },
-  loadingBar: {
-    width: '80%' as any, height: 4, borderRadius: 2,
-    backgroundColor: `${c.textMuted}20`, overflow: 'hidden' as const,
-  },
-  loadingBarFill: {
-    width: '60%' as any, height: '100%', borderRadius: 2,
-  },
-  loadingHint: { color: c.textMuted, fontSize: 10, textAlign: 'center' as const },
 
   scanInfo: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, alignItems: 'center' },
   scanInfoText: { color: c.textMuted, fontSize: 10, letterSpacing: 0.3 },
