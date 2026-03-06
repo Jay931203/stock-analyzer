@@ -223,19 +223,14 @@ export default function HomeScreen() {
     init();
 
     // Show app install banner on web (check if not already dismissed)
-    let removeInstallListener: (() => void) | undefined;
     if (Platform.OS === 'web') {
       AsyncStorage.getItem('dismiss_install_banner').then(v => {
         if (!v) setShowInstallBanner(true);
       }).catch(() => {});
-      // Capture PWA install prompt
-      const handler = (e: any) => { e.preventDefault(); (window as any).__pwaInstallPrompt = e; };
-      window.addEventListener('beforeinstallprompt', handler);
-      removeInstallListener = () => window.removeEventListener('beforeinstallprompt', handler);
     }
 
     const unsub = subscribe(() => setWatchlist(getWatchlist()));
-    return () => { unsub(); removeInstallListener?.(); };
+    return unsub;
   }, []);
 
   useFocusEffect(
@@ -790,31 +785,11 @@ export default function HomeScreen() {
         {showInstallBanner && (
           <View style={[s.installBanner, { backgroundColor: `${colors.accent}10`, borderColor: `${colors.accent}30` }]}>
             <View style={{ flex: 1 }}>
-              <Text style={[s.installBannerTitle, { color: colors.textPrimary }]}>Get the App</Text>
-              <Text style={[s.installBannerSub, { color: colors.textSecondary }]}>Faster experience with push notifications</Text>
+              <Text style={[s.installBannerTitle, { color: colors.textPrimary }]}>Tip</Text>
+              <Text style={[s.installBannerSub, { color: colors.textSecondary }]}>
+                {Platform.OS === 'web' ? 'Add to home screen from browser menu for quick access' : 'Full app coming soon'}
+              </Text>
             </View>
-            <Pressable
-              style={[s.installBannerBtn, { backgroundColor: colors.accent }]}
-              onPress={async () => {
-                // Try PWA install prompt first, fallback to app store
-                const deferredPrompt = (window as any).__pwaInstallPrompt;
-                if (deferredPrompt) {
-                  deferredPrompt.prompt();
-                  const { outcome } = await deferredPrompt.userChoice;
-                  if (outcome === 'accepted') {
-                    setShowInstallBanner(false);
-                    AsyncStorage.setItem('dismiss_install_banner', '1').catch(() => {});
-                  }
-                  (window as any).__pwaInstallPrompt = null;
-                } else {
-                  // No PWA prompt available - just dismiss
-                  setShowInstallBanner(false);
-                  AsyncStorage.setItem('dismiss_install_banner', '1').catch(() => {});
-                }
-              }}
-            >
-              <Text style={s.installBannerBtnText}>Install</Text>
-            </Pressable>
             <Pressable
               onPress={() => {
                 setShowInstallBanner(false);
@@ -1250,15 +1225,6 @@ export default function HomeScreen() {
                 })}
               </View>
             )}
-            {/* Legend */}
-            <View style={s.calLegend}>
-              {Object.entries(CALENDAR_TYPE_COLORS).map(([key, color]) => ({ type: key === 'EARNINGS' ? 'EARN' : key, color })).map(({ type, color }) => (
-                <View key={type} style={s.calLegendItem}>
-                  <View style={[s.calDot, { backgroundColor: color }]} />
-                  <Text style={s.calLegendText}>{type}</Text>
-                </View>
-              ))}
-            </View>
           </View>
         )}
 
@@ -1327,8 +1293,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderColor: c.border,
   },
   authBtnLogin: {
-    borderColor: `${c.accent}50`,
-    backgroundColor: `${c.accent}10`,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    width: 'auto' as any,
+    height: 'auto' as any,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   authBtnText: { color: c.textPrimary, fontSize: 11, fontWeight: '700' as const },
 
@@ -1360,10 +1330,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   installBannerTitle: { fontSize: 13, fontWeight: '700' },
   installBannerSub: { fontSize: 10, marginTop: 1 },
-  installBannerBtn: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.sm,
-  },
-  installBannerBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   installBannerClose: { fontSize: 14, padding: 4 },
 
   summaryRow: { flexDirection: 'row', gap: 6 },
@@ -1541,7 +1507,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   calDayNum: { color: c.textPrimary, fontSize: 14, fontWeight: '600' },
   calEventTag: { fontSize: 10, fontWeight: '800', letterSpacing: 0.2, marginTop: 1, textAlign: 'center' as const },
   calMoreTag: { color: c.textMuted, fontSize: 9, fontWeight: '600', marginTop: 1 },
-  calDot: { width: 5, height: 5, borderRadius: 3 },
   calDetail: {
     marginTop: spacing.sm, backgroundColor: c.bgCard,
     borderRadius: radius.md, padding: spacing.md,
@@ -1560,12 +1525,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   calDetailStats: { alignItems: 'flex-end' as const, marginLeft: 8 },
   calDetailMove: { color: c.textSecondary, fontSize: 13, fontWeight: '800' },
   calDetailBull: { fontSize: 10, fontWeight: '600', marginTop: 1 },
-  calLegend: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8,
-    paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
-  },
-  calLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  calLegendText: { color: c.textMuted, fontSize: 10, fontWeight: '600' },
 
   disclaimer: {
     paddingHorizontal: spacing.lg,
