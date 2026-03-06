@@ -1200,10 +1200,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   themeBtn: { padding: 6, borderRadius: 6 },
   themeBtnPressed: { backgroundColor: c.bgElevated },
   shareTopBtn: {
-    paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
   },
-  shareTopBtnText: { color: c.textSecondary, fontSize: 8, fontWeight: '700' },
+  shareTopBtnText: { color: c.textSecondary, fontSize: 10, fontWeight: '600' },
 
   titleRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
