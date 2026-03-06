@@ -146,6 +146,11 @@ function _makeCardStyles(c: ThemeColors) {
 
 const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU', 'TNA', 'FNGU']);
 
+const CALENDAR_TYPE_COLORS: Record<string, string> = {
+  FOMC: '#EF4444', CPI: '#F59E0B', PPI: '#F97316',
+  PMI: '#8B5CF6', NFP: '#3B82F6', EARNINGS: '#10B981',
+};
+
 export default function HomeScreen() {
   const { colors, isDark, themeMode, cycleTheme } = useTheme();
   const { user, signInWithGoogle, signOut } = useAuth();
@@ -175,6 +180,7 @@ export default function HomeScreen() {
   const [flips, setFlips] = useState<FlipItem[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [selectedCalDay, setSelectedCalDay] = useState<number | null>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
@@ -193,30 +199,43 @@ export default function HomeScreen() {
         if (savedWp && ['5d', '20d', '60d', '120d', '252d'].includes(savedWp)) setPeriod(savedWp);
       } catch {}
 
-      // Try health check, but load data regardless (with retry)
-      let ok = false;
-      try {
-        ok = await api.health();
-      } catch {}
-      setServerOk(ok);
-
-      // signals includes calendar + flips data bundled together
+      // Load data immediately, health check in parallel
       loadSignals();
       loadMarketIndices();
       loadRecentSearches();
 
-      // If health failed, retry once after 3s
+      // Health check with aggressive retry
+      const tryHealth = async () => {
+        try { return await api.health(); } catch { return false; }
+      };
+      let ok = await tryHealth();
+      setServerOk(ok);
       if (!ok) {
-        setTimeout(async () => {
-          try {
-            const retry = await api.health();
-            setServerOk(retry);
-          } catch {}
-        }, 3000);
+        // Retry at 2s and 5s
+        for (const delay of [2000, 5000]) {
+          await new Promise(r => setTimeout(r, delay));
+          ok = await tryHealth();
+          setServerOk(ok);
+          if (ok) break;
+        }
       }
     }
     init();
-    return subscribe(() => setWatchlist(getWatchlist()));
+
+    // Show app install banner on web (check if not already dismissed)
+    let removeInstallListener: (() => void) | undefined;
+    if (Platform.OS === 'web') {
+      AsyncStorage.getItem('dismiss_install_banner').then(v => {
+        if (!v) setShowInstallBanner(true);
+      }).catch(() => {});
+      // Capture PWA install prompt
+      const handler = (e: any) => { e.preventDefault(); (window as any).__pwaInstallPrompt = e; };
+      window.addEventListener('beforeinstallprompt', handler);
+      removeInstallListener = () => window.removeEventListener('beforeinstallprompt', handler);
+    }
+
+    const unsub = subscribe(() => setWatchlist(getWatchlist()));
+    return () => { unsub(); removeInstallListener?.(); };
   }, []);
 
   useFocusEffect(
@@ -338,7 +357,13 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadSignals(undefined, true), loadMarketIndices(), loadRecentSearches()]);
+    const [, , , healthOk] = await Promise.all([
+      loadSignals(undefined, true),
+      loadMarketIndices(),
+      loadRecentSearches(),
+      api.health().catch(() => false),
+    ]);
+    setServerOk(healthOk);
     setRefreshing(false);
   };
 
@@ -468,7 +493,7 @@ export default function HomeScreen() {
     if (sortBy === 'avg_return') return items.sort((a, b) => getAvgRet(a) - getAvgRet(b));
     if (sortBy === 'change') return items.sort((a, b) => a.change_pct - b.change_pct);
     return items.sort((a, b) => getWinRate(a) - getWinRate(b));
-  }, [filtered, sortBy, getWinRate]);
+  }, [filtered, sortBy, getWinRate, getAvgRet]);
 
   return (
     <View style={s.container}>
@@ -526,13 +551,10 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
       >
       <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
-        {/* Top bar */}
+        {/* Top bar - clean: status | title | actions */}
         <View style={s.topBar}>
           <View style={s.topBarLeft}>
             <View style={[s.statusDot, { backgroundColor: serverOk === true ? colors.success : serverOk === false ? colors.error : colors.textMuted }]} />
-            <Text style={s.statusText}>
-              {serverOk === true ? 'Connected' : serverOk === false ? 'Offline' : '...'}
-            </Text>
             {marketState ? (
               <View style={[s.marketBadge, {
                 backgroundColor: marketState === 'OPEN' ? `${colors.bullish}20` :
@@ -549,24 +571,8 @@ export default function HomeScreen() {
               </View>
             ) : null}
           </View>
+          <Text style={s.title}>Stock Scanner</Text>
           <View style={s.topBarRight}>
-            <Text style={s.miniLabel}>Backtest</Text>
-            <View style={s.miniPillGroup}>
-              {(['1y', '3y', '5y', '10y'] as const).map(dp => (
-                <Pressable key={dp} style={[s.miniPill, dataPeriod === dp && s.miniPillActiveBlue]} onPress={() => changeDataPeriod(dp)}>
-                  <Text style={[s.miniPillText, dataPeriod === dp && s.miniPillTextActive]}>{dp.toUpperCase()}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <View style={s.miniDivider} />
-            <Text style={s.miniLabel}>Window</Text>
-            <View style={s.miniPillGroup}>
-              {(['5d', '20d', '60d', '120d', '252d'] as const).map(p => (
-                <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveOrange]} onPress={() => { setPeriod(p); AsyncStorage.setItem('window_period', p).catch(() => {}); }}>
-                  <Text style={[s.miniPillText, period === p && s.miniPillTextActive]}>{PERIOD_LABELS[p]}</Text>
-                </Pressable>
-              ))}
-            </View>
             <Pressable
               onPress={cycleTheme}
               style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}
@@ -580,12 +586,6 @@ export default function HomeScreen() {
               ) : (
                 <MonitorIcon size={16} color={colors.textSecondary} />
               )}
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [s.shareTopBtn, pressed && { opacity: 0.7 }]}
-              onPress={shareMarketSummary}
-            >
-              <Text style={s.shareTopBtnText}>{shareMsg || 'Share'}</Text>
             </Pressable>
             {user ? (
               <Pressable
@@ -607,20 +607,49 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* App Name + Summary */}
-        <View style={s.titleRow}>
-          <Text style={s.title}>Stock Scanner</Text>
-          {signals.length > 0 && (
-            <View style={s.summaryRow}>
-              <View style={[s.summaryBadge, { backgroundColor: `${colors.bullish}15` }]}>
-                <View style={[s.summaryDot, { backgroundColor: colors.bullish }]} />
-                <Text style={[s.summaryText, { color: colors.bullish }]}>{bullish.length}</Text>
-              </View>
-              <View style={[s.summaryBadge, { backgroundColor: `${colors.bearish}15` }]}>
-                <View style={[s.summaryDot, { backgroundColor: colors.bearish }]} />
-                <Text style={[s.summaryText, { color: colors.bearish }]}>{bearish.length}</Text>
-              </View>
+        {/* Period controls row - right below title */}
+        <View style={s.periodRow}>
+          <View style={s.periodGroup}>
+            <Text style={s.periodLabel}>Backtest</Text>
+            <View style={s.miniPillGroup}>
+              {(['1y', '3y', '5y', '10y'] as const).map(dp => (
+                <Pressable key={dp} style={[s.miniPill, dataPeriod === dp && s.miniPillActiveBlue]} onPress={() => changeDataPeriod(dp)}>
+                  <Text style={[s.miniPillText, dataPeriod === dp && s.miniPillTextActive]}>{dp.toUpperCase()}</Text>
+                </Pressable>
+              ))}
             </View>
+          </View>
+          <View style={s.miniDivider} />
+          <View style={s.periodGroup}>
+            <Text style={s.periodLabel}>Window</Text>
+            <View style={s.miniPillGroup}>
+              {(['5d', '20d', '60d', '120d', '252d'] as const).map(p => (
+                <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveOrange]} onPress={() => { setPeriod(p); AsyncStorage.setItem('window_period', p).catch(() => {}); }}>
+                  <Text style={[s.miniPillText, period === p && s.miniPillTextActive]}>{PERIOD_LABELS[p]}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          {signals.length > 0 && (
+            <>
+              <View style={s.miniDivider} />
+              <View style={s.summaryRow}>
+                <View style={[s.summaryBadge, { backgroundColor: `${colors.bullish}15` }]}>
+                  <View style={[s.summaryDot, { backgroundColor: colors.bullish }]} />
+                  <Text style={[s.summaryText, { color: colors.bullish }]}>{bullish.length}</Text>
+                </View>
+                <View style={[s.summaryBadge, { backgroundColor: `${colors.bearish}15` }]}>
+                  <View style={[s.summaryDot, { backgroundColor: colors.bearish }]} />
+                  <Text style={[s.summaryText, { color: colors.bearish }]}>{bearish.length}</Text>
+                </View>
+              </View>
+              <Pressable
+                style={({ pressed }) => [s.shareTopBtn, pressed && { opacity: 0.7 }]}
+                onPress={shareMarketSummary}
+              >
+                <Text style={s.shareTopBtnText}>{shareMsg || 'Share'}</Text>
+              </Pressable>
+            </>
           )}
         </View>
 
@@ -742,6 +771,47 @@ export default function HomeScreen() {
         </View>
       </View>
 
+        {/* App Install Banner (web only) */}
+        {showInstallBanner && (
+          <View style={[s.installBanner, { backgroundColor: `${colors.accent}10`, borderColor: `${colors.accent}30` }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.installBannerTitle, { color: colors.textPrimary }]}>Get the App</Text>
+              <Text style={[s.installBannerSub, { color: colors.textSecondary }]}>Faster experience with push notifications</Text>
+            </View>
+            <Pressable
+              style={[s.installBannerBtn, { backgroundColor: colors.accent }]}
+              onPress={async () => {
+                // Try PWA install prompt first, fallback to app store
+                const deferredPrompt = (window as any).__pwaInstallPrompt;
+                if (deferredPrompt) {
+                  deferredPrompt.prompt();
+                  const { outcome } = await deferredPrompt.userChoice;
+                  if (outcome === 'accepted') {
+                    setShowInstallBanner(false);
+                    AsyncStorage.setItem('dismiss_install_banner', '1').catch(() => {});
+                  }
+                  (window as any).__pwaInstallPrompt = null;
+                } else {
+                  // No PWA prompt available - just dismiss
+                  setShowInstallBanner(false);
+                  AsyncStorage.setItem('dismiss_install_banner', '1').catch(() => {});
+                }
+              }}
+            >
+              <Text style={s.installBannerBtnText}>Install</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setShowInstallBanner(false);
+                AsyncStorage.setItem('dismiss_install_banner', '1').catch(() => {});
+              }}
+              hitSlop={8}
+            >
+              <Text style={[s.installBannerClose, { color: colors.textMuted }]}>{'\u2715'}</Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* Recently Searched + Saved */}
         {(() => {
           const visible = recentSearches.filter(t => !dismissedSearches.has(t));
@@ -807,7 +877,6 @@ export default function HomeScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {sectors.map(sec => {
                 const isActive = (activeSector ?? 'All') === sec;
-                const momentum = sectorMomentum[sec];
                 return (
                   <Pressable
                     key={sec}
@@ -1087,11 +1156,7 @@ export default function HomeScreen() {
                     const isToday = day === calendarGrid.todayDate;
                     const isPast = day !== null && day < calendarGrid.todayDate;
                     const isSelected = day === selectedCalDay;
-                    const hasHigh = events.some(e => e.impact === 'high');
-                    const typeColors: Record<string, string> = {
-                      FOMC: '#EF4444', CPI: '#F59E0B', PPI: '#F97316',
-                      PMI: '#8B5CF6', NFP: '#3B82F6', EARNINGS: '#10B981',
-                    };
+                    const typeColors = CALENDAR_TYPE_COLORS;
                     return (
                       <Pressable
                         key={di}
@@ -1135,11 +1200,7 @@ export default function HomeScreen() {
                   {calendarGrid.monthName} {selectedCalDay}
                 </Text>
                 {calendarGrid.eventsByDay[selectedCalDay].map((ev, i) => {
-                  const typeColors: Record<string, string> = {
-                    FOMC: '#EF4444', CPI: '#F59E0B', PPI: '#F97316',
-                    PMI: '#8B5CF6', NFP: '#3B82F6', EARNINGS: '#10B981',
-                  };
-                  const evColor = typeColors[ev.type] || colors.textMuted;
+                  const evColor = CALENDAR_TYPE_COLORS[ev.type] || colors.textMuted;
                   return (
                     <Pressable
                       key={`${ev.type}-${i}`}
@@ -1174,11 +1235,7 @@ export default function HomeScreen() {
             )}
             {/* Legend */}
             <View style={s.calLegend}>
-              {[
-                { type: 'FOMC', color: '#EF4444' }, { type: 'CPI', color: '#F59E0B' },
-                { type: 'PPI', color: '#F97316' }, { type: 'PMI', color: '#8B5CF6' },
-                { type: 'NFP', color: '#3B82F6' }, { type: 'EARN', color: '#10B981' },
-              ].map(({ type, color }) => (
+              {Object.entries(CALENDAR_TYPE_COLORS).map(([key, color]) => ({ type: key === 'EARNINGS' ? 'EARN' : key, color })).map(({ type, color }) => (
                 <View key={type} style={s.calLegendItem}>
                   <View style={[s.calDot, { backgroundColor: color }]} />
                   <Text style={s.calLegendText}>{type}</Text>
@@ -1233,25 +1290,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   topBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusText: { color: c.textTertiary, fontSize: 10, fontWeight: '500' },
-  marketBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 },
+  marketBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   marketBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  miniLabel: { color: c.textMuted, fontSize: 7, fontWeight: '800', letterSpacing: 0.3 },
-  miniPillGroup: { flexDirection: 'row', gap: 1 },
-  miniPill: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 3 },
-  miniPillActiveBlue: { backgroundColor: c.accent },
-  miniPillActiveOrange: { backgroundColor: c.warning },
-  miniPillText: { color: c.textMuted, fontSize: 8, fontWeight: '600' },
-  miniPillTextActive: { color: '#fff', fontWeight: '800' },
-  miniDivider: { width: 1, height: 12, backgroundColor: c.border },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  title: { color: c.textPrimary, fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
   themeBtn: { padding: 6, borderRadius: 6 },
   themeBtnPressed: { backgroundColor: c.bgElevated },
-  shareTopBtn: {
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
-    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
-  },
-  shareTopBtnText: { color: c.textSecondary, fontSize: 10, fontWeight: '600' },
   authBtn: {
     width: 28,
     height: 28,
@@ -1268,11 +1312,39 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   authBtnText: { color: c.textPrimary, fontSize: 11, fontWeight: '700' as const },
 
-  titleRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 2,
+  // Period controls row
+  periodRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingTop: 6, paddingBottom: 2, flexWrap: 'wrap',
   },
-  title: { color: c.textPrimary, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  periodGroup: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  periodLabel: { color: c.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
+  miniPillGroup: { flexDirection: 'row', gap: 1 },
+  miniPill: { paddingHorizontal: 5, paddingVertical: 3, borderRadius: 4 },
+  miniPillActiveBlue: { backgroundColor: c.accent },
+  miniPillActiveOrange: { backgroundColor: c.warning },
+  miniPillText: { color: c.textMuted, fontSize: 9, fontWeight: '600' },
+  miniPillTextActive: { color: '#fff', fontWeight: '800' },
+  miniDivider: { width: 1, height: 14, backgroundColor: c.border },
+  shareTopBtn: {
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
+    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
+  },
+  shareTopBtnText: { color: c.textSecondary, fontSize: 10, fontWeight: '600' },
+
+  // Install banner
+  installBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: spacing.lg, marginTop: spacing.md,
+    padding: spacing.md, borderRadius: radius.md, borderWidth: 1,
+  },
+  installBannerTitle: { fontSize: 13, fontWeight: '700' },
+  installBannerSub: { fontSize: 10, marginTop: 1 },
+  installBannerBtn: {
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.sm,
+  },
+  installBannerBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  installBannerClose: { fontSize: 14, padding: 4 },
 
   summaryRow: { flexDirection: 'row', gap: 6 },
   summaryBadge: {
@@ -1310,7 +1382,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   searchedDismissText: { color: c.textMuted, fontSize: 10 },
 
   // ═══ SEARCH ═══
-  searchWrapper: { zIndex: 10, position: 'relative', marginTop: 10 },
   searchContainer: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: c.bgElevated, borderRadius: radius.lg,
