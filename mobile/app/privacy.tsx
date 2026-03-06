@@ -19,7 +19,7 @@ export default function PrivacyScreen() {
       {/* Header */}
       <View style={s.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
           style={({ pressed }) => [s.backButton, pressed && { opacity: 0.6 }]}
         >
           <Text style={s.backText}>{'<'} Back</Text>

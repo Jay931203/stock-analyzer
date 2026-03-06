@@ -1,6 +1,7 @@
 """OG Image generation and social sharing endpoints."""
 
 import html
+import json
 import re
 
 from fastapi import APIRouter, Request
@@ -323,7 +324,7 @@ async def share_page(ticker: str, request: Request):
 
 <!-- Redirect real users to the app -->
 <meta http-equiv="refresh" content="0;url=/analyze/{ticker_esc}">
-<script>window.location.replace("/analyze/{ticker_esc}");</script>
+<script>window.location.replace({json.dumps(f"/analyze/{ticker_esc}")});</script>
 
 <style>
   body {{

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Platform,
 } from 'react-native';
@@ -20,7 +20,7 @@ export default function TimeMachinePage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const s = makeStyles(colors);
+  const s = useMemo(() => makeStyles(colors), [colors]);
 
   const [range, setRange] = useState<TimeMachineRange | null>(null);
   const [result, setResult] = useState<TimeMachineResponse | null>(null);
@@ -161,7 +161,7 @@ export default function TimeMachinePage() {
 
                 <Text style={s.signalPrice}>${result.price_at_date.toFixed(2)}</Text>
                 <Text style={s.signalWinRate}>
-                  예측 승률: {result.signal.win_rate_20d.toFixed(0)}% (1개월 기준)
+                  예측 승률: {result.signal.win_rate_20d != null ? `${result.signal.win_rate_20d.toFixed(0)}%` : 'N/A'} (1개월 기준)
                 </Text>
                 <Text style={s.signalOcc}>
                   과거 유사 상황 {result.signal.occurrences}번 발견
@@ -190,21 +190,23 @@ export default function TimeMachinePage() {
             </View>
 
             {/* Accuracy */}
-            <View style={s.section}>
-              <View style={[s.accuracyCard, {
-                backgroundColor: result.accuracy.was_correct ? `${colors.bullish}10` : `${colors.bearish}10`,
-                borderColor: result.accuracy.was_correct ? `${colors.bullish}30` : `${colors.bearish}30`,
-              }]}>
-                <Text style={[s.accuracyTitle, {
-                  color: result.accuracy.was_correct ? colors.bullish : colors.bearish,
+            {result.accuracy && (
+              <View style={s.section}>
+                <View style={[s.accuracyCard, {
+                  backgroundColor: result.accuracy.was_correct ? `${colors.bullish}10` : `${colors.bearish}10`,
+                  borderColor: result.accuracy.was_correct ? `${colors.bullish}30` : `${colors.bearish}30`,
                 }]}>
-                  {result.accuracy.was_correct ? '적중!' : '미적중'}
-                </Text>
-                <Text style={s.accuracyDetail}>
-                  예측: {result.accuracy.predicted_direction === 'bullish' ? '상승' : '하락'}  →  실제: {result.accuracy.actual_direction === 'up' ? '상승' : '하락'}
-                </Text>
+                  <Text style={[s.accuracyTitle, {
+                    color: result.accuracy.was_correct ? colors.bullish : colors.bearish,
+                  }]}>
+                    {result.accuracy.was_correct ? '적중!' : '미적중'}
+                  </Text>
+                  <Text style={s.accuracyDetail}>
+                    예측: {result.accuracy.predicted_direction === 'bullish' ? '상승' : '하락'}  →  실제: {result.accuracy.actual_direction === 'up' ? '상승' : '하락'}
+                  </Text>
+                </View>
               </View>
-            </View>
+            )}
 
             {/* Highlights */}
             {result.highlights.length > 0 && (

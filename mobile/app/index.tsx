@@ -142,6 +142,8 @@ function _makeCardStyles(c: ThemeColors) {
   });
 }
 
+const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU', 'TNA', 'FNGU']);
+
 export default function HomeScreen() {
   const { colors, isDark, themeMode, cycleTheme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -350,8 +352,6 @@ export default function HomeScreen() {
 
   const goToAnalysis = (ticker: string) => router.push(`/analyze/${ticker}`);
   const handleSubmit = () => { const t = query.trim().toUpperCase(); if (t) { setQuery(''); setResults([]); goToAnalysis(t); } };
-
-  const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU', 'TNA', 'FNGU']);
 
   // Market Regime: bullish vs bearish ratio across all non-leveraged signals (period-aware)
   const marketRegime = useMemo(() => {

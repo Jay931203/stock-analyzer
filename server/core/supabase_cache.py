@@ -6,6 +6,7 @@ import json
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
+from urllib.parse import quote as _url_quote
 
 try:
     from dotenv import load_dotenv
@@ -164,7 +165,7 @@ def read_cached_analysis(ticker: str) -> dict | None:
         return None
 
     try:
-        safe_ticker = ticker.upper()
+        safe_ticker = _url_quote(ticker.upper(), safe='')
         url = _rest_url(f"analysis_cache?ticker=eq.{safe_ticker}&select=data,updated_at")
         req = urllib.request.Request(url, headers=_headers())
         with urllib.request.urlopen(req, timeout=10) as resp:

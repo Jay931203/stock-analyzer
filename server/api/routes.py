@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone, timedelta
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Header, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 
 _IS_VERCEL = os.environ.get("VERCEL") is not None
@@ -47,12 +47,25 @@ from .schemas import (
 
 router = APIRouter(prefix="/api")
 
+import re as _re
+
+_TICKER_RE = _re.compile(r"^[A-Z0-9]{1,5}(-[A-Z])?$")
+
+
+def _validate_ticker(ticker: str) -> str:
+    """Validate and normalize a ticker symbol. Raises HTTPException on invalid input."""
+    t = ticker.upper().strip()
+    if not _TICKER_RE.match(t):
+        raise HTTPException(status_code=400, detail=f"Invalid ticker format: {ticker}")
+    return t
+
 
 @router.get("/analyze/{ticker}", response_model=AnalysisResponse)
 async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period: str = "10y"):
     """Full analysis: all indicators + historical probabilities.
     Always returns cached data instantly if available. Recomputes in background if stale.
     """
+    ticker = _validate_ticker(ticker)
     # ── Always return cache if available (even if stale) ──
     cached = read_cached_analysis(ticker)
     if cached and cached.get("data"):
@@ -303,6 +316,7 @@ async def get_presets():
 
 @router.get("/presets/{preset_id}/{ticker}")
 async def run_preset(preset_id: str, ticker: str, period: str = "10y"):
+    ticker = _validate_ticker(ticker)
     preset = get_preset(preset_id)
     if not preset:
         raise HTTPException(status_code=404, detail=f"Preset '{preset_id}' not found")
@@ -326,6 +340,7 @@ class CustomConditionRequest(BaseModel):
 
 @router.post("/probability/{ticker}/custom")
 async def custom_probability(ticker: str, req: CustomConditionRequest, period: str = "10y"):
+    ticker = _validate_ticker(ticker)
     try:
         df = fetch_price_history(ticker, period=period)
     except ValueError as e:
@@ -345,6 +360,7 @@ async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: s
     Adaptive combined probability with progressive bin widening.
     Uses in-memory caches to avoid recomputation on back-to-back requests.
     """
+    ticker = _validate_ticker(ticker)
     key_map = {
         "RSI": "rsi", "MACD": "macd", "MA": "ma", "Drawdown": "drawdown",
         "ADX": "adx", "BB": "bb", "Vol": "volume", "Stoch": "stoch",
@@ -455,7 +471,8 @@ def _evict_cache(cache: dict, max_size: int) -> None:
 @router.get("/similar/{ticker}")
 async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
     """Get similar tickers from the same sector."""
-    upper = ticker.upper()
+    ticker = _validate_ticker(ticker)
+    upper = ticker
     # Find which sector this ticker belongs to
     for sector, tickers in SECTOR_MAP.items():
         if upper in tickers:
@@ -476,11 +493,14 @@ async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
 
 
 @router.get("/signals/refresh")
-async def refresh_signals():
+async def refresh_signals(authorization: str = Header(None)):
     """
     Force recompute signals and update Supabase cache.
     Called by Vercel Cron every 15 minutes.
     """
+    cron_secret = os.environ.get("CRON_SECRET", "")
+    if cron_secret and authorization != f"Bearer {cron_secret}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
     result = _compute_signals("3y")
     snapshot_and_detect(result["signals"])
 
@@ -823,6 +843,7 @@ async def available_conditions():
 @router.get("/time-machine/{ticker}/range", response_model=TimeMachineRangeResponse)
 async def time_machine_range(ticker: str):
     """Return the available date range for the time machine feature."""
+    ticker = _validate_ticker(ticker)
     try:
         df = fetch_price_history(ticker, period="10y")
     except ValueError as e:
@@ -865,7 +886,7 @@ async def time_machine(
     - Calculates actual forward returns using the full (future) data
     - Returns accuracy comparison
     """
-    ticker = ticker.upper()
+    ticker = _validate_ticker(ticker)
 
     # ── Cache check ──
     now = time.time()
