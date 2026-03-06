@@ -10,8 +10,6 @@ import {
   Modal,
   Animated,
   Dimensions,
-  Share,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,31 +23,11 @@ import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../../src/st
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../../src/theme';
 import { SunIcon, MoonIcon, MonitorIcon, ChevronLeftIcon, StarIcon } from '../../src/components/ThemeIcons';
+import TopLoadingBar from '../../src/components/TopLoadingBar';
+import { PERIOD_LABELS } from '../../src/constants/ui';
+import { doShare } from '../../src/utils/share';
 
 const { height: SCREEN_H } = Dimensions.get('window');
-
-function TopLoadingBar({ color, bgColor }: { color: string; bgColor: string }) {
-  const anim = React.useRef(new Animated.Value(0)).current;
-  const [barWidth, setBarWidth] = React.useState(0);
-  React.useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(anim, { toValue: 1, duration: 1200, useNativeDriver: true })
-    );
-    loop.start();
-    return () => loop.stop();
-  }, []);
-  const translateX = barWidth > 0
-    ? anim.interpolate({ inputRange: [0, 1], outputRange: [-barWidth * 0.4, barWidth] })
-    : anim.interpolate({ inputRange: [0, 1], outputRange: [-100, 300] });
-  return (
-    <View
-      style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: bgColor, zIndex: 100, overflow: 'hidden' }}
-      onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
-    >
-      <Animated.View style={{ position: 'absolute', width: '40%', height: '100%', backgroundColor: color, borderRadius: 2, transform: [{ translateX }] }} />
-    </View>
-  );
-}
 
 const INDICATOR_META: Record<string, { label: string }> = {
   RSI: { label: 'RSI' },
@@ -69,7 +47,6 @@ const INDICATOR_META: Record<string, { label: string }> = {
 const ALL_INDICATORS = Object.keys(INDICATOR_META);
 
 const WINDOW_KEY_MAP: Record<string, string> = { '5d': '5', '20d': '20', '60d': '60', '120d': '120', '252d': '252' };
-const WINDOW_LABELS: Record<string, string> = { '5d': '1W', '20d': '1M', '60d': '3M', '120d': '6M', '252d': '1Y' };
 
 function getIndicatorPreview(key: string, data: AnalysisResponse, windowPeriod = '20d'): { value: string; winRate: number | null } {
   const ind = data.indicators;
@@ -235,7 +212,7 @@ export default function AnalyzeScreen() {
       `$${price.current.toFixed(2)} (${dir}${price.change_pct.toFixed(2)}%)`,
       `Sector: ${ticker_info.sector}`,
       '',
-      `Indicators (${WINDOW_LABELS[windowPeriod]} window):`,
+      `Indicators (${PERIOD_LABELS[windowPeriod]} window):`,
     ];
     for (const key of ALL_INDICATORS) {
       const preview = getIndicatorPreview(key, data, windowPeriod);
@@ -254,24 +231,7 @@ export default function AnalyzeScreen() {
   const handleShare = async () => {
     const text = buildShareText();
     if (!text) return;
-    try {
-      if (Platform.OS === 'web') {
-        if (navigator.share) {
-          await navigator.share({ text });
-        } else if (navigator.clipboard) {
-          await navigator.clipboard.writeText(text);
-          setShareMsg('Copied!');
-          setTimeout(() => setShareMsg(''), 2000);
-        } else {
-          // Fallback: prompt
-          window.prompt('Copy this:', text);
-        }
-      } else {
-        await Share.share({ message: text });
-      }
-    } catch {
-      // User cancelled share dialog
-    }
+    await doShare(text, (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(''), 2000); });
   };
 
   const toggleCombinedIndicator = (key: string) => {
@@ -361,7 +321,7 @@ export default function AnalyzeScreen() {
               <View style={s.miniPillGroup}>
                 {(['5d', '20d', '60d', '120d', '252d'] as const).map(wp => (
                   <Pressable key={wp} style={[s.miniPill, windowPeriod === wp && s.miniPillActiveOrange]} onPress={() => { setWindowPeriod(wp); AsyncStorage.setItem('window_period', wp).catch(() => {}); }}>
-                    <Text style={[s.miniPillText, windowPeriod === wp && s.miniPillTextActive]}>{WINDOW_LABELS[wp]}</Text>
+                    <Text style={[s.miniPillText, windowPeriod === wp && s.miniPillTextActive]}>{PERIOD_LABELS[wp]}</Text>
                   </Pressable>
                 ))}
               </View>

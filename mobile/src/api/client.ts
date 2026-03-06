@@ -33,11 +33,25 @@ function isMarketOpen(): boolean {
   const now = new Date();
   const day = now.getUTCDay(); // 0=Sun
   if (day === 0 || day === 6) return false;
+
+  // DST-aware: determine if US Eastern is UTC-4 (EDT) or UTC-5 (EST)
+  const year = now.getUTCFullYear();
+  // 2nd Sunday of March
+  const marchFirst = new Date(Date.UTC(year, 2, 1));
+  const dstStart = new Date(Date.UTC(year, 2, 14 - marchFirst.getUTCDay(), 7));
+  // 1st Sunday of November
+  const novFirst = new Date(Date.UTC(year, 10, 1));
+  const dstEnd = new Date(Date.UTC(year, 10, 7 - novFirst.getUTCDay(), 6));
+  const isDST = now >= dstStart && now < dstEnd;
+  const etOffset = isDST ? 4 : 5; // hours behind UTC
+
   const h = now.getUTCHours();
   const m = now.getUTCMinutes();
   const mins = h * 60 + m;
-  // Market: 14:30-21:00 UTC (9:30 AM - 4:00 PM ET)
-  return mins >= 14 * 60 + 30 && mins <= 21 * 60;
+  // Market: 9:30 AM - 4:00 PM ET
+  const openUTC = (9 * 60 + 30) + etOffset * 60;  // 13:30 or 14:30 UTC
+  const closeUTC = 16 * 60 + etOffset * 60;        // 20:00 or 21:00 UTC
+  return mins >= openUTC && mins <= closeUTC;
 }
 
 async function getPersisted<T>(key: string): Promise<T | null> {
