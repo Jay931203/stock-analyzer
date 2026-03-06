@@ -18,17 +18,33 @@ import { useTheme } from '../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../src/theme';
 import { SunIcon, MoonIcon, MonitorIcon, SearchIcon } from '../src/components/ThemeIcons';
 
-const PERIOD_LABELS: Record<string, string> = { '5d': '1W', '20d': '1M', '60d': '3M' };
+const PERIOD_LABELS: Record<string, string> = { '5d': '1W', '20d': '1M', '60d': '3M', '120d': '6M', '252d': '1Y' };
+
+function getWinRateForPeriod(sig: SignalItem, period: string): number {
+  if (period === '5d') return sig.win_rate_5d;
+  if (period === '60d') return sig.win_rate_60d;
+  if (period === '120d') return sig.win_rate_120d ?? sig.win_rate_60d;
+  if (period === '252d') return sig.win_rate_252d ?? sig.win_rate_60d;
+  return sig.win_rate_20d;
+}
+
+function getAvgReturnForPeriod(sig: SignalItem, period: string): number {
+  if (period === '5d') return sig.avg_return_5d ?? sig.avg_return_20d;
+  if (period === '60d') return sig.avg_return_60d ?? sig.avg_return_20d;
+  if (period === '120d') return sig.avg_return_120d ?? sig.avg_return_60d ?? sig.avg_return_20d;
+  if (period === '252d') return sig.avg_return_252d ?? sig.avg_return_60d ?? sig.avg_return_20d;
+  return sig.avg_return_20d;
+}
 
 function SignalCard({ sig, colors, bullishColor, onPress, period = '20d' }: {
   sig: SignalItem;
   colors: ThemeColors;
   bullishColor: string;
   onPress: () => void;
-  period?: '5d' | '20d' | '60d';
+  period?: string;
 }) {
-  const winRate = period === '5d' ? sig.win_rate_5d : period === '60d' ? sig.win_rate_60d : sig.win_rate_20d;
-  const avgReturn = period === '5d' ? (sig.avg_return_5d ?? sig.avg_return_20d) : period === '60d' ? (sig.avg_return_60d ?? sig.avg_return_20d) : sig.avg_return_20d;
+  const winRate = getWinRateForPeriod(sig, period);
+  const avgReturn = getAvgReturnForPeriod(sig, period);
   return (
     <Pressable
       style={({ pressed }) => [
@@ -139,7 +155,8 @@ export default function HomeScreen() {
   const [marketState, setMarketState] = useState('');
   const [activeSector, setActiveSector] = useState<string | null>('All');
   const [sortBy, setSortBy] = useState<'win_rate' | 'avg_return' | 'change'>('win_rate');
-  const [period, setPeriod] = useState<'5d' | '20d' | '60d'>('20d');
+  const [period, setPeriod] = useState<string>('20d');
+  const [loadingProgress, setLoadingProgress] = useState('');
   const [marketIndices, setMarketIndices] = useState<Record<string, { price: number; change_pct: number }>>({});
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [dismissedSearches, setDismissedSearches] = useState<Set<string>>(new Set());
@@ -183,13 +200,16 @@ export default function HomeScreen() {
 
   const loadSignals = async () => {
     setSignalsLoading(true);
+    setLoadingProgress('Loading signals...');
     try {
       const res = await api.signals(50);
+      setLoadingProgress('Processing data...');
       let sigs = res.signals;
       const mState = res.market_state ?? '';
       setMarketState(mState);
 
       if ((mState === 'PRE' || mState === 'AFTER') && sigs.length > 0) {
+        setLoadingProgress('Updating live prices...');
         try {
           const tickers = sigs.map(s => s.ticker);
           const live = await api.livePrices(tickers);
@@ -205,13 +225,22 @@ export default function HomeScreen() {
       setSignals(sigs);
       setScannedCount(res.scanned);
       setSignalsUpdated(res.updated);
-      // Calendar and flips come bundled with signals (avoids extra cold-start calls)
-      if (res.calendar) setCalendarEvents(res.calendar);
+      if (res.calendar) {
+        setCalendarEvents(res.calendar);
+        // Auto-select today if it has events
+        const today = new Date().getDate();
+        const todayHasEvents = res.calendar.some((ev: any) => {
+          const d = new Date(ev.date + 'T12:00:00');
+          return d.getDate() === today && d.getMonth() === new Date().getMonth();
+        });
+        if (todayHasEvents) setSelectedCalDay(today);
+      }
       if (res.flips) setFlips(res.flips);
     } catch (e) {
       console.log('Signals load error', e);
     }
     setSignalsLoading(false);
+    setLoadingProgress('');
   };
 
   const loadMarketIndices = async () => {
@@ -346,17 +375,20 @@ export default function HomeScreen() {
   }, [calendarEvents]);
 
   const getWinRate = useCallback((s: SignalItem) => {
-    return period === '5d' ? s.win_rate_5d : period === '60d' ? s.win_rate_60d : s.win_rate_20d;
+    return getWinRateForPeriod(s, period);
+  }, [period]);
+  const getAvgRet = useCallback((s: SignalItem) => {
+    return getAvgReturnForPeriod(s, period);
   }, [period]);
   const bullish = useMemo(() => {
     const items = filtered.filter(s => getWinRate(s) >= 50);
-    if (sortBy === 'avg_return') return items.sort((a, b) => (b.avg_return_20d ?? 0) - (a.avg_return_20d ?? 0));
+    if (sortBy === 'avg_return') return items.sort((a, b) => getAvgRet(b) - getAvgRet(a));
     if (sortBy === 'change') return items.sort((a, b) => b.change_pct - a.change_pct);
     return items.sort((a, b) => getWinRate(b) - getWinRate(a));
-  }, [filtered, sortBy, getWinRate]);
+  }, [filtered, sortBy, getWinRate, getAvgRet]);
   const bearish = useMemo(() => {
     const items = filtered.filter(s => getWinRate(s) < 50);
-    if (sortBy === 'avg_return') return items.sort((a, b) => (a.avg_return_20d ?? 0) - (b.avg_return_20d ?? 0));
+    if (sortBy === 'avg_return') return items.sort((a, b) => getAvgRet(a) - getAvgRet(b));
     if (sortBy === 'change') return items.sort((a, b) => a.change_pct - b.change_pct);
     return items.sort((a, b) => getWinRate(a) - getWinRate(b));
   }, [filtered, sortBy, getWinRate]);
@@ -676,6 +708,8 @@ export default function HomeScreen() {
               { key: '5d', label: '1W' },
               { key: '20d', label: '1M' },
               { key: '60d', label: '3M' },
+              { key: '120d', label: '6M' },
+              { key: '252d', label: '1Y' },
             ] as const).map(opt => (
               <Pressable
                 key={opt.key}
@@ -690,18 +724,17 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Loading skeleton */}
+        {/* Loading progress */}
         {signalsLoading && signals.length === 0 && (
           <View style={s.section}>
-            <Text style={s.sectionLabel}>LOADING...</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {[0,1,2,3].map(i => (
-                <View key={i} style={[cardStyles(colors).card, { opacity: 0.3, borderLeftColor: colors.textMuted }]}>
-                  <View style={{ width: 50, height: 14, borderRadius: 4, backgroundColor: colors.bgElevated, marginBottom: 8 }} />
-                  <View style={{ width: 70, height: 24, borderRadius: 4, backgroundColor: colors.bgElevated }} />
-                </View>
-              ))}
-            </ScrollView>
+            <View style={s.loadingBox}>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={s.loadingText}>{loadingProgress || 'Loading...'}</Text>
+              <View style={s.loadingBar}>
+                <View style={[s.loadingBarFill, { backgroundColor: colors.accent }]} />
+              </View>
+              <Text style={s.loadingHint}>First load may take longer if data is being refreshed</Text>
+            </View>
           </View>
         )}
 
@@ -836,7 +869,7 @@ export default function HomeScreen() {
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
               {leveraged.map((sig) => {
-                const wr = period === '5d' ? sig.win_rate_5d : period === '60d' ? sig.win_rate_60d : sig.win_rate_20d;
+                const wr = getWinRateForPeriod(sig, period);
                 const leveragedColor = wr >= 50 ? colors.bullish : colors.bearish;
                 return (
                   <SignalCard key={sig.ticker} sig={sig} colors={colors} bullishColor={leveragedColor} onPress={() => goToAnalysis(sig.ticker)} period={period} />
@@ -856,7 +889,7 @@ export default function HomeScreen() {
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
               {unusualVolume.map((sig) => {
-                const wr = period === '5d' ? sig.win_rate_5d : period === '60d' ? sig.win_rate_60d : sig.win_rate_20d;
+                const wr = getWinRateForPeriod(sig, period);
                 const volColor = wr >= 50 ? colors.bullish : colors.bearish;
                 return (
                   <Pressable
@@ -1190,6 +1223,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   periodPillActive: { backgroundColor: `${c.warning}20`, borderColor: c.warning },
   periodPillTextActive: { color: c.warning, fontWeight: '700' },
 
+  // ═══ LOADING PROGRESS ═══
+  loadingBox: {
+    backgroundColor: c.bgElevated, borderRadius: radius.md,
+    padding: spacing.lg, alignItems: 'center' as const, gap: 10,
+  },
+  loadingText: { color: c.textPrimary, fontSize: 13, fontWeight: '600' },
+  loadingBar: {
+    width: '80%' as any, height: 4, borderRadius: 2,
+    backgroundColor: `${c.textMuted}20`, overflow: 'hidden' as const,
+  },
+  loadingBarFill: {
+    width: '60%' as any, height: '100%', borderRadius: 2,
+  },
+  loadingHint: { color: c.textMuted, fontSize: 10, textAlign: 'center' as const },
+
   scanInfo: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, alignItems: 'center' },
   scanInfoText: { color: c.textMuted, fontSize: 10, letterSpacing: 0.3 },
 
@@ -1252,17 +1300,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   calHeaderCell: {
     flex: 1, alignItems: 'center' as const, paddingVertical: 4,
   },
-  calHeaderText: { color: c.textTertiary, fontSize: 10, fontWeight: '700' },
+  calHeaderText: { color: c.textTertiary, fontSize: 11, fontWeight: '700' },
   calDayCell: {
     flex: 1, alignItems: 'center' as const, justifyContent: 'flex-start' as const,
-    minHeight: 56, paddingVertical: 3, paddingHorizontal: 1, borderRadius: 6,
+    minHeight: 62, paddingVertical: 3, paddingHorizontal: 1, borderRadius: 6,
     borderWidth: 1, borderColor: 'transparent',
   },
   calDayCellToday: {
     backgroundColor: `${c.warning}12`, borderColor: `${c.warning}40`,
   },
-  calDayNum: { color: c.textPrimary, fontSize: 12, fontWeight: '600' },
-  calEventTag: { fontSize: 7, fontWeight: '800', letterSpacing: 0.2, marginTop: 1, textAlign: 'center' as const },
+  calDayNum: { color: c.textPrimary, fontSize: 14, fontWeight: '600' },
+  calEventTag: { fontSize: 9, fontWeight: '800', letterSpacing: 0.2, marginTop: 1, textAlign: 'center' as const },
   calMoreTag: { color: c.textMuted, fontSize: 7, fontWeight: '600', marginTop: 1 },
   calDot: { width: 5, height: 5, borderRadius: 3 },
   calDetail: {

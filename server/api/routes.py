@@ -1145,9 +1145,13 @@ def _scan_ticker_combo(ticker: str) -> dict | None:
             "win_rate_5d": 50.0,
             "win_rate_20d": 50.0,
             "win_rate_60d": 50.0,
+            "win_rate_120d": 50.0,
+            "win_rate_252d": 50.0,
             "avg_return_5d": 0.0,
             "avg_return_20d": 0.0,
             "avg_return_60d": 0.0,
+            "avg_return_120d": 0.0,
+            "avg_return_252d": 0.0,
             "occurrences": 0,
             "condition": "",
             "indicators_used": len(selected),
@@ -1173,9 +1177,13 @@ def _scan_ticker_combo(ticker: str) -> dict | None:
             "win_rate_5d": 50.0,
             "win_rate_20d": 50.0,
             "win_rate_60d": 50.0,
+            "win_rate_120d": 50.0,
+            "win_rate_252d": 50.0,
             "avg_return_5d": 0.0,
             "avg_return_20d": 0.0,
             "avg_return_60d": 0.0,
+            "avg_return_120d": 0.0,
+            "avg_return_252d": 0.0,
             "occurrences": 0,
             "condition": "",
             "indicators_used": len(selected),
@@ -1188,6 +1196,8 @@ def _scan_ticker_combo(ticker: str) -> dict | None:
     p5 = best.periods.get(5, {})
     p20 = best.periods.get(20, {})
     p60 = best.periods.get(60, {})
+    p120 = best.periods.get(120, {})
+    p252 = best.periods.get(252, {})
 
     MIN_CASES = 10  # Minimum cases for statistically meaningful win rate
     occ = best.occurrences
@@ -1204,6 +1214,12 @@ def _scan_ticker_combo(ticker: str) -> dict | None:
         avg_ret5 = round(p5.get("avg_return", 0) * blend, 2)
         avg_ret = round(p20.get("avg_return", 0) * blend, 2)
         avg_ret60 = round(p60.get("avg_return", 0) * blend, 2)
+        raw_wr120 = p120.get("win_rate", 50)
+        raw_wr252 = p252.get("win_rate", 50)
+        wr120 = round(50 + (raw_wr120 - 50) * blend, 1)
+        wr252 = round(50 + (raw_wr252 - 50) * blend, 1)
+        avg_ret120 = round(p120.get("avg_return", 0) * blend, 2)
+        avg_ret252 = round(p252.get("avg_return", 0) * blend, 2)
     else:
         wr5 = round(p5.get("win_rate", 50), 1)
         wr20 = round(p20.get("win_rate", 50), 1)
@@ -1211,6 +1227,10 @@ def _scan_ticker_combo(ticker: str) -> dict | None:
         avg_ret5 = round(p5.get("avg_return", 0), 2)
         avg_ret = round(p20.get("avg_return", 0), 2)
         avg_ret60 = round(p60.get("avg_return", 0), 2)
+        wr120 = round(p120.get("win_rate", 50), 1)
+        wr252 = round(p252.get("win_rate", 50), 1)
+        avg_ret120 = round(p120.get("avg_return", 0), 2)
+        avg_ret252 = round(p252.get("avg_return", 0), 2)
 
     return {
         "ticker": ticker,
@@ -1225,6 +1245,10 @@ def _scan_ticker_combo(ticker: str) -> dict | None:
         "avg_return_5d": avg_ret5,
         "avg_return_20d": avg_ret,
         "avg_return_60d": avg_ret60,
+        "win_rate_120d": wr120,
+        "win_rate_252d": wr252,
+        "avg_return_120d": avg_ret120,
+        "avg_return_252d": avg_ret252,
         "occurrences": occ,
         "condition": best.condition,
         "indicators_used": len(selected),

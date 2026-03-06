@@ -207,9 +207,13 @@ export interface SignalItem {
   win_rate_5d: number;
   win_rate_20d: number;
   win_rate_60d: number;
+  win_rate_120d?: number;
+  win_rate_252d?: number;
   avg_return_5d?: number;
   avg_return_20d: number;
   avg_return_60d?: number;
+  avg_return_120d?: number;
+  avg_return_252d?: number;
   occurrences: number;
   condition: string;
   indicators_used: number;

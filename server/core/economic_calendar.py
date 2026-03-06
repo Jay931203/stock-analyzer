@@ -82,18 +82,26 @@ NFP_2026 = [
 
 # Historical market impact data (average S&P500 move on event day, based on 2020-2024 data)
 EVENT_STATS = {
-    "FOMC": {"avg_move": 1.2, "bullish_pct": 55, "desc": "Fed sets interest rates. Hawkish = bearish, Dovish = bullish."},
-    "CPI": {"avg_move": 0.9, "bullish_pct": 48, "desc": "Consumer inflation. Higher than expected = bearish (rate hike fear)."},
-    "PPI": {"avg_move": 0.5, "bullish_pct": 50, "desc": "Producer inflation. Leading indicator for CPI."},
+    "FOMC": {"avg_move": 1.2, "bullish_pct": 55, "desc": "Fed rate decision. Current rate: 4.25-4.50%. Market expects hold."},
+    "CPI": {"avg_move": 0.9, "bullish_pct": 48, "desc": "Consumer inflation data. Lower than expected = bullish (rate cut hope)."},
+    "PPI": {"avg_move": 0.5, "bullish_pct": 50, "desc": "Producer inflation. Leading indicator for CPI trends."},
     "PMI": {"avg_move": 0.4, "bullish_pct": 52, "desc": "Manufacturing health. >50 = expansion, <50 = contraction."},
-    "NFP": {"avg_move": 0.8, "bullish_pct": 54, "desc": "Jobs added. Goldilocks = bullish, too hot/cold = volatile."},
+    "NFP": {"avg_move": 0.8, "bullish_pct": 54, "desc": "Non-farm payrolls. Goldilocks (moderate growth) = most bullish."},
 }
 
 
-def _build_events(dates: list[date], event_type: str, label: str, impact: str) -> list[dict]:
+def _build_events(dates: list[date], event_type: str, base_label: str, impact: str) -> list[dict]:
     stats = EVENT_STATS.get(event_type, {})
-    return [
-        {
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    events = []
+    for d in dates:
+        label = base_label
+        # CPI/PPI: data is for the prior month
+        if event_type in ("CPI", "PPI"):
+            prev_month = d.month - 1 if d.month > 1 else 12
+            label = f"{base_label} ({month_names[prev_month - 1]})"
+        events.append({
             "date": d.isoformat(),
             "type": event_type,
             "label": label,
@@ -101,9 +109,8 @@ def _build_events(dates: list[date], event_type: str, label: str, impact: str) -
             "avg_move": stats.get("avg_move", 0),
             "bullish_pct": stats.get("bullish_pct", 50),
             "desc": stats.get("desc", ""),
-        }
-        for d in dates
-    ]
+        })
+    return events
 
 
 def get_economic_events(days_ahead: int = 30) -> list[dict]:
