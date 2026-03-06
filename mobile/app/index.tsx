@@ -498,10 +498,9 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* App Name + Title + Summary */}
-        <Text style={s.appName}>Stock Scanner</Text>
+        {/* App Name + Summary */}
         <View style={s.titleRow}>
-          <Text style={s.title}>NASDAQ 100</Text>
+          <Text style={s.title}>Stock Scanner</Text>
           {signals.length > 0 && (
             <View style={s.summaryRow}>
               <View style={[s.summaryBadge, { backgroundColor: `${colors.bullish}15` }]}>
@@ -1136,7 +1135,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   themeBtn: { padding: 6, borderRadius: 6 },
   themeBtnPressed: { backgroundColor: c.bgElevated },
 
-  appName: { color: c.accent, fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginTop: 4 },
   titleRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: 2,
