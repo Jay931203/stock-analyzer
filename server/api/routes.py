@@ -737,35 +737,28 @@ async def earnings_calendar():
 
 @router.get("/calendar")
 async def market_calendar(days: int = Query(30, ge=7, le=60)):
-    """Combined calendar: earnings + economic events."""
+    """Combined calendar: economic events + earnings (from cache only, no blocking fetch)."""
     now = time.time()
 
-    # Get earnings (reuse existing cache)
-    earnings = []
-    if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
-        earnings = _earnings_cache["data"].get("earnings", [])
-    else:
-        raw = fetch_earnings_dates(POPULAR_TICKERS)
-        earnings = [e for e in raw if 0 <= e["days_until"] <= days]
-
-    # Format earnings as calendar events
+    # Earnings: only use if already cached (never block on fetch_earnings_dates here)
     earning_events = []
-    for e in earnings:
-        earning_events.append({
-            "date": e["earnings_date"],
-            "type": "EARNINGS",
-            "label": f"{e['ticker']} Earnings",
-            "ticker": e["ticker"],
-            "name": e.get("name", e["ticker"]),
-            "time_of_day": e.get("time_of_day", ""),
-            "impact": "medium",
-            "days_until": e["days_until"],
-        })
+    if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
+        for e in _earnings_cache["data"].get("earnings", []):
+            if 0 <= e["days_until"] <= days:
+                earning_events.append({
+                    "date": e["earnings_date"],
+                    "type": "EARNINGS",
+                    "label": f"{e['ticker']} Earnings",
+                    "ticker": e["ticker"],
+                    "name": e.get("name", e["ticker"]),
+                    "time_of_day": e.get("time_of_day", ""),
+                    "impact": "medium",
+                    "days_until": e["days_until"],
+                })
 
-    # Get economic events
+    # Economic events (hardcoded, instant)
     econ_events = get_economic_events(days_ahead=days)
 
-    # Merge and sort
     all_events = earning_events + econ_events
     all_events.sort(key=lambda x: x["date"])
 

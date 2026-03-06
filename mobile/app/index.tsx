@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api, { initServerUrl } from '../src/api/client';
-import type { CalendarEvent, EarningsItem, FlipItem, SearchResult, SignalItem } from '../src/types/analysis';
+import type { CalendarEvent, FlipItem, SearchResult, SignalItem } from '../src/types/analysis';
 import { getWatchlist, removeFromWatchlist, subscribe, initWatchlist } from '../src/store/watchlist';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../src/theme';
@@ -143,7 +143,7 @@ export default function HomeScreen() {
   const [marketIndices, setMarketIndices] = useState<Record<string, { price: number; change_pct: number }>>({});
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [dismissedSearches, setDismissedSearches] = useState<Set<string>>(new Set());
-  const [earnings, setEarnings] = useState<EarningsItem[]>([]);
+  // earnings data comes from calendar API, no separate state needed
   const [flips, setFlips] = useState<FlipItem[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [selectedCalDay, setSelectedCalDay] = useState<number | null>(null);
@@ -169,7 +169,6 @@ export default function HomeScreen() {
 
       // Secondary data: defer 1s so critical stuff renders first
       setTimeout(() => {
-        loadEarnings();
         loadFlips();
         loadCalendar();
       }, 1000);
@@ -191,7 +190,7 @@ export default function HomeScreen() {
   const loadSignals = async () => {
     setSignalsLoading(true);
     try {
-      const res = await api.signals(101);
+      const res = await api.signals(50);
       let sigs = res.signals;
       const mState = res.market_state ?? '';
       setMarketState(mState);
@@ -232,13 +231,6 @@ export default function HomeScreen() {
     } catch {}
   };
 
-  const loadEarnings = async () => {
-    try {
-      const res = await api.earningsCalendar();
-      setEarnings(res.earnings || []);
-    } catch {}
-  };
-
   const loadFlips = async () => {
     try {
       const res = await api.signalFlips();
@@ -255,7 +247,7 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadSignals(), loadMarketIndices(), loadRecentSearches(), loadEarnings(), loadFlips(), loadCalendar()]);
+    await Promise.all([loadSignals(), loadMarketIndices(), loadRecentSearches(), loadFlips(), loadCalendar()]);
     setRefreshing(false);
   };
 
