@@ -82,7 +82,7 @@ function SignalCard({ sig, colors, bullishColor, onPress, period = '20d' }: {
             {winRate.toFixed(0)}%
           </Text>
           <Text style={cardStyles(colors).probLabel}>
-            Win Rate ({PERIOD_LABELS[period]}){sig.occurrences < 5 ? ' *' : ''}
+            Win Rate{sig.occurrences < 5 ? ' *' : ''}
           </Text>
         </>
       )}
@@ -156,9 +156,8 @@ export default function HomeScreen() {
   const [marketState, setMarketState] = useState('');
   const [activeSector, setActiveSector] = useState<string | null>('All');
   const [sortBy, setSortBy] = useState<'win_rate' | 'avg_return' | 'change'>('win_rate');
-  const [period, setPeriod] = useState<string>('20d');
-  const [dataPeriod, setDataPeriod] = useState<string>('3y'); // backtest data range
-  const [qqqPeriod, setQqqPeriod] = useState<string>('20d'); // QQQ/SPY independent period
+  const [period, setPeriod] = useState<string>('20d'); // forward return window (global)
+  const [dataPeriod, setDataPeriod] = useState<string>('3y'); // backtest data range (global)
   const [loadingProgress, setLoadingProgress] = useState('');
   const [marketIndices, setMarketIndices] = useState<Record<string, { price: number; change_pct: number }>>({});
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -464,35 +463,56 @@ export default function HomeScreen() {
               </View>
             ) : null}
           </View>
-          <View style={s.topBarRight}>
-            {/* Data Period Selector */}
-            <View style={s.dataPeriodRow}>
+          <Pressable
+            onPress={cycleTheme}
+            style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}
+            accessibilityLabel={`Theme: ${themeMode}`}
+            accessibilityRole="button"
+          >
+            {themeMode === 'light' ? (
+              <SunIcon size={16} color={colors.textSecondary} />
+            ) : themeMode === 'dark' ? (
+              <MoonIcon size={16} color={colors.textSecondary} />
+            ) : (
+              <MonitorIcon size={16} color={colors.textSecondary} />
+            )}
+          </Pressable>
+        </View>
+
+        {/* Global Controls: Backtest + Window */}
+        <View style={s.globalControlsRow}>
+          <View style={s.controlGroup}>
+            <Text style={s.controlLabel}>BACKTEST</Text>
+            <View style={s.controlPills}>
               {(['1y', '3y', '5y', '10y'] as const).map(dp => (
                 <Pressable
                   key={dp}
-                  style={[s.dataPeriodPill, dataPeriod === dp && s.dataPeriodPillActive]}
+                  style={[s.controlPill, dataPeriod === dp && s.controlPillActiveBacktest]}
                   onPress={() => changeDataPeriod(dp)}
                 >
-                  <Text style={[s.dataPeriodText, dataPeriod === dp && s.dataPeriodTextActive]}>
+                  <Text style={[s.controlPillText, dataPeriod === dp && s.controlPillTextActiveBacktest]}>
                     {dp.toUpperCase()}
                   </Text>
                 </Pressable>
               ))}
             </View>
-            <Pressable
-              onPress={cycleTheme}
-              style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}
-              accessibilityLabel={`Theme: ${themeMode}`}
-              accessibilityRole="button"
-            >
-              {themeMode === 'light' ? (
-                <SunIcon size={16} color={colors.textSecondary} />
-              ) : themeMode === 'dark' ? (
-                <MoonIcon size={16} color={colors.textSecondary} />
-              ) : (
-                <MonitorIcon size={16} color={colors.textSecondary} />
-              )}
-            </Pressable>
+          </View>
+          <View style={s.controlDivider} />
+          <View style={s.controlGroup}>
+            <Text style={s.controlLabel}>WINDOW</Text>
+            <View style={s.controlPills}>
+              {(['5d', '20d', '60d', '120d', '252d'] as const).map(p => (
+                <Pressable
+                  key={p}
+                  style={[s.controlPill, period === p && s.controlPillActiveWindow]}
+                  onPress={() => setPeriod(p)}
+                >
+                  <Text style={[s.controlPillText, period === p && s.controlPillTextActiveWindow]}>
+                    {PERIOD_LABELS[p]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
         </View>
 
@@ -540,27 +560,13 @@ export default function HomeScreen() {
           if (etfs.length === 0) return null;
           return (
             <View>
-              {/* QQQ/SPY period selector */}
-              <View style={s.indexPeriodRow}>
-                {(['5d', '20d', '60d', '120d', '252d'] as const).map(p => (
-                  <Pressable
-                    key={p}
-                    style={[s.indexPeriodPill, qqqPeriod === p && s.indexPeriodPillActive]}
-                    onPress={() => setQqqPeriod(p)}
-                  >
-                    <Text style={[s.indexPeriodText, qqqPeriod === p && s.indexPeriodTextActive]}>
-                      {PERIOD_LABELS[p]}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
               <View style={s.indexCardsRow}>
                 {etfs.map(sig => {
                   const liveData = marketIndices[sig.ticker];
                   const price = liveData?.price ?? sig.price;
                   const changePct = liveData?.change_pct ?? sig.change_pct;
-                  const wr = getWinRateForPeriod(sig, qqqPeriod);
-                  const avgRet = getAvgReturnForPeriod(sig, qqqPeriod);
+                  const wr = getWinRateForPeriod(sig, period);
+                  const avgRet = getAvgReturnForPeriod(sig, period);
                   const color = wr >= 50 ? colors.bullish : colors.bearish;
                   const name = sig.ticker === 'QQQ' ? 'Invesco QQQ' : sig.ticker === 'SPY' ? 'S&P 500 ETF' : sig.name;
                   return (
@@ -588,7 +594,7 @@ export default function HomeScreen() {
                       <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
                         <View style={{ alignItems: 'center' }}>
                           <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
-                          <Text style={s.indexCardLabel}>{PERIOD_LABELS[qqqPeriod]} Win</Text>
+                          <Text style={s.indexCardLabel}>Win Rate</Text>
                         </View>
                         {avgRet !== undefined && avgRet !== 0 && (
                           <View style={{ alignItems: 'center' }}>
@@ -737,7 +743,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Sort + Period Options */}
+        {/* Sort Options */}
         {signals.length > 0 && (
           <View style={s.sortRow}>
             <Text style={s.sortLabel}>Sort</Text>
@@ -752,24 +758,6 @@ export default function HomeScreen() {
                 onPress={() => setSortBy(opt.key)}
               >
                 <Text style={[s.sortPillText, sortBy === opt.key && s.sortPillTextActive]}>
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
-            <View style={s.sortDivider} />
-            {([
-              { key: '5d', label: '1W' },
-              { key: '20d', label: '1M' },
-              { key: '60d', label: '3M' },
-              { key: '120d', label: '6M' },
-              { key: '252d', label: '1Y' },
-            ] as const).map(opt => (
-              <Pressable
-                key={opt.key}
-                style={[s.sortPill, period === opt.key && s.periodPillActive]}
-                onPress={() => setPeriod(opt.key)}
-              >
-                <Text style={[s.sortPillText, period === opt.key && s.periodPillTextActive]}>
                   {opt.label}
                 </Text>
               </Pressable>
@@ -981,7 +969,7 @@ export default function HomeScreen() {
                     <Text style={[cardStyles(colors).winRate, { color: volColor, fontSize: 22 }]}>
                       {wr.toFixed(0)}%
                     </Text>
-                    <Text style={cardStyles(colors).probLabel}>Win Rate ({PERIOD_LABELS[period]})</Text>
+                    <Text style={cardStyles(colors).probLabel}>Win Rate</Text>
                   </Pressable>
                 );
               })}
@@ -1151,14 +1139,27 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statusText: { color: c.textTertiary, fontSize: 10, fontWeight: '500' },
   marketBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 },
   marketBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dataPeriodRow: { flexDirection: 'row', gap: 2, backgroundColor: c.bgElevated, borderRadius: radius.md, padding: 2 },
-  dataPeriodPill: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
-  dataPeriodPillActive: { backgroundColor: c.accent },
-  dataPeriodText: { color: c.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
-  dataPeriodTextActive: { color: '#fff', fontWeight: '800' },
   themeBtn: { padding: 8, borderRadius: 6 },
   themeBtnPressed: { backgroundColor: c.bgElevated },
+
+  // ═══ GLOBAL CONTROLS ═══
+  globalControlsRow: {
+    flexDirection: 'row', alignItems: 'center', marginTop: 8,
+    backgroundColor: c.bgElevated, borderRadius: radius.md, padding: 6, gap: 6,
+  },
+  controlGroup: { flex: 1, alignItems: 'center' as const, gap: 3 },
+  controlLabel: { color: c.textMuted, fontSize: 8, fontWeight: '800', letterSpacing: 1 },
+  controlPills: { flexDirection: 'row', gap: 2 },
+  controlPill: {
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4,
+    backgroundColor: c.bg,
+  },
+  controlPillActiveBacktest: { backgroundColor: c.accent },
+  controlPillActiveWindow: { backgroundColor: c.warning },
+  controlPillText: { color: c.textMuted, fontSize: 9, fontWeight: '600' },
+  controlPillTextActiveBacktest: { color: '#fff', fontWeight: '800' },
+  controlPillTextActiveWindow: { color: '#fff', fontWeight: '800' },
+  controlDivider: { width: 1, height: 24, backgroundColor: c.border },
 
   appName: { color: c.accent, fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginTop: 4 },
   titleRow: {
@@ -1176,17 +1177,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   summaryText: { fontSize: 12, fontWeight: '700' },
 
   // ═══ MARKET INDICES ═══
-  indexPeriodRow: {
-    flexDirection: 'row', justifyContent: 'center', gap: 4, marginTop: 10, marginBottom: 6,
-  },
-  indexPeriodPill: {
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full,
-    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
-  },
-  indexPeriodPillActive: { backgroundColor: c.accentDim, borderColor: c.accent },
-  indexPeriodText: { color: c.textMuted, fontSize: 10, fontWeight: '500' },
-  indexPeriodTextActive: { color: c.accent, fontWeight: '700' },
-  indexCardsRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  indexCardsRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
   indexCard: {
     flex: 1, backgroundColor: c.bgCard, borderRadius: radius.lg,
     padding: spacing.md, borderWidth: 1, borderColor: `${c.accent}30`,
@@ -1288,9 +1279,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sortPillActive: { backgroundColor: c.accentDim, borderColor: c.accent },
   sortPillText: { color: c.textMuted, fontSize: 10, fontWeight: '500' },
   sortPillTextActive: { color: c.accent, fontWeight: '700' },
-  sortDivider: { width: 1, height: 14, backgroundColor: c.border, marginHorizontal: 2 },
-  periodPillActive: { backgroundColor: `${c.warning}20`, borderColor: c.warning },
-  periodPillTextActive: { color: c.warning, fontWeight: '700' },
 
   // ═══ LOADING PROGRESS ═══
   loadingBox: {
