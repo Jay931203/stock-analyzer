@@ -174,12 +174,14 @@ export default function HomeScreen() {
       await initWatchlist();
       setWatchlist(getWatchlist());
 
-      // Load saved data period
+      // Load saved settings
       try {
-        const saved = await AsyncStorage.getItem('data_period');
-        if (saved && ['1y', '3y', '5y', '10y'].includes(saved)) {
-          setDataPeriod(saved);
-        }
+        const [savedDp, savedWp] = await Promise.all([
+          AsyncStorage.getItem('data_period'),
+          AsyncStorage.getItem('window_period'),
+        ]);
+        if (savedDp && ['1y', '3y', '5y', '10y'].includes(savedDp)) setDataPeriod(savedDp);
+        if (savedWp && ['5d', '20d', '60d', '120d', '252d'].includes(savedWp)) setPeriod(savedWp);
       } catch {}
 
       // Try health check, but load data regardless (with retry)
@@ -464,7 +466,7 @@ export default function HomeScreen() {
             ) : null}
           </View>
           <View style={s.topBarRight}>
-            {/* Backtest mini pills */}
+            <Text style={s.miniLabel}>BT</Text>
             <View style={s.miniPillGroup}>
               {(['1y', '3y', '5y', '10y'] as const).map(dp => (
                 <Pressable key={dp} style={[s.miniPill, dataPeriod === dp && s.miniPillActiveBlue]} onPress={() => changeDataPeriod(dp)}>
@@ -473,10 +475,10 @@ export default function HomeScreen() {
               ))}
             </View>
             <View style={s.miniDivider} />
-            {/* Window mini pills */}
+            <Text style={s.miniLabel}>W</Text>
             <View style={s.miniPillGroup}>
               {(['5d', '20d', '60d', '120d', '252d'] as const).map(p => (
-                <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveOrange]} onPress={() => setPeriod(p)}>
+                <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveOrange]} onPress={() => { setPeriod(p); AsyncStorage.setItem('window_period', p).catch(() => {}); }}>
                   <Text style={[s.miniPillText, period === p && s.miniPillTextActive]}>{PERIOD_LABELS[p]}</Text>
                 </Pressable>
               ))}
@@ -1124,7 +1126,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statusText: { color: c.textTertiary, fontSize: 10, fontWeight: '500' },
   marketBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 },
   marketBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  miniLabel: { color: c.textMuted, fontSize: 7, fontWeight: '800', letterSpacing: 0.3 },
   miniPillGroup: { flexDirection: 'row', gap: 1 },
   miniPill: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 3 },
   miniPillActiveBlue: { backgroundColor: c.accent },

@@ -10,6 +10,8 @@ import {
   Modal,
   Animated,
   Dimensions,
+  Share,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,31 +45,35 @@ const INDICATOR_META: Record<string, { label: string }> = {
 
 const ALL_INDICATORS = Object.keys(INDICATOR_META);
 
-function getIndicatorPreview(key: string, data: AnalysisResponse): { value: string; winRate: number | null } {
+const WINDOW_KEY_MAP: Record<string, string> = { '5d': '5', '20d': '20', '60d': '60', '120d': '120', '252d': '252' };
+const WINDOW_LABELS: Record<string, string> = { '5d': '1W', '20d': '1M', '60d': '3M', '120d': '6M', '252d': '1Y' };
+
+function getIndicatorPreview(key: string, data: AnalysisResponse, windowPeriod = '20d'): { value: string; winRate: number | null } {
   const ind = data.indicators;
+  const wp = WINDOW_KEY_MAP[windowPeriod] || '20';
   switch (key) {
     case 'RSI':
-      return { value: ind.rsi.value?.toFixed(1) ?? '-', winRate: ind.rsi.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: ind.rsi.value?.toFixed(1) ?? '-', winRate: ind.rsi.probability?.periods?.[wp]?.win_rate ?? null };
     case 'MACD':
-      return { value: ind.macd.event ?? 'Neutral', winRate: ind.macd.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: ind.macd.event ?? 'Neutral', winRate: ind.macd.probability?.periods?.[wp]?.win_rate ?? null };
     case 'MA':
-      return { value: ind.ma.alignment ?? '-', winRate: ind.ma.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: ind.ma.alignment ?? '-', winRate: ind.ma.probability?.periods?.[wp]?.win_rate ?? null };
     case 'BB':
-      return { value: ind.bb.zone ?? '-', winRate: ind.bb.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: ind.bb.zone ?? '-', winRate: ind.bb.probability?.periods?.[wp]?.win_rate ?? null };
     case 'Vol':
-      return { value: (ind.volume.ratio?.toFixed(1) ?? '-') + 'x', winRate: ind.volume.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: (ind.volume.ratio?.toFixed(1) ?? '-') + 'x', winRate: ind.volume.probability?.periods?.[wp]?.win_rate ?? null };
     case 'Stoch':
-      return { value: ind.stochastic.k?.toFixed(0) ?? '-', winRate: ind.stochastic.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: ind.stochastic.k?.toFixed(0) ?? '-', winRate: ind.stochastic.probability?.periods?.[wp]?.win_rate ?? null };
     case 'Drawdown':
-      return { value: (ind.drawdown.from_60d_high?.toFixed(1) ?? '-') + '%', winRate: ind.drawdown.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: (ind.drawdown.from_60d_high?.toFixed(1) ?? '-') + '%', winRate: ind.drawdown.probability?.periods?.[wp]?.win_rate ?? null };
     case 'ADX':
-      return { value: ind.adx.adx?.toFixed(0) ?? '-', winRate: ind.adx.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: ind.adx.adx?.toFixed(0) ?? '-', winRate: ind.adx.probability?.periods?.[wp]?.win_rate ?? null };
     case 'MADist':
-      return { value: (ind.ma_distance.from_sma20?.toFixed(1) ?? '-') + '%', winRate: ind.ma_distance.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: (ind.ma_distance.from_sma20?.toFixed(1) ?? '-') + '%', winRate: ind.ma_distance.probability?.periods?.[wp]?.win_rate ?? null };
     case 'Consec':
-      return { value: (ind.consecutive.days > 0 ? '+' : '') + ind.consecutive.days + 'd', winRate: ind.consecutive.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: (ind.consecutive.days > 0 ? '+' : '') + ind.consecutive.days + 'd', winRate: ind.consecutive.probability?.periods?.[wp]?.win_rate ?? null };
     case 'W52':
-      return { value: (ind.week52.position_pct?.toFixed(0) ?? '-') + '%', winRate: ind.week52.probability?.periods?.['20']?.win_rate ?? null };
+      return { value: (ind.week52.position_pct?.toFixed(0) ?? '-') + '%', winRate: ind.week52.probability?.periods?.[wp]?.win_rate ?? null };
     case 'ATR':
       return { value: (ind.atr.atr_pct?.toFixed(1) ?? '-') + '%', winRate: null };
     default:
@@ -141,12 +147,17 @@ export default function AnalyzeScreen() {
   const [modalIndicator, setModalIndicator] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(isInWatchlist(ticker ?? ''));
   const [period, setPeriod] = useState<string>('3y');
+  const [windowPeriod, setWindowPeriod] = useState<string>('20d');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Load global data period setting
+  // Load global settings
   useEffect(() => {
-    AsyncStorage.getItem('data_period').then(saved => {
-      if (saved && ['1y', '3y', '5y', '10y'].includes(saved)) setPeriod(saved);
+    Promise.all([
+      AsyncStorage.getItem('data_period'),
+      AsyncStorage.getItem('window_period'),
+    ]).then(([dp, wp]) => {
+      if (dp && ['1y', '3y', '5y', '10y'].includes(dp)) setPeriod(dp);
+      if (wp && ['5d', '20d', '60d', '120d', '252d'].includes(wp)) setWindowPeriod(wp);
     }).catch(() => {});
   }, []);
 
@@ -177,6 +188,39 @@ export default function AnalyzeScreen() {
     setRefreshKey(k => k + 1);
     setRefreshing(false);
   }, [ticker, period]);
+
+  const handleShare = async () => {
+    if (!data) return;
+    const { ticker_info, price, indicators } = data;
+    const dir = price.change_pct >= 0 ? '+' : '';
+    const wp = WINDOW_KEY_MAP[windowPeriod] || '20';
+    const lines = [
+      `${ticker_info.ticker} - ${ticker_info.name}`,
+      `$${price.current.toFixed(2)} (${dir}${price.change_pct.toFixed(2)}%)`,
+      `Sector: ${ticker_info.sector}`,
+      '',
+      `Indicators (${WINDOW_LABELS[windowPeriod]} window):`,
+    ];
+    for (const key of ALL_INDICATORS) {
+      const preview = getIndicatorPreview(key, data, windowPeriod);
+      if (preview.winRate !== null) {
+        lines.push(`  ${INDICATOR_META[key]?.label ?? key}: ${preview.value} → ${preview.winRate.toFixed(0)}% win`);
+      }
+    }
+    if (data.combined) {
+      const cp = data.combined.probability.periods?.[wp];
+      if (cp) lines.push('', `Combined: ${cp.win_rate.toFixed(0)}% win (${data.combined.probability.occurrences} cases)`);
+    }
+    lines.push('', `Data: ${period.toUpperCase()} | via Stock Scanner`);
+    const text = lines.join('\n');
+    try {
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(text);
+      } else {
+        await Share.share({ message: text });
+      }
+    } catch {}
+  };
 
   const toggleCombinedIndicator = (key: string) => {
     setCombinedIndicators(prev => {
@@ -251,6 +295,23 @@ export default function AnalyzeScreen() {
               </View>
             </Pressable>
             <View style={s.navRight}>
+              <Text style={s.miniLabel}>BT</Text>
+              <View style={s.miniPillGroup}>
+                {(['1y', '3y', '5y', '10y'] as const).map(p => (
+                  <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveBlue]} onPress={() => { setPeriod(p); AsyncStorage.setItem('data_period', p).catch(() => {}); }}>
+                    <Text style={[s.miniPillText, period === p && s.miniPillTextActive]}>{p.toUpperCase()}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={s.miniDivider} />
+              <Text style={s.miniLabel}>W</Text>
+              <View style={s.miniPillGroup}>
+                {(['5d', '20d', '60d', '120d', '252d'] as const).map(wp => (
+                  <Pressable key={wp} style={[s.miniPill, windowPeriod === wp && s.miniPillActiveOrange]} onPress={() => { setWindowPeriod(wp); AsyncStorage.setItem('window_period', wp).catch(() => {}); }}>
+                    <Text style={[s.miniPillText, windowPeriod === wp && s.miniPillTextActive]}>{WINDOW_LABELS[wp]}</Text>
+                  </Pressable>
+                ))}
+              </View>
               <Pressable onPress={cycleTheme} style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}>
                 {themeMode === 'light' ? (
                   <SunIcon size={14} color={colors.textSecondary} />
@@ -259,6 +320,12 @@ export default function AnalyzeScreen() {
                 ) : (
                   <MonitorIcon size={14} color={colors.textSecondary} />
                 )}
+              </Pressable>
+              <Pressable
+                style={s.shareBtn}
+                onPress={handleShare}
+              >
+                <Text style={s.shareBtnText}>Share</Text>
               </Pressable>
               <Pressable
                 style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
@@ -299,16 +366,6 @@ export default function AnalyzeScreen() {
           {price.high_52w && price.low_52w && (
             <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
           )}
-
-          {/* Backtest period */}
-          <View style={s.periodRow}>
-            <Text style={s.periodLabel}>Backtest</Text>
-            {['1y', '3y', '5y', '10y'].map((p) => (
-              <Pressable key={p} style={({ pressed }) => [s.periodPill, period === p && s.periodPillActive, pressed && { opacity: 0.7 }]} onPress={() => { setPeriod(p); AsyncStorage.setItem('data_period', p).catch(() => {}); }}>
-                <Text style={[s.periodPillText, period === p && s.periodPillTextActive]}>{p.toUpperCase()}</Text>
-              </Pressable>
-            ))}
-          </View>
 
           {/* COMBINED ANALYSIS */}
           <View style={s.combinedSection}>
@@ -367,7 +424,7 @@ export default function AnalyzeScreen() {
 
           <View style={s.cardGrid}>
             {ALL_INDICATORS.map(key => {
-              const { value, winRate } = getIndicatorPreview(key, data);
+              const { value, winRate } = getIndicatorPreview(key, data, windowPeriod);
               const meta = INDICATOR_META[key];
 
               return (
@@ -480,9 +537,22 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   saveBtnActive: { backgroundColor: c.accentDim, borderColor: c.accent },
   saveBtnText: { color: c.textTertiary, ...typography.labelSm },
   saveBtnTextActive: { color: c.accent },
-  navRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  navRight: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  miniLabel: { color: c.textMuted, fontSize: 7, fontWeight: '800', letterSpacing: 0.3 },
+  miniPillGroup: { flexDirection: 'row', gap: 1 },
+  miniPill: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 3 },
+  miniPillActiveBlue: { backgroundColor: c.accent },
+  miniPillActiveOrange: { backgroundColor: c.warning },
+  miniPillText: { color: c.textMuted, fontSize: 8, fontWeight: '600' },
+  miniPillTextActive: { color: '#fff', fontWeight: '800' },
+  miniDivider: { width: 1, height: 12, backgroundColor: c.border },
+  shareBtn: {
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.sm,
+    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
+  },
+  shareBtnText: { color: c.textSecondary, fontSize: 10, fontWeight: '600' },
   themeBtn: {
-    paddingVertical: 6, paddingHorizontal: 8, borderRadius: 6,
+    paddingVertical: 4, paddingHorizontal: 6, borderRadius: 6,
   },
   themeBtnPressed: { backgroundColor: c.bgElevated },
 
@@ -498,16 +568,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     color: c.textMuted, fontSize: 11, backgroundColor: c.bgElevated,
     paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden',
   },
-
-  periodRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.sm, marginBottom: spacing.md },
-  periodLabel: { color: c.textMuted, fontSize: 10, marginRight: 2 },
-  periodPill: {
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4,
-    backgroundColor: c.bgElevated, borderWidth: 1, borderColor: 'transparent',
-  },
-  periodPillActive: { borderColor: c.accent, backgroundColor: c.accentDim },
-  periodPillText: { color: c.textMuted, fontSize: 10, fontWeight: '600' },
-  periodPillTextActive: { color: c.accent },
 
   // Combined section
   combinedSection: {
