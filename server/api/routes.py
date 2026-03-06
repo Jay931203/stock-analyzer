@@ -625,59 +625,68 @@ async def get_signals(limit: int = Query(101, ge=1, le=150)):
     """
     Combined probability for popular stocks.
     Uses Supabase cache for fast loading, falls back to computation.
+    Also includes calendar and flips data to avoid extra cold-start API calls.
     """
     now = time.time()
+    signals_data = None
 
     # 1. Try in-memory cache first (fastest)
     if _signals_cache["data"] and now - _signals_cache["ts"] < _SIGNALS_TTL:
-        cached = _signals_cache["data"]
-        return {
-            "signals": cached["signals"][:limit],
-            "scanned": cached["scanned"],
-            "updated": cached["updated"],
-            "market_state": _get_market_state(),
-        }
+        signals_data = _signals_cache["data"]
 
     # 2. Try Supabase cache (fast, survives cold starts)
-    supabase_data = read_cached_signals()
-    if supabase_data:
-        # Populate in-memory cache too
-        _signals_cache["data"] = supabase_data
-        _signals_cache["ts"] = now
-        return {
-            "signals": supabase_data["signals"][:limit],
-            "scanned": supabase_data["scanned"],
-            "updated": supabase_data["updated"],
-            "market_state": _get_market_state(),
-        }
+    if not signals_data:
+        supabase_data = read_cached_signals()
+        if supabase_data:
+            _signals_cache["data"] = supabase_data
+            _signals_cache["ts"] = now
+            signals_data = supabase_data
 
     # 3. Full computation (slow, only on cache miss)
-    from concurrent.futures import ThreadPoolExecutor
+    if not signals_data:
+        from concurrent.futures import ThreadPoolExecutor
 
-    with ThreadPoolExecutor(max_workers=12) as pool:
-        results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
-    valid = [r for r in results if r is not None]
-    valid.sort(key=lambda x: x["strength"], reverse=True)
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            results = list(pool.map(_scan_ticker_combo, POPULAR_TICKERS))
+        valid = [r for r in results if r is not None]
+        valid.sort(key=lambda x: x["strength"], reverse=True)
 
-    # Detect signal flips
-    snapshot_and_detect(valid)
+        snapshot_and_detect(valid)
 
-    result = {
-        "signals": valid,
-        "scanned": len(POPULAR_TICKERS),
-        "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }
+        signals_data = {
+            "signals": valid,
+            "scanned": len(POPULAR_TICKERS),
+            "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
 
-    # Save to both caches
-    _signals_cache["data"] = result
-    _signals_cache["ts"] = now
-    write_cached_signals(valid)  # Persist to Supabase
+        _signals_cache["data"] = signals_data
+        _signals_cache["ts"] = now
+        write_cached_signals(valid)
+
+    # Bundle calendar + flips to avoid extra cold-start API calls
+    calendar_events = get_economic_events(days_ahead=30)
+    # Add cached earnings if available
+    if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
+        for e in _earnings_cache["data"].get("earnings", []):
+            if 0 <= e["days_until"] <= 30:
+                calendar_events.append({
+                    "date": e["earnings_date"], "type": "EARNINGS",
+                    "label": f"{e['ticker']} Earnings", "ticker": e["ticker"],
+                    "name": e.get("name", e["ticker"]),
+                    "time_of_day": e.get("time_of_day", ""),
+                    "impact": "medium", "days_until": e["days_until"],
+                })
+    calendar_events.sort(key=lambda x: x["date"])
+
+    flips_data = get_flips()
 
     return {
-        "signals": valid[:limit],
-        "scanned": len(POPULAR_TICKERS),
-        "updated": result["updated"],
+        "signals": signals_data["signals"][:limit],
+        "scanned": signals_data["scanned"],
+        "updated": signals_data["updated"],
         "market_state": _get_market_state(),
+        "calendar": calendar_events,
+        "flips": flips_data,
     }
 
 

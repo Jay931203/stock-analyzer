@@ -162,16 +162,10 @@ export default function HomeScreen() {
       } catch {}
       setServerOk(ok);
 
-      // Critical data first (signals drives the whole UI)
+      // signals includes calendar + flips data bundled together
       loadSignals();
       loadMarketIndices();
       loadRecentSearches();
-
-      // Secondary data: defer 1s so critical stuff renders first
-      setTimeout(() => {
-        loadFlips();
-        loadCalendar();
-      }, 1000);
 
       // If health failed, retry once after 3s
       if (!ok) {
@@ -211,6 +205,9 @@ export default function HomeScreen() {
       setSignals(sigs);
       setScannedCount(res.scanned);
       setSignalsUpdated(res.updated);
+      // Calendar and flips come bundled with signals (avoids extra cold-start calls)
+      if (res.calendar) setCalendarEvents(res.calendar);
+      if (res.flips) setFlips(res.flips);
     } catch (e) {
       console.log('Signals load error', e);
     }
@@ -231,23 +228,9 @@ export default function HomeScreen() {
     } catch {}
   };
 
-  const loadFlips = async () => {
-    try {
-      const res = await api.signalFlips();
-      setFlips(res.flips || []);
-    } catch {}
-  };
-
-  const loadCalendar = async () => {
-    try {
-      const res = await api.marketCalendar(30);
-      setCalendarEvents(res.events || []);
-    } catch {}
-  };
-
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadSignals(), loadMarketIndices(), loadRecentSearches(), loadFlips(), loadCalendar()]);
+    await Promise.all([loadSignals(), loadMarketIndices(), loadRecentSearches()]);
     setRefreshing(false);
   };
 

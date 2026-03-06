@@ -260,4 +260,6 @@ export interface SignalsResponse {
   scanned: number;
   updated: string;
   market_state: string;
+  calendar?: CalendarEvent[];
+  flips?: FlipItem[];
 }
