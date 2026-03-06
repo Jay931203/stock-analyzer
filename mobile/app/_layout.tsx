@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ErrorBoundary from '../src/components/ErrorBoundary';
 import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
+import { AuthProvider } from '../src/contexts/AuthContext';
 import { PremiumProvider } from '../src/contexts/PremiumContext';
 import Paywall from '../src/components/Paywall';
 
@@ -51,10 +52,12 @@ export default function RootLayout() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <ThemeProvider>
-          <PremiumProvider>
-            <InnerLayout />
-            <Paywall />
-          </PremiumProvider>
+          <AuthProvider>
+            <PremiumProvider>
+              <InnerLayout />
+              <Paywall />
+            </PremiumProvider>
+          </AuthProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

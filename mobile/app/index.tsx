@@ -20,6 +20,7 @@ import { spacing, radius, typography, getDirectionColor, type ThemeColors } from
 import { SunIcon, MoonIcon, MonitorIcon, SearchIcon } from '../src/components/ThemeIcons';
 import TopLoadingBar from '../src/components/TopLoadingBar';
 import AdSlot from '../src/components/AdSlot';
+import { useAuth } from '../src/contexts/AuthContext';
 import { PERIOD_LABELS } from '../src/constants/ui';
 import { doShare as doShareUtil } from '../src/utils/share';
 
@@ -146,6 +147,7 @@ const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU
 
 export default function HomeScreen() {
   const { colors, isDark, themeMode, cycleTheme } = useTheme();
+  const { user, signInWithGoogle, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
@@ -560,6 +562,23 @@ export default function HomeScreen() {
             >
               <Text style={s.shareTopBtnText}>{shareMsg || 'Share'}</Text>
             </Pressable>
+            {user ? (
+              <Pressable
+                style={({ pressed }) => [s.authBtn, pressed && { opacity: 0.7 }]}
+                onPress={signOut}
+              >
+                <Text style={s.authBtnText} numberOfLines={1}>
+                  {user.user_metadata?.avatar_url ? '' : (user.email?.charAt(0).toUpperCase() || 'U')}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={({ pressed }) => [s.authBtn, s.authBtnLogin, pressed && { opacity: 0.7 }]}
+                onPress={signInWithGoogle}
+              >
+                <Text style={[s.authBtnText, { color: colors.accent }]}>Login</Text>
+              </Pressable>
+            )}
           </View>
         </View>
 
@@ -1208,6 +1227,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border,
   },
   shareTopBtnText: { color: c.textSecondary, fontSize: 10, fontWeight: '600' },
+  authBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: c.bgElevated,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  authBtnLogin: {
+    borderColor: `${c.accent}50`,
+    backgroundColor: `${c.accent}10`,
+  },
+  authBtnText: { color: c.textPrimary, fontSize: 11, fontWeight: '700' as const },
 
   titleRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
