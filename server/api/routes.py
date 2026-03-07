@@ -707,6 +707,7 @@ async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20), debu
             # Debug mode: show intermediate results
             import yfinance as yf
             dbg = {}
+            dbg["yf_version"] = yf.__version__
             try:
                 stock = yf.Ticker(ticker)
                 eh = stock.earnings_history
@@ -716,6 +717,16 @@ async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20), debu
                     dbg["eh_shape"] = list(eh.shape)
                     dbg["eh_index"] = [str(i) for i in eh.index]
                     dbg["eh_cols"] = list(eh.columns)
+                # Also try earnings_dates (HTML scraping)
+                try:
+                    ed = stock.earnings_dates
+                    dbg["ed_type"] = str(type(ed))
+                    dbg["ed_empty"] = ed is None or (hasattr(ed, 'empty') and ed.empty)
+                    if ed is not None and not ed.empty:
+                        dbg["ed_shape"] = list(ed.shape)
+                        dbg["ed_index"] = [str(i) for i in ed.index[:3]]
+                except Exception as e2:
+                    dbg["ed_error"] = str(e2)
             except Exception as e:
                 dbg["eh_error"] = str(e)
             try:
