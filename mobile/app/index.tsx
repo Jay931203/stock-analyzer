@@ -930,7 +930,6 @@ export default function HomeScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {sectors.map(sec => {
                 const isActive = (activeSector ?? 'All') === sec;
-                const stats = sec !== 'All' ? sectorStats[sec] : null;
                 return (
                   <Pressable
                     key={sec}
@@ -942,12 +941,6 @@ export default function HomeScreen() {
                     <Text style={[s.sectorChipText, isActive && s.sectorChipTextActive]}>
                       {sec === 'All' ? `All (${signals.length})` : sec}
                     </Text>
-                    {stats && stats.total > 0 && (
-                      <View style={s.sectorChipStats}>
-                        <Text style={s.sectorBullCount}>{'\u25B2'}{stats.bullish}</Text>
-                        <Text style={s.sectorBearCount}>{'\u25BC'}{stats.bearish}</Text>
-                      </View>
-                    )}
                   </Pressable>
                 );
               })}
@@ -1277,9 +1270,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sectorChipActive: { backgroundColor: c.accentDim, borderColor: c.accent },
   sectorChipText: { color: c.textMuted, fontSize: 11, fontWeight: '500' },
   sectorChipTextActive: { color: c.accent, fontWeight: '700' },
-  sectorChipStats: { flexDirection: 'row', gap: 4, marginTop: 2, justifyContent: 'center' },
-  sectorBullCount: { color: '#22C55E', fontSize: 10, fontWeight: '600' },
-  sectorBearCount: { color: '#EF4444', fontSize: 10, fontWeight: '600' },
 
   sortRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
