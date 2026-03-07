@@ -416,7 +416,14 @@ export default function AnalyzeScreen() {
 
         </View>
 
-        {/* COMBINED ANALYSIS - most actionable, show first */}
+        {/* 52 Week Position - most intuitive at-a-glance view */}
+        {price.high_52w && price.low_52w && (
+          <View style={s.week52Section}>
+            <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
+          </View>
+        )}
+
+        {/* COMBINED ANALYSIS */}
         <View style={s.headerBlock}>
           <View style={s.combinedSection}>
             <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
@@ -451,13 +458,6 @@ export default function AnalyzeScreen() {
             )}
           </View>
         </View>
-
-        {/* 52 Week Position */}
-        {price.high_52w && price.low_52w && (
-          <View style={s.week52Section}>
-            <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
-          </View>
-        )}
 
         {/* Time Machine CTA */}
         <Pressable
@@ -564,8 +564,9 @@ export default function AnalyzeScreen() {
                     const occ = data.combined!.probability.occurrences;
                     const wins = Math.round(occ * p.win_rate / 100);
                     const periodLabel = PERIOD_LABELS[windowPeriod] || windowPeriod;
-                    const direction = p.win_rate >= 50 ? 'up' : 'down';
-                    return `In the past ${data.combined!.probability.data_period || '10 years'}, similar conditions occurred ${occ} times. ${wins} of those (${p.win_rate.toFixed(0)}%) moved ${direction} after ${periodLabel}.`;
+                    const direction = p.win_rate >= 50 ? '상승' : '하락';
+                    const dirEn = p.win_rate >= 50 ? 'up' : 'down';
+                    return `과거 ${data.combined!.probability.data_period || '10년'}간 유사한 조건이 ${occ}번 발생했습니다. 이 중 ${wins}번(${p.win_rate.toFixed(0)}%)이 ${periodLabel} 후 ${direction}했습니다.\n\nIn ${occ} similar cases, ${wins} (${p.win_rate.toFixed(0)}%) moved ${dirEn} after ${periodLabel}.`;
                   })()}
                 </Text>
                 {highlights.length > 0 && (
