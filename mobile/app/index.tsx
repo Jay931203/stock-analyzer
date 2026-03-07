@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TextInput,
+  Image,
   StyleSheet,
   Pressable,
   ActivityIndicator,
@@ -670,9 +671,16 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Sign out"
               >
-                <Text style={s.authBtnText} numberOfLines={1}>
-                  {user.user_metadata?.avatar_url ? '' : (user.email?.charAt(0).toUpperCase() || 'U')}
-                </Text>
+                {user.user_metadata?.avatar_url ? (
+                  <Image
+                    source={{ uri: user.user_metadata.avatar_url }}
+                    style={s.authAvatar}
+                  />
+                ) : (
+                  <Text style={s.authBtnText} numberOfLines={1}>
+                    {user.email?.charAt(0).toUpperCase() || 'U'}
+                  </Text>
+                )}
               </Pressable>
             ) : Platform.OS === 'web' ? (
               <Pressable
@@ -1159,6 +1167,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingVertical: 6,
   },
   authBtnText: { color: c.textPrimary, fontSize: 11, fontWeight: '700' as const },
+  authAvatar: { width: 34, height: 34, borderRadius: 17 },
 
   // Period controls row
   periodRow: {
