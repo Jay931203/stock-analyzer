@@ -25,18 +25,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setLoading(false);
-    });
+    let mounted = true;
+
+    async function init() {
+      // On web, manually detect OAuth tokens in URL hash
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const hash = window.location.hash;
+        if (hash && hash.includes('access_token=')) {
+          const params = new URLSearchParams(hash.substring(1));
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+          if (access_token && refresh_token) {
+            const { data } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (mounted && data.session) {
+              setSession(data.session);
+              setLoading(false);
+              // Clean URL hash
+              window.history.replaceState(null, '', window.location.pathname);
+              return;
+            }
+          }
+        }
+      }
+
+      // Fallback: recover session from storage
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (mounted) {
+        setSession(s);
+        setLoading(false);
+      }
+    }
+
+    init();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
