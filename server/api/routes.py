@@ -601,6 +601,7 @@ async def get_signals(
 
     # Bundle calendar + flips
     calendar_events = get_economic_events(days_ahead=30)
+    # Upcoming earnings from earnings-calendar cache
     if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
         for e in _earnings_cache["data"].get("earnings", []):
             if 0 <= e["days_until"] <= 30:
@@ -611,6 +612,12 @@ async def get_signals(
                     "time_of_day": e.get("time_of_day", ""),
                     "impact": "medium", "days_until": e["days_until"],
                 })
+    # Past earnings from Supabase cache (last 60 days)
+    try:
+        past_earnings = _fetch_past_earnings_for_calendar()
+        calendar_events.extend(past_earnings)
+    except Exception:
+        pass
     calendar_events.sort(key=lambda x: x["date"])
 
     flips_data = get_flips()
@@ -783,7 +790,12 @@ def _fetch_past_earnings_for_calendar() -> list[dict]:
     """Fetch recent past earnings (last 60 days) from top tickers for calendar display.
 
     Reads from Supabase earnings cache (populated by populate_earnings.py script).
+    Uses in-memory cache to avoid repeated Supabase calls (12h TTL).
     """
+    now_ts = time.time()
+    if _past_earnings_cache["data"] is not None and now_ts - _past_earnings_cache["ts"] < _PAST_EARNINGS_TTL:
+        return _past_earnings_cache["data"]
+
     now = datetime.now()
     cutoff = now - timedelta(days=60)
     events = []
@@ -814,6 +826,8 @@ def _fetch_past_earnings_for_calendar() -> list[dict]:
         except Exception:
             continue
 
+    _past_earnings_cache["data"] = events
+    _past_earnings_cache["ts"] = time.time()
     return events
 
 
@@ -838,16 +852,11 @@ async def market_calendar(days: int = Query(30, ge=7, le=60)):
                     "days_until": e["days_until"],
                 })
 
-    # Past earnings (last 60 days) - cached separately
+    # Past earnings (last 60 days) - uses in-memory cache inside _fetch_past_earnings_for_calendar
     past_earning_events = []
-    if _past_earnings_cache["data"] and now - _past_earnings_cache["ts"] < _PAST_EARNINGS_TTL:
-        past_earning_events = _past_earnings_cache["data"]
-    else:
-        try:
-            past_earning_events = _fetch_past_earnings_for_calendar()
-            _past_earnings_cache["data"] = past_earning_events
-            _past_earnings_cache["ts"] = now
-        except Exception:
+    try:
+        past_earning_events = _fetch_past_earnings_for_calendar()
+    except Exception:
             pass
 
     # Economic events (hardcoded, instant)

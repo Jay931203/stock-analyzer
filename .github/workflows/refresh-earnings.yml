@@ -1,0 +1,30 @@
+name: Refresh Earnings Cache
+
+on:
+  schedule:
+    # Every Sunday at 06:00 UTC (Sun 1:00 AM ET)
+    # Earnings data changes ~quarterly, weekly refresh is plenty
+    - cron: '0 6 * * 0'
+
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+
+      - name: Populate earnings cache
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python -m scripts.populate_earnings
