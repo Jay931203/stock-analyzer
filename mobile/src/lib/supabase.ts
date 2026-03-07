@@ -16,6 +16,7 @@ const webStorage = typeof window !== 'undefined' ? {
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: (Platform.OS === 'web' ? webStorage : AsyncStorage) as any,
+    flowType: 'implicit',
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',
