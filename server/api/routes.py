@@ -699,10 +699,32 @@ async def earnings_calendar():
 
 
 @router.get("/earnings-history/{ticker}")
-async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20)):
+async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20), debug: bool = Query(False)):
     """Get past earnings history with post-earnings price performance."""
     ticker = _validate_ticker(ticker)
     try:
+        if debug:
+            # Debug mode: show intermediate results
+            import yfinance as yf
+            dbg = {}
+            try:
+                stock = yf.Ticker(ticker)
+                eh = stock.earnings_history
+                dbg["eh_type"] = str(type(eh))
+                dbg["eh_empty"] = eh is None or (hasattr(eh, 'empty') and eh.empty)
+                if eh is not None and not eh.empty:
+                    dbg["eh_shape"] = list(eh.shape)
+                    dbg["eh_index"] = [str(i) for i in eh.index]
+                    dbg["eh_cols"] = list(eh.columns)
+            except Exception as e:
+                dbg["eh_error"] = str(e)
+            try:
+                df = fetch_price_history(ticker, period="3y")
+                dbg["df_shape"] = list(df.shape) if not df.empty else "empty"
+            except Exception as e:
+                dbg["df_error"] = str(e)
+            return {"debug": dbg}
+
         history = fetch_earnings_history(ticker, limit=limit)
         # Calculate aggregate stats
         beats = sum(1 for e in history if e.get("surprise_pct") and e["surprise_pct"] > 0)
