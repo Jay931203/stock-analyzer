@@ -584,22 +584,42 @@ def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
         t = ticker.upper()
         stock = yf.Ticker(t)
 
-        # Use yfinance's internal authenticated data fetcher for earningsHistory
-        url = (
-            f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{t}"
-            f"?modules=earningsHistory"
-        )
-        resp = stock._data.get(url)
-        data = resp.json() if hasattr(resp, "json") else resp
-        if not isinstance(data, dict):
-            return []
-
-        entries = (
-            data.get("quoteSummary", {})
-            .get("result", [{}])[0]
-            .get("earningsHistory", {})
-            .get("history", [])
-        )
+        # Use yfinance's internal authenticated fetcher (handles crumb/cookies)
+        try:
+            eh_df = stock.earnings_history
+            if eh_df is not None and not eh_df.empty:
+                # Convert DataFrame to list of dicts compatible with our format
+                entries = []
+                for quarter_end in eh_df.index:
+                    row = eh_df.loc[quarter_end]
+                    entries.append({
+                        "quarter_ts": quarter_end,
+                        "epsEstimate": float(row["epsEstimate"]) if pd.notna(row["epsEstimate"]) else None,
+                        "epsActual": float(row["epsActual"]) if pd.notna(row["epsActual"]) else None,
+                        "surprisePercent": float(row["surprisePercent"]) if pd.notna(row["surprisePercent"]) else None,
+                    })
+            else:
+                entries = []
+        except Exception:
+            # Fallback: direct quoteSummary API call
+            try:
+                qs_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{t}"
+                params = {"modules": "earningsHistory", "corsDomain": "finance.yahoo.com", "formatted": "false", "symbol": t}
+                raw = stock._data.get_raw_json(qs_url, user_agent_headers=stock._data.user_agent_headers, params=params)
+                if not raw:
+                    return []
+                history = raw.get("quoteSummary", {}).get("result", [{}])[0].get("earningsHistory", {}).get("history", [])
+                entries = []
+                for item in history:
+                    q_epoch = item.get("quarter", {}).get("raw")
+                    entries.append({
+                        "quarter_ts": pd.Timestamp.utcfromtimestamp(q_epoch) if q_epoch else None,
+                        "epsEstimate": item.get("epsEstimate", {}).get("raw"),
+                        "epsActual": item.get("epsActual", {}).get("raw"),
+                        "surprisePercent": item.get("surprisePercent", {}).get("raw"),
+                    })
+            except Exception:
+                return []
         if not entries:
             return []
 
@@ -613,10 +633,10 @@ def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
 
         for entry in entries:
             try:
-                quarter_epoch = entry.get("quarter", {}).get("raw")
-                if not quarter_epoch:
+                qts = entry.get("quarter_ts")
+                if qts is None:
                     continue
-                qe = datetime.utcfromtimestamp(quarter_epoch)
+                qe = qts.to_pydatetime().replace(tzinfo=None) if hasattr(qts, "to_pydatetime") else qts
 
                 # Earnings announced ~20-65 days after quarter end
                 search_start = pd.Timestamp(qe + timedelta(days=20))
@@ -631,9 +651,9 @@ def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
                 announce_idx = df_ret[window_mask].idxmax()
                 announce_date_str = announce_idx.strftime("%Y-%m-%d")
 
-                eps_est = entry.get("epsEstimate", {}).get("raw")
-                eps_act = entry.get("epsActual", {}).get("raw")
-                surp = entry.get("surprisePercent", {}).get("raw")
+                eps_est = entry.get("epsEstimate")
+                eps_act = entry.get("epsActual")
+                surp = entry.get("surprisePercent")
 
                 eps_estimate = round(float(eps_est), 2) if eps_est is not None else None
                 reported_eps = round(float(eps_act), 2) if eps_act is not None else None
