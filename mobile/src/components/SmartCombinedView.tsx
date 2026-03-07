@@ -131,7 +131,7 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
       <View style={s.container}>
         <View style={s.errorCard}>
           <Text style={s.errorText}>{error}</Text>
-          <Pressable style={s.retryBtn} onPress={loadSmartProbability}>
+          <Pressable style={s.retryBtn} onPress={loadSmartProbability} accessibilityRole="button" accessibilityLabel="Retry combined analysis">
             <Text style={s.retryText}>Retry</Text>
           </Pressable>
         </View>
@@ -162,6 +162,8 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
             return (
               <Pressable key={tier} style={[s.tierBtn, isActive && s.tierBtnActive]}
                 onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveTier(tier); }}
+                accessibilityRole="button"
+                accessibilityLabel={`${tierInfo.label} tier${isBest ? ', recommended' : ''}, ${tierProb?.occurrences ?? 0} cases`}
               >
                 <View style={s.tierLabelRow}>
                   <Text style={[s.tierLabel, isActive && s.tierLabelActive]}>{tierInfo.label}</Text>
@@ -181,6 +183,8 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
       {/* Conditions & Cases - expandable section */}
       <Pressable style={s.section}
         onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowImpact(!showImpact); }}
+        accessibilityRole="button"
+        accessibilityLabel={showImpact ? 'Hide conditions and cases' : 'Show conditions and cases'}
       >
         <View style={s.sectionToggle}>
           <Text style={s.sectionTitle}>Show Conditions & Cases</Text>

@@ -173,9 +173,9 @@ export default function AnalyzeScreen() {
 
   const loadData = useCallback(async (forceRefresh = false) => {
     if (!ticker) return;
-    const isInitial = !hasDataRef.current;
+    const isInitial = !hasDataRef.current || forceRefresh;
     if (isInitial) setLoading(true);
-    else setPeriodLoading(true);
+    setPeriodLoading(true);
     setError(null);
     try {
       const result = await api.analyze(ticker, period);
@@ -190,9 +190,17 @@ export default function AnalyzeScreen() {
     setPeriodLoading(false);
   }, [ticker, period]);
 
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
   const refreshData = useCallback(async () => {
     if (!ticker) return;
-    try { setData(await api.analyze(ticker, period, true)); } catch {}
+    try {
+      setData(await api.analyze(ticker, period, true));
+    } catch {
+      // Only show error if we don't have existing data
+      if (!dataRef.current) setError('Failed to refresh data');
+    }
   }, [ticker, period]);
 
   useEffect(() => {
@@ -286,9 +294,16 @@ export default function AnalyzeScreen() {
   if (error || !data) {
     return (
       <View style={s.center}>
+        <View style={s.errorIconCircle}>
+          <Text style={s.errorIconText}>!</Text>
+        </View>
+        <Text style={s.errorTitle}>Analysis Failed</Text>
         <Text style={s.errorText}>{error ?? 'Unknown error'}</Text>
         <Pressable style={s.retryBtn} onPress={() => loadData()} accessibilityRole="button" accessibilityLabel="Retry analysis">
-          <Text style={s.retryBtnText}>Retry</Text>
+          <Text style={s.retryBtnText}>Try Again</Text>
+        </Pressable>
+        <Pressable style={s.backLink} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} accessibilityRole="button" accessibilityLabel="Go back to home">
+          <Text style={s.backLinkText}>Back to Home</Text>
         </Pressable>
       </View>
     );
@@ -401,7 +416,65 @@ export default function AnalyzeScreen() {
 
         </View>
 
-        {/* INDICATORS - tap to open modal */}
+        {/* COMBINED ANALYSIS - most actionable, show first */}
+        <View style={s.headerBlock}>
+          <View style={s.combinedSection}>
+            <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
+
+            <View style={s.toggleRow}>
+              {ALL_INDICATORS.filter(k => k !== 'ATR').map(key => {
+                const active = combinedIndicators.has(key);
+                return (
+                  <Pressable
+                    key={key}
+                    style={[s.toggleChip, active && s.toggleChipActive]}
+                    onPress={() => toggleCombinedIndicator(key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${active ? 'Disable' : 'Enable'} ${INDICATOR_META[key].label} for combined analysis`}
+                  >
+                    <Text style={[s.toggleChipText, active && s.toggleChipTextActive]}>
+                      {INDICATOR_META[key].labelKo}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {activeForCombined.length >= 2 ? (
+              <SmartCombinedView
+                key={refreshKey}
+                ticker={ticker!}
+                selectedIndicators={activeForCombined}
+              />
+            ) : (
+              <Text style={s.hintText}>Enable at least 2 indicators for combined analysis</Text>
+            )}
+          </View>
+        </View>
+
+        {/* 52 Week Position */}
+        {price.high_52w && price.low_52w && (
+          <View style={s.week52Section}>
+            <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
+          </View>
+        )}
+
+        {/* Time Machine CTA */}
+        <Pressable
+          style={({ pressed }) => [s.timeMachineBtn, pressed && { opacity: 0.8 }]}
+          onPress={() => router.push(`/time-machine/${ticker}`)}
+          accessibilityRole="button"
+          accessibilityLabel="Open Signal Time Machine"
+        >
+          <Text style={s.timeMachineBtnIcon}>TM</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.timeMachineBtnTitle}>Signal Time Machine</Text>
+            <Text style={s.timeMachineBtnSub}>Compare past signals with actual results</Text>
+          </View>
+          <Text style={{ color: colors.accent, fontSize: 16 }}>›</Text>
+        </Pressable>
+
+        {/* INDICATORS - detailed breakdown, tap for modal */}
         <View style={s.indicatorsSection}>
           <Text style={s.sectionTitle}>INDICATORS</Text>
           <Text style={s.hintText}>Tap any indicator for details</Text>
@@ -450,69 +523,14 @@ export default function AnalyzeScreen() {
           </View>
         </View>
 
-        {/* 52 Week Position */}
-        {price.high_52w && price.low_52w && (
-          <View style={s.week52Section}>
-            <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
-          </View>
-        )}
-
-        {/* Time Machine CTA */}
-        <Pressable
-          style={({ pressed }) => [s.timeMachineBtn, pressed && { opacity: 0.8 }]}
-          onPress={() => router.push(`/time-machine/${ticker}`)}
-          accessibilityRole="button"
-          accessibilityLabel="Open Signal Time Machine"
-        >
-          <Text style={s.timeMachineBtnIcon}>TM</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={s.timeMachineBtnTitle}>Signal Time Machine</Text>
-            <Text style={s.timeMachineBtnSub}>Compare past signals with actual results</Text>
-          </View>
-          <Text style={{ color: colors.accent, fontSize: 16 }}>›</Text>
-        </Pressable>
-
-        <View style={s.headerBlock}>
-          {/* COMBINED ANALYSIS */}
-          <View style={s.combinedSection}>
-            <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
-
-            <View style={s.toggleRow}>
-              {ALL_INDICATORS.filter(k => k !== 'ATR').map(key => {
-                const active = combinedIndicators.has(key);
-                return (
-                  <Pressable
-                    key={key}
-                    style={[s.toggleChip, active && s.toggleChipActive]}
-                    onPress={() => toggleCombinedIndicator(key)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${active ? 'Disable' : 'Enable'} ${INDICATOR_META[key].label} for combined analysis`}
-                  >
-                    <Text style={[s.toggleChipText, active && s.toggleChipTextActive]}>
-                      {INDICATOR_META[key].labelKo}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {activeForCombined.length >= 2 ? (
-              <SmartCombinedView
-                key={refreshKey}
-                ticker={ticker!}
-                selectedIndicators={activeForCombined}
-              />
-            ) : (
-              <Text style={s.hintText}>Enable at least 2 indicators for combined analysis</Text>
-            )}
-          </View>
-        </View>
-
         <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
           <Text style={s.footerText}>Updated: {data.analysis_date}</Text>
         </View>
 
         <View style={s.disclaimer}>
+          <Text style={s.disclaimerText}>
+            This analysis is based on historical data and is not investment advice. Investment decisions should be made at your own discretion.
+          </Text>
           <Text style={s.disclaimerText}>
             본 분석은 과거 데이터 기반 통계이며 투자 조언이 아닙니다. 투자 결정은 본인 판단하에 이루어져야 합니다.
           </Text>
@@ -613,7 +631,7 @@ export default function AnalyzeScreen() {
 }
 
 const makeStyles = (c: ThemeColors, screenH: number) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
+  container: { flex: 1, backgroundColor: c.bg, maxWidth: 600, alignSelf: 'center' as const, width: '100%' as any },
   scroll: { flex: 1 },
   center: {
     flex: 1, justifyContent: 'center', alignItems: 'center',
@@ -621,12 +639,23 @@ const makeStyles = (c: ThemeColors, screenH: number) => StyleSheet.create({
   },
   loadingText: { color: c.textPrimary, ...typography.h3, marginTop: spacing.lg },
   loadingSub: { color: c.textTertiary, ...typography.bodySm, marginTop: spacing.xs },
-  errorText: { color: c.bearish, ...typography.bodySm, textAlign: 'center', marginBottom: spacing.lg },
-  retryBtn: {
-    backgroundColor: c.bgCard, paddingHorizontal: 28, paddingVertical: 12,
-    borderRadius: radius.sm, borderWidth: 1, borderColor: c.borderLight,
+  errorIconCircle: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: `${c.bearish}15`, alignItems: 'center' as const,
+    justifyContent: 'center' as const, marginBottom: spacing.md,
   },
-  retryBtnText: { color: c.accent, ...typography.bodyBold },
+  errorIconText: { color: c.bearish, fontSize: 28, fontWeight: '800' as const },
+  errorTitle: {
+    color: c.textPrimary, ...typography.h3, marginBottom: spacing.xs,
+  },
+  errorText: { color: c.textSecondary, ...typography.bodySm, textAlign: 'center', marginBottom: spacing.lg },
+  retryBtn: {
+    backgroundColor: c.accent, paddingHorizontal: 32, paddingVertical: 14,
+    borderRadius: radius.md,
+  },
+  retryBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' as const },
+  backLink: { marginTop: spacing.md, paddingVertical: spacing.sm },
+  backLinkText: { color: c.textMuted, ...typography.bodySm, textDecorationLine: 'underline' as const },
 
   // Header block
   headerBlock: {

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePremium } from '../contexts/PremiumContext';
+import { useAuth } from '../contexts/AuthContext';
 import { spacing, radius, typography } from '../theme';
 
 const BENEFITS = [
@@ -15,6 +16,13 @@ const BENEFITS = [
 export default function Paywall() {
   const { colors } = useTheme();
   const { paywallVisible, hidePaywall } = usePremium();
+  const { user } = useAuth();
+  const [notifyState, setNotifyState] = useState<'idle' | 'done'>('idle');
+
+  const handleNotifyMe = () => {
+    // For now, mark as subscribed. In the future this will call an API to register interest.
+    setNotifyState('done');
+  };
 
   return (
     <Modal
@@ -39,10 +47,10 @@ export default function Paywall() {
 
             {/* Title */}
             <Text style={[styles.title, { color: colors.textPrimary }]}>
-              Upgrade to Premium
+              Premium Features
             </Text>
-            <Text style={[styles.titleKo, { color: colors.textSecondary }]}>
-              프리미엄으로 업그레이드
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              We are building advanced tools for serious investors
             </Text>
 
             {/* Benefits */}
@@ -64,34 +72,47 @@ export default function Paywall() {
               ))}
             </View>
 
-            {/* Price */}
-            <View style={[styles.priceBox, { backgroundColor: colors.bgElevated, borderColor: colors.borderLight }]}>
-              <Text style={[styles.priceAmount, { color: colors.textPrimary }]}>$9.99</Text>
-              <Text style={[styles.priceUnit, { color: colors.textSecondary }]}>/month</Text>
+            {/* Launch info */}
+            <View style={[styles.launchCard, { backgroundColor: colors.bgElevated, borderColor: colors.borderLight }]}>
+              <Text style={[styles.launchTitle, { color: colors.textPrimary }]}>
+                Launching Soon
+              </Text>
+              <Text style={[styles.launchDesc, { color: colors.textSecondary }]}>
+                Premium features are in development. Get notified when they launch.
+              </Text>
             </View>
 
             {/* CTA */}
-            <View
-              style={[
-                styles.ctaBtn,
-                { backgroundColor: colors.textMuted, opacity: 0.5 },
-              ]}
-            >
-              <Text style={styles.ctaText}>Coming Soon</Text>
-              <Text style={styles.ctaSubText}>곧 출시 예정</Text>
-            </View>
+            {notifyState === 'done' ? (
+              <View style={[styles.ctaBtn, { backgroundColor: `${colors.bullish}15` }]}>
+                <Text style={[styles.ctaDoneText, { color: colors.bullish }]}>
+                  {user ? 'You will be notified at launch' : 'Subscribed for updates'}
+                </Text>
+              </View>
+            ) : (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.ctaBtn,
+                  { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 },
+                ]}
+                onPress={handleNotifyMe}
+                accessibilityRole="button"
+                accessibilityLabel="Get notified when premium launches"
+              >
+                <Text style={styles.ctaText}>Notify Me</Text>
+                <Text style={styles.ctaSubText}>Get notified at launch</Text>
+              </Pressable>
+            )}
 
             {/* Dismiss */}
             <Pressable
               style={({ pressed }) => [styles.dismissBtn, pressed && { opacity: 0.6 }]}
               onPress={hidePaywall}
+              accessibilityRole="button"
+              accessibilityLabel="Close premium info"
             >
-              <Text style={[styles.dismissText, { color: colors.textMuted }]}>Maybe later</Text>
+              <Text style={[styles.dismissText, { color: colors.textMuted }]}>Close</Text>
             </Pressable>
-
-            <Text style={[styles.legalText, { color: colors.textMuted }]}>
-              Cancel anytime. Subscription auto-renews monthly.
-            </Text>
           </ScrollView>
         </View>
       </View>
@@ -142,10 +163,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 4,
   },
-  titleKo: {
+  subtitle: {
     ...typography.bodySm,
     textAlign: 'center',
     marginBottom: spacing.xl,
+    lineHeight: 20,
   },
   benefitsList: {
     width: '100%',
@@ -180,24 +202,24 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     marginTop: 2,
   },
-  priceBox: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    paddingHorizontal: spacing.xl,
+  launchCard: {
+    width: '100%',
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
     marginBottom: spacing.xl,
+    alignItems: 'center',
   },
-  priceAmount: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: -1,
+  launchTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
   },
-  priceUnit: {
-    ...typography.body,
-    fontWeight: '600',
-    marginLeft: 4,
+  launchDesc: {
+    ...typography.bodySm,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   ctaBtn: {
     width: '100%',
@@ -218,6 +240,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 3,
   },
+  ctaDoneText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
   dismissBtn: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
@@ -225,11 +251,5 @@ const styles = StyleSheet.create({
   dismissText: {
     ...typography.body,
     fontWeight: '500',
-  },
-  legalText: {
-    ...typography.labelSm,
-    textAlign: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
   },
 });

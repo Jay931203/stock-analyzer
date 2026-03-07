@@ -169,10 +169,10 @@ export function getDirectionColor(value: number, c: ThemeColors): string {
   return c.neutral;
 }
 
-export function getWinRateColor(rate: number): string {
-  if (rate >= 65) return '#26a69a';
-  if (rate >= 55) return '#66bb6a';
-  if (rate >= 50) return '#78909c';
-  if (rate >= 45) return '#ffa726';
-  return '#ef5350';
+export function getWinRateColor(wr: number, colors: ThemeColors): string {
+  if (wr >= 65) return colors.bullish;
+  if (wr >= 55) return colors.bullish;
+  if (wr <= 35) return colors.bearish;
+  if (wr <= 45) return colors.bearish;
+  return colors.neutral;
 }

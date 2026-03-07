@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { View, Text, Pressable, FlatList, StyleSheet } from 'react-native';
 import type { SignalItem } from '../../types/analysis';
 import { spacing, radius, getDirectionColor, type ThemeColors } from '../../theme';
@@ -84,6 +84,88 @@ function UnusualVolume({ signals, period, colors, onPress }: Props) {
       .slice(0, 10);
   }, [signals]);
 
+  const renderItem = useCallback(({ item: sig }: { item: SignalItem }) => {
+    const wr = getWinRateForPeriod(sig, period);
+    const avgReturn = getAvgReturnForPeriod(sig, period);
+    const isSpike = (sig.volume_ratio ?? 1) >= 2.0;
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          s.volumeCard,
+          pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
+        ]}
+        onPress={() => onPress(sig.ticker)}
+        accessibilityRole="button"
+        accessibilityLabel={`${sig.ticker} ${sig.name || ''}, volume ${(sig.volume_ratio ?? 1).toFixed(1)}x, win rate ${wr.toFixed(0)}%`}
+      >
+        <Text style={cs.ticker}>{sig.ticker}</Text>
+        {sig.name && (
+          <Text style={cs.companyName} numberOfLines={1}>
+            {sig.name}
+          </Text>
+        )}
+        <View
+          style={[
+            s.volumeBadge,
+            {
+              backgroundColor: isSpike ? '#F9731620' : '#3B82F620',
+            },
+          ]}
+        >
+          <Text
+            style={[
+              s.volumeBadgeText,
+              {
+                color: isSpike ? '#F97316' : '#3B82F6',
+              },
+            ]}
+          >
+            Vol {(sig.volume_ratio ?? 1).toFixed(1)}x
+          </Text>
+        </View>
+        <View style={cs.divider} />
+        <Text
+          style={[
+            cs.winRate,
+            { color: wr >= 50 ? colors.bullish : colors.bearish, fontSize: 22 },
+          ]}
+        >
+          {wr.toFixed(0)}%
+        </Text>
+        <Text style={cs.probLabel}>Win Rate</Text>
+        {avgReturn !== undefined && avgReturn !== 0 && sig.occurrences > 0 && (
+          <View
+            style={[
+              cs.avgBadge,
+              {
+                backgroundColor: avgReturn >= 0 ? `${colors.bullish}15` : `${colors.bearish}15`,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                cs.avgText,
+                {
+                  color: avgReturn >= 0 ? colors.bullish : colors.bearish,
+                },
+              ]}
+            >
+              Avg {avgReturn >= 0 ? '+' : ''}
+              {avgReturn.toFixed(1)}%
+            </Text>
+          </View>
+        )}
+        <View style={cs.priceRow}>
+          <Text style={cs.price}>${sig.price.toFixed(2)}</Text>
+          <Text style={[cs.change, { color: getDirectionColor(sig.change_pct, colors) }]}>
+            {sig.change_pct >= 0 ? '+' : ''}
+            {sig.change_pct.toFixed(1)}%
+          </Text>
+        </View>
+      </Pressable>
+    );
+  }, [period, colors, onPress, s, cs]);
+
   if (unusualVolume.length === 0) return null;
 
   return (
@@ -102,87 +184,7 @@ function UnusualVolume({ signals, period, colors, onPress }: Props) {
         initialNumToRender={5}
         maxToRenderPerBatch={5}
         windowSize={3}
-        renderItem={({ item: sig }) => {
-          const wr = getWinRateForPeriod(sig, period);
-          const avgReturn = getAvgReturnForPeriod(sig, period);
-          const isSpike = (sig.volume_ratio ?? 1) >= 2.0;
-          return (
-            <Pressable
-              style={({ pressed }) => [
-                s.volumeCard,
-                pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
-              ]}
-              onPress={() => onPress(sig.ticker)}
-              accessibilityRole="button"
-              accessibilityLabel={`${sig.ticker} ${sig.name || ''}, volume ${(sig.volume_ratio ?? 1).toFixed(1)}x, win rate ${wr.toFixed(0)}%`}
-            >
-              <Text style={cs.ticker}>{sig.ticker}</Text>
-              {sig.name && (
-                <Text style={cs.companyName} numberOfLines={1}>
-                  {sig.name}
-                </Text>
-              )}
-              <View
-                style={[
-                  s.volumeBadge,
-                  {
-                    backgroundColor: isSpike ? '#F9731620' : '#3B82F620',
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    s.volumeBadgeText,
-                    {
-                      color: isSpike ? '#F97316' : '#3B82F6',
-                    },
-                  ]}
-                >
-                  Vol {(sig.volume_ratio ?? 1).toFixed(1)}x
-                </Text>
-              </View>
-              <View style={cs.divider} />
-              <Text
-                style={[
-                  cs.winRate,
-                  { color: wr >= 50 ? colors.bullish : colors.bearish, fontSize: 22 },
-                ]}
-              >
-                {wr.toFixed(0)}%
-              </Text>
-              <Text style={cs.probLabel}>Win Rate</Text>
-              {avgReturn !== undefined && avgReturn !== 0 && sig.occurrences > 0 && (
-                <View
-                  style={[
-                    cs.avgBadge,
-                    {
-                      backgroundColor: avgReturn >= 0 ? `${colors.bullish}15` : `${colors.bearish}15`,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      cs.avgText,
-                      {
-                        color: avgReturn >= 0 ? colors.bullish : colors.bearish,
-                      },
-                    ]}
-                  >
-                    Avg {avgReturn >= 0 ? '+' : ''}
-                    {avgReturn.toFixed(1)}%
-                  </Text>
-                </View>
-              )}
-              <View style={cs.priceRow}>
-                <Text style={cs.price}>${sig.price.toFixed(2)}</Text>
-                <Text style={[cs.change, { color: getDirectionColor(sig.change_pct, colors) }]}>
-                  {sig.change_pct >= 0 ? '+' : ''}
-                  {sig.change_pct.toFixed(1)}%
-                </Text>
-              </View>
-            </Pressable>
-          );
-        }}
+        renderItem={renderItem}
       />
     </View>
   );

@@ -25,7 +25,7 @@ interface CalendarGrid {
 interface Props {
   calendarGrid: CalendarGrid | null;
   selectedCalDay: number | null;
-  onDaySelect: (day: number) => void;
+  onDaySelect: (day: number | null) => void;
   colors: ThemeColors;
   onTickerPress?: (ticker: string) => void;
 }
@@ -76,7 +76,7 @@ function MarketCalendar({ calendarGrid, selectedCalDay, onDaySelect, colors, onT
                   ]}
                   onPress={
                     day !== null && events.length > 0
-                      ? () => onDaySelect(isSelected ? (null as any) : day)
+                      ? () => onDaySelect(isSelected ? null : day)
                       : undefined
                   }
                   disabled={day === null}

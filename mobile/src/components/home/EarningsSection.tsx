@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { View, Text, Pressable, FlatList, StyleSheet } from 'react-native';
 import type { EarningsItem } from '../../types/analysis';
 import { spacing, radius, getDirectionColor, type ThemeColors } from '../../theme';
@@ -30,6 +30,70 @@ function EarningsSection({ earnings, colors, onPress }: Props) {
   const s = useMemo(() => makeStyles(colors), [colors]);
   const cs = cardStyles(colors);
 
+  const renderItem = useCallback(({ item }: { item: EarningsItem }) => {
+    const earnDate = new Date(item.earnings_date + 'T12:00:00');
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    const dateLabel = `${monthNames[earnDate.getMonth()]} ${earnDate.getDate()}`;
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          s.earningsCard,
+          pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
+        ]}
+        onPress={() => onPress(item.ticker)}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.ticker} ${item.name}, earnings ${dateLabel}, D-${item.days_until}`}
+      >
+        <Text style={s.earningsTicker}>{item.ticker}</Text>
+        <Text style={s.earningsName} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={s.earningsDate}>{dateLabel}</Text>
+        <View style={{ flexDirection: 'row', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+          <View style={s.earningsDday}>
+            <Text style={[s.earningsDdayText, { color: colors.accent }]}>D-{item.days_until}</Text>
+          </View>
+          {item.time_of_day ? (
+            <View style={s.earningsTime}>
+              <Text style={s.earningsTimeText}>{item.time_of_day}</Text>
+            </View>
+          ) : null}
+        </View>
+        {item.price !== undefined && (
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: 6,
+            }}
+          >
+            <Text style={cs.price}>${item.price.toFixed(2)}</Text>
+            {item.change_pct !== undefined && (
+              <Text style={[cs.change, { color: getDirectionColor(item.change_pct, colors) }]}>
+                {item.change_pct >= 0 ? '+' : ''}
+                {item.change_pct.toFixed(1)}%
+              </Text>
+            )}
+          </View>
+        )}
+      </Pressable>
+    );
+  }, [colors, onPress, s, cs]);
+
   if (earnings.length === 0) return null;
 
   return (
@@ -48,69 +112,7 @@ function EarningsSection({ earnings, colors, onPress }: Props) {
         initialNumToRender={5}
         maxToRenderPerBatch={5}
         windowSize={3}
-        renderItem={({ item }) => {
-          const earnDate = new Date(item.earnings_date + 'T12:00:00');
-          const monthNames = [
-            'Jan',
-            'Feb',
-            'Mar',
-            'Apr',
-            'May',
-            'Jun',
-            'Jul',
-            'Aug',
-            'Sep',
-            'Oct',
-            'Nov',
-            'Dec',
-          ];
-          const dateLabel = `${monthNames[earnDate.getMonth()]} ${earnDate.getDate()}`;
-          return (
-            <Pressable
-              style={({ pressed }) => [
-                s.earningsCard,
-                pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
-              ]}
-              onPress={() => onPress(item.ticker)}
-              accessibilityRole="button"
-              accessibilityLabel={`${item.ticker} ${item.name}, earnings ${dateLabel}, D-${item.days_until}`}
-            >
-              <Text style={s.earningsTicker}>{item.ticker}</Text>
-              <Text style={s.earningsName} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <Text style={s.earningsDate}>{dateLabel}</Text>
-              <View style={{ flexDirection: 'row', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-                <View style={s.earningsDday}>
-                  <Text style={[s.earningsDdayText, { color: colors.accent }]}>D-{item.days_until}</Text>
-                </View>
-                {item.time_of_day ? (
-                  <View style={s.earningsTime}>
-                    <Text style={s.earningsTimeText}>{item.time_of_day}</Text>
-                  </View>
-                ) : null}
-              </View>
-              {item.price !== undefined && (
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginTop: 6,
-                  }}
-                >
-                  <Text style={cs.price}>${item.price.toFixed(2)}</Text>
-                  {item.change_pct !== undefined && (
-                    <Text style={[cs.change, { color: getDirectionColor(item.change_pct, colors) }]}>
-                      {item.change_pct >= 0 ? '+' : ''}
-                      {item.change_pct.toFixed(1)}%
-                    </Text>
-                  )}
-                </View>
-              )}
-            </Pressable>
-          );
-        }}
+        renderItem={renderItem}
       />
     </View>
   );

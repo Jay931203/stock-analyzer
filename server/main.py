@@ -31,7 +31,7 @@ if os.environ.get("VERCEL_URL"):
 if os.environ.get("VERCEL_PROJECT_PRODUCTION_URL"):
     _ALLOWED_ORIGINS.append(f"https://{os.environ['VERCEL_PROJECT_PRODUCTION_URL']}")
 # Allow all origins in development mode
-_IS_DEV = not os.environ.get("VERCEL")
+_IS_DEV = not (os.environ.get("VERCEL") or os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PRODUCTION"))
 
 app = FastAPI(
     title="Stock Analyzer API",

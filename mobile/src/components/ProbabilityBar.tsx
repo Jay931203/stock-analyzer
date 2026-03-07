@@ -22,7 +22,7 @@ export default function ProbabilityBar({ label, periods }: Props) {
     <View style={s.container}>
       {label && <Text style={s.label}>{label}</Text>}
       {sorted.map(([period, stats]) => {
-        const winColor = getWinRateColor(stats.win_rate);
+        const winColor = getWinRateColor(stats.win_rate, colors);
         const barWidth = Math.min(Math.max(stats.win_rate, 0), 100);
         return (
           <View key={period} style={s.row}>

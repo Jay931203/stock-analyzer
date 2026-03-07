@@ -123,7 +123,7 @@ export default function ProbabilityCard({ data, compact }: Props) {
               <Text style={[s.cell, s.periodCol, s.periodText]}>
                 {PERIOD_LABELS[period] ?? `${period}d`}
               </Text>
-              <Text style={[s.cell, s.winCol, s.winText, { color: getWinRateColor(stats.win_rate) }]}>
+              <Text style={[s.cell, s.winCol, s.winText, { color: getWinRateColor(stats.win_rate, colors) }]}>
                 {stats.win_rate.toFixed(1)}%
               </Text>
               <Text style={[s.cell, s.returnCol, { color: stats.avg_return >= 0 ? colors.bullish : colors.bearish }]}>

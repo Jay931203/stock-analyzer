@@ -80,7 +80,10 @@ export default function TimeMachinePage() {
     api.timeMachineRange(ticker).then(r => {
       setRange(r);
       setSelectedDate(getDateMonthsAgo(12));
-    }).catch(() => {});
+    }).catch(() => {
+      // Still set a default date so presets work even without range
+      setSelectedDate(getDateMonthsAgo(12));
+    });
   }, [ticker]);
 
   const analyze = useCallback(async (date: string) => {
@@ -97,6 +100,13 @@ export default function TimeMachinePage() {
       setLoading(false);
     }
   }, [ticker, backtestPeriod]);
+
+  // Re-run analysis when backtest period changes (if there's already a result)
+  useEffect(() => {
+    if (result && selectedDate) {
+      analyze(selectedDate);
+    }
+  }, [backtestPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleShare = useCallback(() => {
     if (!result) return;
@@ -232,7 +242,18 @@ export default function TimeMachinePage() {
         {/* ── Error ── */}
         {error && !loading && (
           <View style={s.errorBox}>
-            <Text style={s.errorText}>{error}</Text>
+            <View style={s.errorBoxRow}>
+              <View style={s.errorDot} />
+              <Text style={s.errorText}>{error}</Text>
+            </View>
+            <Pressable
+              style={s.errorRetryBtn}
+              onPress={() => { if (selectedDate) analyze(selectedDate); }}
+              accessibilityRole="button"
+              accessibilityLabel="Retry analysis"
+            >
+              <Text style={s.errorRetryText}>Retry</Text>
+            </Pressable>
           </View>
         )}
 
@@ -467,7 +488,7 @@ export default function TimeMachinePage() {
 /* ── Styles ── */
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
+  container: { flex: 1, backgroundColor: c.bg, maxWidth: 600, alignSelf: 'center' as const, width: '100%' as any },
   scroll: { flex: 1 },
 
   /* Header */
@@ -578,8 +599,20 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     marginHorizontal: spacing.lg, marginTop: spacing.lg,
     padding: spacing.md, backgroundColor: `${c.bearish}10`,
     borderRadius: radius.md, borderWidth: 1, borderColor: `${c.bearish}30`,
+    alignItems: 'center' as const,
   },
-  errorText: { color: c.bearish, fontSize: 13 },
+  errorBoxRow: {
+    flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, marginBottom: spacing.sm,
+  },
+  errorDot: {
+    width: 8, height: 8, borderRadius: 4, backgroundColor: c.bearish,
+  },
+  errorText: { color: c.bearish, fontSize: 13, flex: 1 },
+  errorRetryBtn: {
+    backgroundColor: c.accent, paddingHorizontal: 20, paddingVertical: 8,
+    borderRadius: radius.md,
+  },
+  errorRetryText: { color: '#fff', fontSize: 13, fontWeight: '700' as const },
 
   /* Verdict */
   verdictCard: {

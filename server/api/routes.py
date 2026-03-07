@@ -1,12 +1,13 @@
 """FastAPI route handlers."""
 
 import os
+import re as _re
 import time
 from datetime import datetime, timezone, timedelta
 
 import pandas as pd
-from fastapi import APIRouter, Header, HTTPException, Query, BackgroundTasks
-from pydantic import BaseModel
+from fastapi import APIRouter, Header, HTTPException, Path, Query, BackgroundTasks
+from pydantic import BaseModel, Field
 
 _IS_VERCEL = os.environ.get("VERCEL") is not None
 
@@ -47,8 +48,6 @@ from .schemas import (
 
 router = APIRouter(prefix="/api")
 
-import re as _re
-
 _TICKER_RE = _re.compile(r"^[A-Z0-9]{1,5}(-[A-Z])?$")
 
 
@@ -61,7 +60,7 @@ def _validate_ticker(ticker: str) -> str:
 
 
 @router.get("/analyze/{ticker}", response_model=AnalysisResponse)
-async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period: str = "10y"):
+async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$")):
     """Full analysis: all indicators + historical probabilities.
     Always returns cached data instantly if available. Recomputes in background if stale.
     """
@@ -293,9 +292,10 @@ def _recompute_analysis(ticker: str, period: str = "10y") -> AnalysisResponse:
 async def get_probability(
     ticker: str,
     conditions: str = Query(..., description="Comma-separated conditions"),
-    period: str = "10y",
+    period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$"),
 ):
     """Calculate probability for custom condition combinations."""
+    ticker = _validate_ticker(ticker)
     try:
         df = fetch_price_history(ticker, period=period)
     except ValueError as e:
@@ -315,7 +315,7 @@ async def get_presets():
 
 
 @router.get("/presets/{preset_id}/{ticker}")
-async def run_preset(preset_id: str, ticker: str, period: str = "10y"):
+async def run_preset(preset_id: str, ticker: str, period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$")):
     ticker = _validate_ticker(ticker)
     preset = get_preset(preset_id)
     if not preset:
@@ -334,19 +334,24 @@ async def run_preset(preset_id: str, ticker: str, period: str = "10y"):
     }
 
 
+class ConditionItem(BaseModel):
+    indicator: str = Field(..., max_length=50)
+    state: str = Field(..., max_length=100)
+
+
 class CustomConditionRequest(BaseModel):
-    conditions: list[dict]
+    conditions: list[ConditionItem] = Field(..., max_length=10)
 
 
 @router.post("/probability/{ticker}/custom")
-async def custom_probability(ticker: str, req: CustomConditionRequest, period: str = "10y"):
+async def custom_probability(ticker: str, req: CustomConditionRequest, period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$")):
     ticker = _validate_ticker(ticker)
     try:
         df = fetch_price_history(ticker, period=period)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    result = calc_combined_probability(df, req.conditions)
+    result = calc_combined_probability(df, [c.model_dump() for c in req.conditions])
     return _to_prob_data(result)
 
 
@@ -355,7 +360,7 @@ class SmartProbabilityRequest(BaseModel):
 
 
 @router.post("/smart-probability/{ticker}")
-async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: str = "10y"):
+async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$")):
     """
     Adaptive combined probability with progressive bin widening.
     Uses in-memory caches to avoid recomputation on back-to-back requests.
@@ -533,7 +538,7 @@ async def signal_flips():
 @router.get("/signals")
 async def get_signals(
     limit: int = Query(101, ge=1, le=150),
-    data_period: str = Query("3y", pattern="^(1y|3y|5y|10y)$"),
+    data_period: str = Query("3y", pattern="^(1y|2y|3y|5y|10y)$"),
     background_tasks: BackgroundTasks = None,
 ):
     """
@@ -788,7 +793,7 @@ async def trending_stocks(
 
 
 @router.get("/search/{query}", response_model=SearchResponse)
-async def search(query: str, limit: int = 10):
+async def search(query: str = Path(..., max_length=30), limit: int = Query(10, ge=1, le=50)):
     results = search_tickers(query, limit=limit)
     return SearchResponse(
         query=query,
@@ -876,7 +881,7 @@ async def time_machine_range(ticker: str):
 async def time_machine(
     ticker: str,
     date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    period: str = Query("3y", pattern="^(1y|3y|5y|10y)$"),
+    period: str = Query("3y", pattern="^(1y|2y|3y|5y|10y)$"),
 ):
     """
     Signal Time Machine: shows what signals would have been generated on a past date,

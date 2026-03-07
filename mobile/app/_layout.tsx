@@ -38,6 +38,10 @@ function InnerLayout() {
           name="privacy"
           options={{ title: 'Privacy Policy', headerShown: false }}
         />
+        <Stack.Screen
+          name="terms"
+          options={{ headerShown: false }}
+        />
       </Stack>
     </>
   );

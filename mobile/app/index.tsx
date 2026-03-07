@@ -26,6 +26,7 @@ import AdSlot from '../src/components/AdSlot';
 import { useAuth } from '../src/contexts/AuthContext';
 import { PERIOD_LABELS } from '../src/constants/ui';
 import { doShare as doShareUtil } from '../src/utils/share';
+import { useNetworkStatus } from '../src/hooks/useNetworkStatus';
 import {
   MarketRegimeBar,
   SectorHeatmap,
@@ -161,6 +162,7 @@ const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU
 export default function HomeScreen() {
   const { colors, isDark, themeMode, cycleTheme } = useTheme();
   const { user, signInWithGoogle, signOut } = useAuth();
+  const isOnline = useNetworkStatus();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
@@ -189,6 +191,62 @@ export default function HomeScreen() {
   const [selectedCalDay, setSelectedCalDay] = useState<number | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const loadSignals = useCallback(async (dp?: string, forceRefresh = false) => {
+    const usePeriod = dp ?? dataPeriod;
+    setSignalsLoading(true);
+    setSignalsError(null);
+    try {
+      const res = await api.signals(50, usePeriod, forceRefresh);
+      let sigs = res.signals;
+      const mState = res.market_state ?? '';
+      setMarketState(mState);
+
+      if ((mState === 'PRE' || mState === 'AFTER') && sigs.length > 0) {
+        try {
+          const tickers = sigs.map(s => s.ticker);
+          const live = await api.livePrices(tickers);
+          if (live.prices) {
+            sigs = sigs.map(s => {
+              const lp = live.prices[s.ticker];
+              return lp ? { ...s, price: lp.price, change_pct: lp.change_pct } : s;
+            });
+          }
+        } catch {}
+      }
+
+      setSignals(sigs);
+      setScannedCount(res.scanned);
+      setSignalsUpdated(res.updated);
+      setServerOk(true); // signals loaded = server is alive
+      if (res.calendar) {
+        setCalendarEvents(res.calendar);
+        const today = new Date();
+        const todayDate = today.getDate();
+        const todayMonth = today.getMonth();
+        const todayYear = today.getFullYear();
+
+        // Find next upcoming event day in this month
+        const eventDays = res.calendar
+          .filter((ev: any) => {
+            const d = new Date(ev.date + 'T12:00:00');
+            return d.getFullYear() === todayYear && d.getMonth() === todayMonth && d.getDate() >= todayDate;
+          })
+          .map((ev: any) => new Date(ev.date + 'T12:00:00').getDate())
+          .sort((a: number, b: number) => a - b);
+
+        if (eventDays.length > 0) {
+          setSelectedCalDay(eventDays[0]); // Select next upcoming event day
+        }
+      }
+      if (res.flips) setFlips(res.flips);
+    } catch (e: any) {
+      if (signals.length === 0) {
+        setSignalsError(e.response?.data?.detail ?? e.message ?? 'Failed to load signals');
+      }
+    }
+    setSignalsLoading(false);
+  }, [dataPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     async function init() {
@@ -256,12 +314,12 @@ export default function HomeScreen() {
         }
       }).catch(() => {});
       setWatchlist(getWatchlist());
-    }, [dataPeriod, period])
+    }, [dataPeriod, period]) // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const [shareMsg, setShareMsg] = useState('');
 
-  const shareSignal = async (sig: SignalItem) => {
+  const shareSignal = useCallback(async (sig: SignalItem) => {
     const wr = getWinRateForPeriod(sig, period);
     const avgRet = getAvgReturnForPeriod(sig, period);
     const dir = sig.change_pct >= 0 ? '+' : '';
@@ -274,7 +332,7 @@ export default function HomeScreen() {
       `Backtest: ${dataPeriod.toUpperCase()} | via Stock Scanner`,
     ].filter(Boolean).join('\n');
     await doShareUtil(text, (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(''), 2000); });
-  };
+  }, [period, dataPeriod]);
 
   const shareMarketSummary = async () => {
     if (!marketRegime || signals.length === 0) return;
@@ -300,62 +358,6 @@ export default function HomeScreen() {
     // Clear existing signals so full loading screen shows
     setSignals([]);
     loadSignals(dp, true);
-  };
-
-  const loadSignals = async (dp?: string, forceRefresh = false) => {
-    const usePeriod = dp ?? dataPeriod;
-    setSignalsLoading(true);
-    setSignalsError(null);
-    try {
-      const res = await api.signals(50, usePeriod, forceRefresh);
-      let sigs = res.signals;
-      const mState = res.market_state ?? '';
-      setMarketState(mState);
-
-      if ((mState === 'PRE' || mState === 'AFTER') && sigs.length > 0) {
-        try {
-          const tickers = sigs.map(s => s.ticker);
-          const live = await api.livePrices(tickers);
-          if (live.prices) {
-            sigs = sigs.map(s => {
-              const lp = live.prices[s.ticker];
-              return lp ? { ...s, price: lp.price, change_pct: lp.change_pct } : s;
-            });
-          }
-        } catch {}
-      }
-
-      setSignals(sigs);
-      setScannedCount(res.scanned);
-      setSignalsUpdated(res.updated);
-      setServerOk(true); // signals loaded = server is alive
-      if (res.calendar) {
-        setCalendarEvents(res.calendar);
-        const today = new Date();
-        const todayDate = today.getDate();
-        const todayMonth = today.getMonth();
-        const todayYear = today.getFullYear();
-
-        // Find next upcoming event day in this month
-        const eventDays = res.calendar
-          .filter((ev: any) => {
-            const d = new Date(ev.date + 'T12:00:00');
-            return d.getFullYear() === todayYear && d.getMonth() === todayMonth && d.getDate() >= todayDate;
-          })
-          .map((ev: any) => new Date(ev.date + 'T12:00:00').getDate())
-          .sort((a: number, b: number) => a - b);
-
-        if (eventDays.length > 0) {
-          setSelectedCalDay(eventDays[0]); // Select next upcoming event day
-        }
-      }
-      if (res.flips) setFlips(res.flips);
-    } catch (e: any) {
-      if (signals.length === 0) {
-        setSignalsError(e.response?.data?.detail ?? e.message ?? 'Failed to load signals');
-      }
-    }
-    setSignalsLoading(false);
   };
 
   const loadMarketIndices = async () => {
@@ -403,7 +405,7 @@ export default function HomeScreen() {
     }, 300);
   }, []);
 
-  const goToAnalysis = (ticker: string) => router.push(`/analyze/${ticker}`);
+  const goToAnalysis = useCallback((ticker: string) => router.push(`/analyze/${ticker}`), [router]);
   const handleSubmit = () => { const t = query.trim().toUpperCase(); if (t) { setQuery(''); setResults([]); goToAnalysis(t); } };
 
   // Market Regime: bullish vs bearish ratio across all non-leveraged signals (period-aware)
@@ -529,10 +531,54 @@ export default function HomeScreen() {
     return items.sort((a, b) => getWinRate(a) - getWinRate(b));
   }, [filtered, sortBy, getWinRate, getAvgRet]);
 
+  const renderBullishItem = useCallback(({ item: sig }: { item: SignalItem }) => (
+    <SignalCard
+      sig={sig}
+      colors={colors}
+      bullishColor={colors.bullish}
+      onPress={() => goToAnalysis(sig.ticker)}
+      onLongPress={() => shareSignal(sig)}
+      period={period}
+    />
+  ), [colors, period, goToAnalysis, shareSignal]);
+
+  const renderBearishItem = useCallback(({ item: sig }: { item: SignalItem }) => (
+    <SignalCard
+      sig={sig}
+      colors={colors}
+      bullishColor={colors.bearish}
+      onPress={() => goToAnalysis(sig.ticker)}
+      onLongPress={() => shareSignal(sig)}
+      period={period}
+    />
+  ), [colors, period, goToAnalysis, shareSignal]);
+
+  const renderLeveragedItem = useCallback(({ item: sig }: { item: SignalItem }) => {
+    const wr = getWinRateForPeriod(sig, period);
+    const leveragedColor = wr >= 50 ? colors.bullish : colors.bearish;
+    return (
+      <SignalCard
+        sig={sig}
+        colors={colors}
+        bullishColor={leveragedColor}
+        onPress={() => goToAnalysis(sig.ticker)}
+        onLongPress={() => shareSignal(sig)}
+        period={period}
+      />
+    );
+  }, [colors, period, goToAnalysis, shareSignal]);
+
   return (
     <View style={s.container}>
       {/* Top loading bar (thin, non-intrusive) */}
       {signalsLoading && <TopLoadingBar color={colors.accent} bgColor={`${colors.textMuted}15`} />}
+
+      {/* Offline banner */}
+      {!isOnline && (
+        <View style={s.offlineBanner}>
+          <Text style={s.offlineBannerText}>No internet connection</Text>
+        </View>
+      )}
 
       {/* Search dropdown overlay (above everything) */}
       {query.length >= 1 && !loading && results.length === 0 && (
@@ -562,16 +608,6 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Full-screen loading removed — skeleton cards shown inline instead */}
-
-      {/* Empty state when scan complete but no signals */}
-      {signals.length === 0 && !signalsLoading && !signalsError && (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
-          <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '600' }}>No signals found</Text>
-          <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 8, textAlign: 'center' }}>Pull down to refresh or try a different period</Text>
-        </View>
-      )}
-
       {/* ═══ SINGLE SCROLLVIEW (header + content) ═══ */}
       <ScrollView
         style={s.mainScroll}
@@ -579,6 +615,14 @@ export default function HomeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
         keyboardShouldPersistTaps="handled"
       >
+      {/* Empty state when scan complete but no signals */}
+      {signals.length === 0 && !signalsLoading && !signalsError && (
+        <View style={s.emptyState}>
+          <Text style={s.emptyStateIcon}>&#x1F50D;</Text>
+          <Text style={s.emptyStateTitle}>No signals found</Text>
+          <Text style={s.emptyStateDesc}>Pull down to refresh or try a different backtest period</Text>
+        </View>
+      )}
       <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
         {/* Top bar - clean: status | title | actions */}
         <View style={s.topBar}>
@@ -937,17 +981,16 @@ export default function HomeScreen() {
 
         {/* Error state */}
         {signalsError && signals.length === 0 && !signalsLoading && (
-          <View style={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.xxl, alignItems: 'center' }}>
-            <Text style={{ color: colors.bearish, fontSize: 14, fontWeight: '600', marginBottom: spacing.sm, textAlign: 'center' }}>
-              {signalsError}
-            </Text>
+          <View style={s.errorState}>
+            <Text style={s.errorStateIcon}>!</Text>
+            <Text style={s.errorStateText}>{signalsError}</Text>
             <Pressable
-              style={{ backgroundColor: colors.bgCard, paddingHorizontal: 24, paddingVertical: 10, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border }}
+              style={s.errorStateRetryBtn}
               onPress={() => loadSignals()}
               accessibilityRole="button"
               accessibilityLabel="Retry loading signals"
             >
-              <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '600' }}>Retry</Text>
+              <Text style={s.errorStateRetryText}>Retry</Text>
             </Pressable>
           </View>
         )}
@@ -976,9 +1019,7 @@ export default function HomeScreen() {
               horizontal
               data={bullish}
               keyExtractor={item => item.ticker}
-              renderItem={({ item: sig }) => (
-                <SignalCard sig={sig} colors={colors} bullishColor={colors.bullish} onPress={() => goToAnalysis(sig.ticker)} onLongPress={() => shareSignal(sig)} period={period} />
-              )}
+              renderItem={renderBullishItem}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingRight: spacing.lg }}
               initialNumToRender={5}
@@ -1000,9 +1041,7 @@ export default function HomeScreen() {
               horizontal
               data={bearish}
               keyExtractor={item => item.ticker}
-              renderItem={({ item: sig }) => (
-                <SignalCard sig={sig} colors={colors} bullishColor={colors.bearish} onPress={() => goToAnalysis(sig.ticker)} onLongPress={() => shareSignal(sig)} period={period} />
-              )}
+              renderItem={renderBearishItem}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingRight: spacing.lg }}
               initialNumToRender={5}
@@ -1027,13 +1066,7 @@ export default function HomeScreen() {
               horizontal
               data={leveraged}
               keyExtractor={item => item.ticker}
-              renderItem={({ item: sig }) => {
-                const wr = getWinRateForPeriod(sig, period);
-                const leveragedColor = wr >= 50 ? colors.bullish : colors.bearish;
-                return (
-                  <SignalCard sig={sig} colors={colors} bullishColor={leveragedColor} onPress={() => goToAnalysis(sig.ticker)} onLongPress={() => shareSignal(sig)} period={period} />
-                );
-              }}
+              renderItem={renderLeveragedItem}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingRight: spacing.lg }}
               initialNumToRender={5}
@@ -1260,6 +1293,47 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sortPillActive: { backgroundColor: c.accentDim, borderColor: c.accent },
   sortPillText: { color: c.textMuted, fontSize: 10, fontWeight: '500' },
   sortPillTextActive: { color: c.accent, fontWeight: '700' },
+
+  // Offline banner
+  offlineBanner: {
+    backgroundColor: c.bearish, paddingVertical: 4, alignItems: 'center' as const,
+  },
+  offlineBannerText: { color: '#fff', fontSize: 11, fontWeight: '600' as const },
+
+  // Empty state
+  emptyState: {
+    flex: 1, justifyContent: 'center' as const, alignItems: 'center' as const,
+    paddingHorizontal: spacing.xl, paddingVertical: 48,
+  },
+  emptyStateIcon: { fontSize: 36, marginBottom: spacing.md },
+  emptyStateTitle: {
+    color: c.textSecondary, fontSize: 16, fontWeight: '600' as const, marginBottom: spacing.xs,
+  },
+  emptyStateDesc: {
+    color: c.textMuted, fontSize: 12, textAlign: 'center' as const, lineHeight: 18,
+  },
+
+  // Error state
+  errorState: {
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.xxl,
+    alignItems: 'center' as const,
+  },
+  errorStateIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: `${c.bearish}15`, color: c.bearish,
+    fontSize: 20, fontWeight: '800' as const,
+    textAlign: 'center' as const, lineHeight: 40, marginBottom: spacing.sm,
+    overflow: 'hidden' as const,
+  },
+  errorStateText: {
+    color: c.bearish, fontSize: 14, fontWeight: '600' as const,
+    marginBottom: spacing.md, textAlign: 'center' as const,
+  },
+  errorStateRetryBtn: {
+    backgroundColor: c.accent, paddingHorizontal: 28, paddingVertical: 12,
+    borderRadius: radius.md,
+  },
+  errorStateRetryText: { color: '#fff', fontSize: 14, fontWeight: '700' as const },
 
   scanInfo: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, alignItems: 'center' },
   scanInfoText: { color: c.textMuted, fontSize: 10, letterSpacing: 0.3 },

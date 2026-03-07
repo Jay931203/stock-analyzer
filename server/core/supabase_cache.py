@@ -58,8 +58,7 @@ def read_cached_signals() -> dict | None:
             return None
 
         latest = data[0].get("updated_at", "")
-        # Import enrichment dicts lazily to avoid circular import
-        from ..api.routes import TICKER_NAMES, MARKET_CAP_B
+        from ..api.constants import TICKER_NAMES, MARKET_CAP_B
 
         signals = []
         for row in data:
