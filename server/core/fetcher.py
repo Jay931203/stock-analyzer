@@ -575,59 +575,72 @@ def fetch_earnings_dates(tickers: list[str]) -> list[dict]:
 def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
     """Fetch past earnings with post-earnings price moves.
 
-    Uses yfinance earnings_history (JSON-based, no lxml) for EPS data.
-    Estimates actual report dates from quarter-end + ~30-60 days using
-    the largest single-day price move in that window as the announcement day.
+    Uses Yahoo Finance quoteSummary JSON API (via yfinance's authenticated
+    session) for EPS data. Estimates actual announcement dates from quarter-end
+    dates by finding the largest single-day price move in a ~20-65 day window.
     """
     from datetime import datetime, timedelta
     try:
-        kwargs = {"session": _session} if _session else {}
-        stock = yf.Ticker(ticker.upper(), **kwargs)
+        t = ticker.upper()
+        stock = yf.Ticker(t)
 
-        eh = stock.earnings_history
-        if eh is None or eh.empty:
+        # Use yfinance's internal authenticated data fetcher for earningsHistory
+        url = (
+            f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{t}"
+            f"?modules=earningsHistory"
+        )
+        resp = stock._data.get(url)
+        data = resp.json() if hasattr(resp, "json") else resp
+        if not isinstance(data, dict):
+            return []
+
+        entries = (
+            data.get("quoteSummary", {})
+            .get("result", [{}])[0]
+            .get("earningsHistory", {})
+            .get("history", [])
+        )
+        if not entries:
             return []
 
         df = fetch_price_history(ticker, period="3y")
         if df.empty:
             return []
 
-        # Pre-compute daily returns for fast lookup
         df_ret = df["Close"].pct_change().abs()
-
         results = []
         now = datetime.now()
 
-        # earnings_history index = quarter-end dates, most recent first
-        for quarter_end in eh.index:
+        for entry in entries:
             try:
-                qe = quarter_end.to_pydatetime().replace(tzinfo=None)
+                quarter_epoch = entry.get("quarter", {}).get("raw")
+                if not quarter_epoch:
+                    continue
+                qe = datetime.utcfromtimestamp(quarter_epoch)
 
                 # Earnings announced ~20-65 days after quarter end
                 search_start = pd.Timestamp(qe + timedelta(days=20))
                 search_end = pd.Timestamp(qe + timedelta(days=65))
-
                 if search_start > pd.Timestamp(now):
                     continue
 
-                # Find the day with the biggest price move in the window
                 window_mask = (df.index >= search_start) & (df.index <= search_end)
                 if window_mask.sum() < 2:
                     continue
 
-                window_ret = df_ret[window_mask]
-                announce_idx = window_ret.idxmax()
+                announce_idx = df_ret[window_mask].idxmax()
                 announce_date_str = announce_idx.strftime("%Y-%m-%d")
 
-                row = eh.loc[quarter_end]
-                eps_estimate = round(float(row["epsEstimate"]), 2) if pd.notna(row["epsEstimate"]) else None
-                reported_eps = round(float(row["epsActual"]), 2) if pd.notna(row["epsActual"]) else None
-                surprise_raw = row["surprisePercent"] if pd.notna(row["surprisePercent"]) else None
-                surprise_pct = round(float(surprise_raw) * 100, 2) if surprise_raw is not None else None
+                eps_est = entry.get("epsEstimate", {}).get("raw")
+                eps_act = entry.get("epsActual", {}).get("raw")
+                surp = entry.get("surprisePercent", {}).get("raw")
+
+                eps_estimate = round(float(eps_est), 2) if eps_est is not None else None
+                reported_eps = round(float(eps_act), 2) if eps_act is not None else None
+                surprise_pct = round(float(surp) * 100, 2) if surp is not None else None
 
                 # Post-earnings returns (1W=5 trading days, 1M=20 trading days)
-                post_mask = df.index >= announce_idx
-                post_df = df.loc[post_mask]
+                post_df = df.loc[df.index >= announce_idx]
                 if len(post_df) < 2:
                     continue
                 close_at = post_df.iloc[0]["Close"]
