@@ -28,9 +28,11 @@ interface Props {
   onDaySelect: (day: number | null) => void;
   colors: ThemeColors;
   onTickerPress?: (ticker: string) => void;
+  onPrevMonth?: () => void;
+  onNextMonth?: () => void;
 }
 
-function MarketCalendar({ calendarGrid, selectedCalDay, onDaySelect, colors, onTickerPress }: Props) {
+function MarketCalendar({ calendarGrid, selectedCalDay, onDaySelect, colors, onTickerPress, onPrevMonth, onNextMonth }: Props) {
   const s = useMemo(() => makeStyles(colors), [colors]);
 
   if (!calendarGrid) return null;
@@ -40,9 +42,21 @@ function MarketCalendar({ calendarGrid, selectedCalDay, onDaySelect, colors, onT
       <View style={s.sectionHeader}>
         <View style={[s.sectionDot, { backgroundColor: '#F59E0B' }]} />
         <Text style={s.sectionLabel}>MARKET CALENDAR</Text>
-        <Text style={s.sectionCount}>
-          {calendarGrid.monthName} {calendarGrid.year}
-        </Text>
+        <View style={s.monthNav}>
+          {onPrevMonth && (
+            <Pressable onPress={onPrevMonth} style={s.monthNavBtn} accessibilityRole="button" accessibilityLabel="Previous month">
+              <Text style={s.monthNavArrow}>‹</Text>
+            </Pressable>
+          )}
+          <Text style={s.sectionCount}>
+            {calendarGrid.monthName} {calendarGrid.year}
+          </Text>
+          {onNextMonth && (
+            <Pressable onPress={onNextMonth} style={s.monthNavBtn} accessibilityRole="button" accessibilityLabel="Next month">
+              <Text style={s.monthNavArrow}>›</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
       <View style={s.calGrid}>
         {/* Weekday headers */}
@@ -186,6 +200,9 @@ const makeStyles = (c: ThemeColors) =>
       textTransform: 'uppercase',
     },
     sectionCount: { color: c.textMuted, fontSize: 12, fontWeight: '600' },
+    monthNav: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    monthNavBtn: { paddingHorizontal: 8, paddingVertical: 2 },
+    monthNavArrow: { color: c.accent, fontSize: 18, fontWeight: '700' },
     calGrid: {
       backgroundColor: c.bgElevated,
       borderRadius: radius.md,

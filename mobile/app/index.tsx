@@ -476,14 +476,17 @@ export default function HomeScreen() {
     return signals.filter(s => LEVERAGED_TICKERS.has(s.ticker)).sort((a, b) => getWinRateForPeriod(b, period) - getWinRateForPeriod(a, period));
   }, [signals, period]);
   // Build calendar grid (current month view)
+  const [calMonthOffset, setCalMonthOffset] = useState(0);
+
   const calendarGrid = useMemo(() => {
     if (calendarEvents.length === 0) return null;
     const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
+    const target = new Date(today.getFullYear(), today.getMonth() + calMonthOffset, 1);
+    const year = target.getFullYear();
+    const month = target.getMonth();
     const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const todayDate = today.getDate();
+    const todayDate = (calMonthOffset === 0) ? today.getDate() : -1; // only highlight today in current month
     const monthName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month];
 
     // Map events by day-of-month
@@ -510,7 +513,7 @@ export default function HomeScreen() {
     }
 
     return { year, month, monthName, todayDate, weeks, eventsByDay, daysInMonth };
-  }, [calendarEvents]);
+  }, [calendarEvents, calMonthOffset]);
 
   const getWinRate = useCallback((s: SignalItem) => {
     return getWinRateForPeriod(s, period);
@@ -802,9 +805,9 @@ export default function HomeScreen() {
                       {wr !== null ? (
                         <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
                       ) : (
-                        <Text style={[s.indexCardWinRate, { color: colors.textMuted }]}>--</Text>
+                        <Text style={[s.indexCardWinRate, { color: colors.textMuted, fontSize: 14 }]}>N/A</Text>
                       )}
-                      <Text style={s.indexCardLabel}>Win Rate</Text>
+                      <Text style={s.indexCardLabel}>{wr !== null ? 'Win Rate' : 'Tap to analyze'}</Text>
                     </View>
                     {avgRet !== null && avgRet !== 0 ? (
                       <View style={{ alignItems: 'center' }}>
@@ -813,16 +816,13 @@ export default function HomeScreen() {
                         </Text>
                         <Text style={s.indexCardLabel}>Avg Return</Text>
                       </View>
-                    ) : (
+                    ) : null}
+                    {sig ? (
                       <View style={{ alignItems: 'center' }}>
-                        <Text style={[s.indexCardAvg, { color: colors.textMuted }]}>--</Text>
-                        <Text style={s.indexCardLabel}>Avg Return</Text>
+                        <Text style={s.indexCardCases}>{sig.occurrences}</Text>
+                        <Text style={s.indexCardLabel}>Cases</Text>
                       </View>
-                    )}
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={s.indexCardCases}>{sig?.occurrences ?? '--'}</Text>
-                      <Text style={s.indexCardLabel}>Cases</Text>
-                    </View>
+                    ) : null}
                   </View>
                 </Pressable>
               );
@@ -1076,7 +1076,15 @@ export default function HomeScreen() {
         <EarningsSection earnings={earnings} colors={colors} onPress={goToAnalysis} />
 
         {/* Market Calendar */}
-        <MarketCalendar calendarGrid={calendarGrid} selectedCalDay={selectedCalDay} onDaySelect={setSelectedCalDay} colors={colors} onTickerPress={goToAnalysis} />
+        <MarketCalendar
+          calendarGrid={calendarGrid}
+          selectedCalDay={selectedCalDay}
+          onDaySelect={setSelectedCalDay}
+          colors={colors}
+          onTickerPress={goToAnalysis}
+          onPrevMonth={() => { setCalMonthOffset(o => o - 1); setSelectedCalDay(null); }}
+          onNextMonth={calMonthOffset < 2 ? () => { setCalMonthOffset(o => o + 1); setSelectedCalDay(null); } : undefined}
+        />
 
         {/* Ad Slot */}
         <AdSlot size="banner" />
