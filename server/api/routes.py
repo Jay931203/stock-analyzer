@@ -13,7 +13,7 @@ _IS_VERCEL = os.environ.get("VERCEL") is not None
 
 from ..core.analyzer import compute_all_indicators, get_indicator_state
 from ..core.backtester import calc_combined_probability, calc_probability
-from ..core.fetcher import fetch_batch_quotes, fetch_earnings_dates, fetch_live_prices, fetch_price_history, get_ticker_info, search_tickers
+from ..core.fetcher import fetch_batch_quotes, fetch_earnings_dates, fetch_earnings_history, fetch_live_prices, fetch_price_history, get_ticker_info, search_tickers
 from ..core.signal_flip import snapshot_and_detect, get_flips
 from ..core.economic_calendar import get_economic_events
 from ..core.presets import get_preset, list_presets, PRESETS
@@ -698,12 +698,102 @@ async def earnings_calendar():
     return result
 
 
+@router.get("/earnings-history/{ticker}")
+async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20)):
+    """Get past earnings history with post-earnings price performance."""
+    ticker = _validate_ticker(ticker)
+    try:
+        history = fetch_earnings_history(ticker, limit=limit)
+        # Calculate aggregate stats
+        beats = sum(1 for e in history if e.get("surprise_pct") and e["surprise_pct"] > 0)
+        total_with_data = sum(1 for e in history if e.get("surprise_pct") is not None)
+
+        avg_return_1w = None
+        avg_return_1m = None
+        returns_1w = [e["return_1w"] for e in history if e["return_1w"] is not None]
+        returns_1m = [e["return_1m"] for e in history if e["return_1m"] is not None]
+        if returns_1w:
+            avg_return_1w = round(sum(returns_1w) / len(returns_1w), 2)
+        if returns_1m:
+            avg_return_1m = round(sum(returns_1m) / len(returns_1m), 2)
+
+        positive_1w = sum(1 for r in returns_1w if r > 0) if returns_1w else 0
+
+        return {
+            "ticker": ticker,
+            "earnings": history,
+            "stats": {
+                "beat_rate": round(beats / total_with_data * 100) if total_with_data > 0 else None,
+                "total_reports": len(history),
+                "avg_return_1w": avg_return_1w,
+                "avg_return_1m": avg_return_1m,
+                "positive_after_1w_pct": round(positive_1w / len(returns_1w) * 100) if returns_1w else None,
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+_past_earnings_cache: dict = {"data": None, "ts": 0}
+_PAST_EARNINGS_TTL = 43200  # 12 hours
+
+# Top tickers for past earnings calendar (subset to avoid excessive API calls)
+_CALENDAR_EARNINGS_TICKERS = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA",
+    "AVGO", "AMD", "NFLX", "CRM", "COST", "ADBE", "INTC",
+    "QCOM", "MU", "PYPL", "SBUX", "COIN", "PLTR",
+]
+
+
+def _fetch_past_earnings_for_calendar() -> list[dict]:
+    """Fetch recent past earnings (last 60 days) from top tickers for calendar display."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    now = datetime.now()
+    cutoff = now - timedelta(days=60)
+    events = []
+
+    def _get_past(ticker: str) -> list[dict]:
+        try:
+            history = fetch_earnings_history(ticker, limit=4)
+            result = []
+            for e in history:
+                earn_date = datetime.strptime(e["date"], "%Y-%m-%d")
+                if earn_date >= cutoff:
+                    desc_parts = []
+                    if e.get("reported_eps") is not None:
+                        desc_parts.append(f"EPS: {e['reported_eps']}")
+                    if e.get("surprise_pct") is not None:
+                        desc_parts.append(f"Surprise: {e['surprise_pct']}%")
+                    result.append({
+                        "date": e["date"],
+                        "type": "EARNINGS",
+                        "label": f"{ticker} Earnings",
+                        "impact": "medium",
+                        "ticker": ticker,
+                        "desc": ", ".join(desc_parts) if desc_parts else "",
+                    })
+            return result
+        except Exception:
+            return []
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {executor.submit(_get_past, t): t for t in _CALENDAR_EARNINGS_TICKERS}
+        for future in as_completed(futures):
+            try:
+                events.extend(future.result())
+            except Exception:
+                pass
+
+    return events
+
+
 @router.get("/calendar")
 async def market_calendar(days: int = Query(30, ge=7, le=60)):
-    """Combined calendar: economic events + earnings (from cache only, no blocking fetch)."""
+    """Combined calendar: economic events + upcoming earnings + recent past earnings."""
     now = time.time()
 
-    # Earnings: only use if already cached (never block on fetch_earnings_dates here)
+    # Upcoming earnings: only use if already cached (never block on fetch_earnings_dates here)
     earning_events = []
     if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
         for e in _earnings_cache["data"].get("earnings", []):
@@ -719,10 +809,22 @@ async def market_calendar(days: int = Query(30, ge=7, le=60)):
                     "days_until": e["days_until"],
                 })
 
+    # Past earnings (last 60 days) - cached separately
+    past_earning_events = []
+    if _past_earnings_cache["data"] and now - _past_earnings_cache["ts"] < _PAST_EARNINGS_TTL:
+        past_earning_events = _past_earnings_cache["data"]
+    else:
+        try:
+            past_earning_events = _fetch_past_earnings_for_calendar()
+            _past_earnings_cache["data"] = past_earning_events
+            _past_earnings_cache["ts"] = now
+        except Exception:
+            pass
+
     # Economic events (hardcoded, instant)
     econ_events = get_economic_events(days_ahead=days)
 
-    all_events = earning_events + econ_events
+    all_events = earning_events + past_earning_events + econ_events
     all_events.sort(key=lambda x: x["date"])
 
     return {

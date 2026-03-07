@@ -572,6 +572,99 @@ def fetch_earnings_dates(tickers: list[str]) -> list[dict]:
     return results
 
 
+def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
+    """Fetch past earnings dates with post-earnings price moves.
+
+    Uses yfinance earnings_dates for historical earnings,
+    then calculates 1-week and 1-month returns after each earnings date.
+    """
+    from datetime import datetime, timedelta
+    try:
+        kwargs = {"session": _session} if _session else {}
+        stock = yf.Ticker(ticker.upper(), **kwargs)
+
+        # Get earnings dates (past and future)
+        ed = stock.earnings_dates
+        if ed is None or ed.empty:
+            return []
+
+        # Get price history for return calculation
+        df = fetch_price_history(ticker, period="3y")
+        if df.empty:
+            return []
+
+        results = []
+        now = datetime.now()
+
+        for idx in ed.index[:limit * 2]:  # Look at more than limit to filter
+            try:
+                # Parse the earnings date
+                if hasattr(idx, 'to_pydatetime'):
+                    earn_dt = idx.to_pydatetime()
+                    if hasattr(earn_dt, 'tzinfo') and earn_dt.tzinfo:
+                        earn_dt = earn_dt.replace(tzinfo=None)
+                else:
+                    continue
+
+                # Skip future earnings
+                if earn_dt > now:
+                    continue
+
+                earn_date_str = earn_dt.strftime("%Y-%m-%d")
+
+                # Get EPS surprise data from the row
+                row = ed.loc[idx]
+                eps_estimate = row.get("EPS Estimate", None)
+                reported_eps = row.get("Reported EPS", None)
+                surprise_pct = row.get("Surprise(%)", None)
+
+                # Convert to Python floats, handling NaN
+                eps_estimate = float(eps_estimate) if pd.notna(eps_estimate) else None
+                reported_eps = float(reported_eps) if pd.notna(reported_eps) else None
+                surprise_pct = float(surprise_pct) if pd.notna(surprise_pct) else None
+
+                # Calculate post-earnings returns (1W = 5 trading days, 1M = 20 trading days)
+                # Find the closest trading day on or after earnings date
+                earn_date_pd = pd.Timestamp(earn_date_str)
+                mask = df.index >= earn_date_pd
+                if mask.sum() < 2:
+                    continue
+
+                post_df = df.loc[mask]
+                close_at_earnings = post_df.iloc[0]["Close"]
+
+                return_1w = None
+                return_1m = None
+
+                if len(post_df) > 5:
+                    return_1w = round((post_df.iloc[5]["Close"] / close_at_earnings - 1) * 100, 2)
+                if len(post_df) > 20:
+                    return_1m = round((post_df.iloc[20]["Close"] / close_at_earnings - 1) * 100, 2)
+
+                # Determine BMO/AMC
+                hour = earn_dt.hour if hasattr(earn_dt, 'hour') else 0
+                time_of_day = "BMO" if hour < 12 else ("AMC" if hour >= 16 else "TBD")
+
+                results.append({
+                    "date": earn_date_str,
+                    "eps_estimate": eps_estimate,
+                    "reported_eps": reported_eps,
+                    "surprise_pct": surprise_pct,
+                    "return_1w": return_1w,
+                    "return_1m": return_1m,
+                    "time_of_day": time_of_day,
+                })
+
+                if len(results) >= limit:
+                    break
+            except Exception:
+                continue
+
+        return results
+    except Exception:
+        return []
+
+
 def search_tickers(query: str, limit: int = 10) -> list[dict]:
     """Search for tickers matching a query. Uses local DB first, yfinance as fallback."""
     q = query.upper().strip()

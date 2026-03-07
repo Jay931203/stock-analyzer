@@ -303,3 +303,27 @@ export interface TimeMachineRange {
   last_date: string;
   total_days: number;
 }
+
+export interface EarningsHistoryItem {
+  date: string;
+  eps_estimate: number | null;
+  reported_eps: number | null;
+  surprise_pct: number | null;
+  return_1w: number | null;
+  return_1m: number | null;
+  time_of_day: string;
+}
+
+export interface EarningsHistoryStats {
+  beat_rate: number | null;
+  total_reports: number;
+  avg_return_1w: number | null;
+  avg_return_1m: number | null;
+  positive_after_1w_pct: number | null;
+}
+
+export interface EarningsHistoryResponse {
+  ticker: string;
+  earnings: EarningsHistoryItem[];
+  stats: EarningsHistoryStats;
+}

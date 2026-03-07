@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../src/api/client';
-import type { AnalysisResponse } from '../../src/types/analysis';
+import type { AnalysisResponse, EarningsHistoryResponse } from '../../src/types/analysis';
 import IndicatorCard from '../../src/components/IndicatorCard';
 import SmartCombinedView from '../../src/components/SmartCombinedView';
 import Week52Gauge from '../../src/components/Week52Gauge';
@@ -157,6 +157,8 @@ export default function AnalyzeScreen() {
   const [windowPeriod, setWindowPeriod] = useState<string>('20d');
   const [refreshKey, setRefreshKey] = useState(0);
   const [summaryVisible, setSummaryVisible] = useState(false);
+  const [earningsData, setEarningsData] = useState<EarningsHistoryResponse | null>(null);
+  const [showAllEarnings, setShowAllEarnings] = useState(false);
 
   // Load global settings
   useEffect(() => {
@@ -215,6 +217,13 @@ export default function AnalyzeScreen() {
     setRefreshKey(k => k + 1);
     setRefreshing(false);
   };
+
+  // Load earnings history (non-blocking, after main data loads)
+  useEffect(() => {
+    if (ticker && data) {
+      api.earningsHistory(ticker).then(setEarningsData).catch(() => {});
+    }
+  }, [ticker, data]);
 
   const [shareMsg, setShareMsg] = useState('');
 
@@ -420,6 +429,97 @@ export default function AnalyzeScreen() {
         {price.high_52w && price.low_52w && (
           <View style={s.week52Section}>
             <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
+          </View>
+        )}
+
+        {/* EARNINGS HISTORY */}
+        {earningsData && earningsData.earnings.length > 0 && (
+          <View style={s.earningsSection}>
+            <Text style={s.sectionTitle}>EARNINGS HISTORY</Text>
+
+            {/* Summary stats bar */}
+            <View style={s.earningsStatsRow}>
+              {earningsData.stats.beat_rate !== null && (
+                <View style={s.earningsStat}>
+                  <Text style={[s.earningsStatValue, { color: earningsData.stats.beat_rate >= 50 ? colors.bullish : colors.bearish }]}>
+                    {earningsData.stats.beat_rate}%
+                  </Text>
+                  <Text style={s.earningsStatLabel}>Beat Rate</Text>
+                </View>
+              )}
+              {earningsData.stats.avg_return_1w !== null && (
+                <View style={s.earningsStat}>
+                  <Text style={[s.earningsStatValue, { color: earningsData.stats.avg_return_1w >= 0 ? colors.bullish : colors.bearish }]}>
+                    {earningsData.stats.avg_return_1w >= 0 ? '+' : ''}{earningsData.stats.avg_return_1w}%
+                  </Text>
+                  <Text style={s.earningsStatLabel}>Avg 1W</Text>
+                </View>
+              )}
+              {earningsData.stats.avg_return_1m !== null && (
+                <View style={s.earningsStat}>
+                  <Text style={[s.earningsStatValue, { color: earningsData.stats.avg_return_1m >= 0 ? colors.bullish : colors.bearish }]}>
+                    {earningsData.stats.avg_return_1m >= 0 ? '+' : ''}{earningsData.stats.avg_return_1m}%
+                  </Text>
+                  <Text style={s.earningsStatLabel}>Avg 1M</Text>
+                </View>
+              )}
+              {earningsData.stats.positive_after_1w_pct !== null && (
+                <View style={s.earningsStat}>
+                  <Text style={[s.earningsStatValue, { color: earningsData.stats.positive_after_1w_pct >= 50 ? colors.bullish : colors.bearish }]}>
+                    {earningsData.stats.positive_after_1w_pct}%
+                  </Text>
+                  <Text style={s.earningsStatLabel}>1W Rise%</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Column headers */}
+            <View style={s.earningsHeaderRow}>
+              <Text style={[s.earningsDate, s.earningsHeaderText]}>Date</Text>
+              <View style={s.earningsEps}>
+                <Text style={s.earningsHeaderText}>EPS</Text>
+              </View>
+              <View style={s.earningsSurpriseCol}>
+                <Text style={s.earningsHeaderText}>Surprise</Text>
+              </View>
+              <Text style={[s.earningsReturn, s.earningsHeaderText]}>1W</Text>
+              <Text style={[s.earningsReturn, s.earningsHeaderText]}>1M</Text>
+            </View>
+
+            {/* Earnings rows */}
+            {(showAllEarnings ? earningsData.earnings : earningsData.earnings.slice(0, 4)).map((e, i) => (
+              <View key={i} style={s.earningsRow}>
+                <Text style={s.earningsDate}>{e.date.slice(5)}</Text>
+                <View style={s.earningsEps}>
+                  <Text style={s.earningsEpsText}>
+                    {e.eps_estimate !== null ? e.eps_estimate.toFixed(2) : '?'} → {e.reported_eps !== null ? e.reported_eps.toFixed(2) : '?'}
+                  </Text>
+                </View>
+                <View style={s.earningsSurpriseCol}>
+                  {e.surprise_pct !== null ? (
+                    <View style={[s.earningsSurpriseBadge, { backgroundColor: e.surprise_pct >= 0 ? `${colors.bullish}15` : `${colors.bearish}15` }]}>
+                      <Text style={[s.earningsSurpriseText, { color: e.surprise_pct >= 0 ? colors.bullish : colors.bearish }]}>
+                        {e.surprise_pct >= 0 ? '+' : ''}{e.surprise_pct.toFixed(1)}%
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={s.earningsReturnDash}>--</Text>
+                  )}
+                </View>
+                <Text style={[s.earningsReturn, { color: (e.return_1w ?? 0) >= 0 ? colors.bullish : colors.bearish }]}>
+                  {e.return_1w !== null ? `${e.return_1w >= 0 ? '+' : ''}${e.return_1w.toFixed(1)}%` : '--'}
+                </Text>
+                <Text style={[s.earningsReturn, { color: (e.return_1m ?? 0) >= 0 ? colors.bullish : colors.bearish }]}>
+                  {e.return_1m !== null ? `${e.return_1m >= 0 ? '+' : ''}${e.return_1m.toFixed(1)}%` : '--'}
+                </Text>
+              </View>
+            ))}
+
+            {earningsData.earnings.length > 4 && (
+              <Pressable onPress={() => setShowAllEarnings(!showAllEarnings)} style={s.showMoreBtn}>
+                <Text style={s.showMoreText}>{showAllEarnings ? 'Show less' : `Show all ${earningsData.earnings.length}`}</Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -848,6 +948,103 @@ const makeStyles = (c: ThemeColors, screenH: number) => StyleSheet.create({
     backgroundColor: c.bgCard,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+  },
+
+  // Earnings History section
+  earningsSection: {
+    backgroundColor: c.bgCard,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginTop: 1,
+  },
+  earningsStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: c.bgElevated,
+    borderRadius: radius.md,
+  },
+  earningsStat: {
+    alignItems: 'center',
+  },
+  earningsStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  earningsStatLabel: {
+    color: c.textMuted,
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  earningsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: c.border,
+    marginBottom: 2,
+  },
+  earningsHeaderText: {
+    color: c.textMuted,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  earningsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: c.border,
+  },
+  earningsDate: {
+    width: 46,
+    color: c.textSecondary,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  earningsEps: {
+    flex: 1,
+    paddingHorizontal: 2,
+  },
+  earningsEpsText: {
+    color: c.textPrimary,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  earningsSurpriseCol: {
+    width: 58,
+    alignItems: 'center',
+  },
+  earningsSurpriseBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  earningsSurpriseText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  earningsReturn: {
+    width: 48,
+    textAlign: 'right',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  earningsReturnDash: {
+    color: c.textMuted,
+    fontSize: 11,
+  },
+  showMoreBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    marginTop: 4,
+  },
+  showMoreText: {
+    color: c.accent,
+    fontSize: 12,
+    fontWeight: '600',
   },
 
   // Time Machine CTA
