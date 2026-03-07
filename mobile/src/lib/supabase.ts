@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 const SUPABASE_URL = 'https://wmekpggsbkpxeavfesvq.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtZWtwZ2dzYmtweGVhdmZlc3ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkzMjcxODYsImV4cCI6MjA2NDkwMzE4Nn0.IBfhpTcjmFsNMRTEqLiiKvig6tJkTt1xYAyUKBfdr3c';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtZWtwZ2dzYmtweGVhdmZlc3ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5NTY3MDQsImV4cCI6MjA4NjUzMjcwNH0.Pdu9AvKdm9N0QBkvK_GOI1iYLEKGXD3V6mmYOeUQAhM';
 
 // Web: use localStorage directly for Supabase compatibility
 // Native: use AsyncStorage
