@@ -45,8 +45,8 @@ function getDateMonthsAgo(months: number): string {
   const d = new Date();
   d.setMonth(d.getMonth() - months);
   const day = d.getDay();
-  if (day === 0) d.setDate(d.getDate() - 2);
-  if (day === 6) d.setDate(d.getDate() - 1);
+  if (day === 0) d.setDate(d.getDate() + 1);
+  if (day === 6) d.setDate(d.getDate() + 2);
   return d.toISOString().split('T')[0];
 }
 

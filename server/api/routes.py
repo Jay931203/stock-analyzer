@@ -1048,11 +1048,11 @@ async def time_machine(
     except Exception:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {date}")
 
-    # Auto-adjust weekends to nearest prior Friday
-    if as_of.weekday() == 5:  # Saturday -> Friday
-        as_of -= pd.Timedelta(days=1)
-    elif as_of.weekday() == 6:  # Sunday -> Friday
-        as_of -= pd.Timedelta(days=2)
+    # Auto-adjust weekends to next Monday
+    if as_of.weekday() == 5:  # Saturday -> Monday
+        as_of += pd.Timedelta(days=2)
+    elif as_of.weekday() == 6:  # Sunday -> Monday
+        as_of += pd.Timedelta(days=1)
     date = as_of.strftime("%Y-%m-%d")
 
     # Must be at least 5 trading days ago
