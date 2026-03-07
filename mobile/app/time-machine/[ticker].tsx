@@ -29,14 +29,14 @@ const BACKTEST_PERIODS = [
 ] as const;
 
 const PRESET_DATES = [
-  { label: 'COVID Crash', sub: '2020-03-23', date: '2020-03-23' },
-  { label: 'Rate Shock', sub: '2022-01-24', date: '2022-01-24' },
-  { label: '2022 Bottom', sub: '2022-10-13', date: '2022-10-13' },
-  { label: 'Oct Pullback', sub: '2023-10-27', date: '2023-10-27' },
-  { label: 'Yen Carry Unwind', sub: '2024-08-05', date: '2024-08-05' },
-  { label: '3 Months Ago', sub: '', date: getDateMonthsAgo(3) },
-  { label: '6 Months Ago', sub: '', date: getDateMonthsAgo(6) },
-  { label: '1 Year Ago', sub: '', date: getDateMonthsAgo(12) },
+  { label: '코로나 폭락', sub: '2020-03-23', date: '2020-03-23' },
+  { label: '금리 쇼크', sub: '2022-01-24', date: '2022-01-24' },
+  { label: '2022 바닥', sub: '2022-10-13', date: '2022-10-13' },
+  { label: '10월 조정', sub: '2023-10-27', date: '2023-10-27' },
+  { label: '엔캐리 청산', sub: '2024-08-05', date: '2024-08-05' },
+  { label: '3개월 전', sub: '', date: getDateMonthsAgo(3) },
+  { label: '6개월 전', sub: '', date: getDateMonthsAgo(6) },
+  { label: '1년 전', sub: '', date: getDateMonthsAgo(12) },
 ];
 
 /* ── Helpers ── */
@@ -136,16 +136,16 @@ export default function TimeMachinePage() {
               hitSlop={12}
               onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
               accessibilityRole="button"
-              accessibilityLabel="Go back"
+              accessibilityLabel="뒤로가기"
             >
               <ChevronLeftIcon size={18} color={colors.accent} />
             </Pressable>
             <View style={s.headerCenter}>
-              <Text style={s.pageTitle}>Time Machine</Text>
+              <Text style={s.pageTitle}>타임머신</Text>
               <Text style={s.tickerBadge}>{ticker?.toUpperCase()}</Text>
             </View>
             {result ? (
-              <Pressable style={s.shareBtn} hitSlop={12} onPress={handleShare} accessibilityRole="button" accessibilityLabel="Share analysis">
+              <Pressable style={s.shareBtn} hitSlop={12} onPress={handleShare} accessibilityRole="button" accessibilityLabel="분석 공유">
                 <ShareIcon size={16} color={colors.accent} />
               </Pressable>
             ) : <View style={{ width: 36 }} />}
@@ -157,7 +157,7 @@ export default function TimeMachinePage() {
 
         {/* ── Date Presets ── */}
         <View style={s.section}>
-          <Text style={s.sectionLabel}>SELECT A DATE</Text>
+          <Text style={s.sectionLabel}>날짜 선택</Text>
           <View style={s.presetGrid}>
             {PRESET_DATES.map(p => {
               const active = selectedDate === p.date;
@@ -167,7 +167,7 @@ export default function TimeMachinePage() {
                   style={[s.presetBtn, active && s.presetBtnActive]}
                   onPress={() => analyze(p.date)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Analyze ${p.label}, ${p.sub || p.date}`}
+                  accessibilityLabel={`${p.label} 분석, ${p.sub || p.date}`}
                 >
                   <Text style={[s.presetLabel, active && s.presetLabelActive]}>{p.label}</Text>
                   <Text style={[s.presetSub, active && s.presetSubActive]}>
@@ -205,7 +205,7 @@ export default function TimeMachinePage() {
                     style={[s.periodPill, backtestPeriod === bp.value && s.periodPillActive]}
                     onPress={() => setBacktestPeriod(bp.value)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Backtest period ${bp.label}`}
+                    accessibilityLabel={`백테스트 기간 ${bp.label}`}
                   >
                     <Text style={[s.periodPillText, backtestPeriod === bp.value && s.periodPillTextActive]}>
                       {bp.label}
@@ -213,8 +213,8 @@ export default function TimeMachinePage() {
                   </Pressable>
                 ))}
               </View>
-              <Pressable style={s.analyzeBtn} onPress={() => analyze(selectedDate)} accessibilityRole="button" accessibilityLabel="Analyze selected date">
-                <Text style={s.analyzeBtnText}>Analyze</Text>
+              <Pressable style={s.analyzeBtn} onPress={() => analyze(selectedDate)} accessibilityRole="button" accessibilityLabel="선택한 날짜 분석">
+                <Text style={s.analyzeBtnText}>분석</Text>
               </Pressable>
             </View>
           )}
@@ -224,9 +224,9 @@ export default function TimeMachinePage() {
         {!result && !loading && !error && (
           <View style={s.emptyState}>
             <Text style={s.emptyIcon}>&#8986;</Text>
-            <Text style={s.emptyTitle}>Travel Back in Time</Text>
+            <Text style={s.emptyTitle}>과거로 돌아가기</Text>
             <Text style={s.emptyDesc}>
-              Select a historical date to see what signal this tool would have generated -- and whether it was right.
+              과거 날짜를 선택하면 그날의 시그널과 실제 결과를 비교할 수 있습니다.
             </Text>
           </View>
         )}
@@ -235,7 +235,7 @@ export default function TimeMachinePage() {
         {loading && (
           <View style={s.loadingBox}>
             <ActivityIndicator size="large" color={colors.accent} />
-            <Text style={s.loadingText}>Analyzing {selectedDate}...</Text>
+            <Text style={s.loadingText}>{selectedDate} 분석 중...</Text>
           </View>
         )}
 
@@ -250,9 +250,9 @@ export default function TimeMachinePage() {
               style={s.errorRetryBtn}
               onPress={() => { if (selectedDate) analyze(selectedDate); }}
               accessibilityRole="button"
-              accessibilityLabel="Retry analysis"
+              accessibilityLabel="분석 재시도"
             >
-              <Text style={s.errorRetryText}>Retry</Text>
+              <Text style={s.errorRetryText}>재시도</Text>
             </Pressable>
           </View>
         )}
@@ -272,18 +272,18 @@ export default function TimeMachinePage() {
                     {acc.was_correct ? '\u2713' : '\u2717'}
                   </Text>
                   <Text style={[s.verdictTitle, { color: acc.was_correct ? colors.bullish : colors.bearish }]}>
-                    {acc.was_correct ? 'Signal Was Correct' : 'Signal Was Wrong'}
+                    {acc.was_correct ? '시그널 적중' : '시그널 빗나감'}
                   </Text>
                   <View style={s.verdictComparison}>
                     <View style={s.verdictSide}>
-                      <Text style={s.verdictSideLabel}>Predicted</Text>
+                      <Text style={s.verdictSideLabel}>예측</Text>
                       <Text style={[s.verdictSideValue, {
                         color: acc.predicted_direction === 'bullish' ? colors.bullish : colors.bearish,
                       }]}>{directionLabel(acc.predicted_direction)}</Text>
                     </View>
                     <Text style={s.verdictArrow}>{'\u2192'}</Text>
                     <View style={s.verdictSide}>
-                      <Text style={s.verdictSideLabel}>Actual</Text>
+                      <Text style={s.verdictSideLabel}>실제</Text>
                       <Text style={[s.verdictSideValue, {
                         color: acc.actual_direction === 'up' ? colors.bullish : colors.bearish,
                       }]}>{actualDirLabel(acc.actual_direction)}</Text>
@@ -295,13 +295,13 @@ export default function TimeMachinePage() {
 
             {/* 2. Signal at Date */}
             <View style={s.section}>
-              <Text style={s.sectionLabel}>SIGNAL ON {result.date}</Text>
+              <Text style={s.sectionLabel}>{result.date} 시그널</Text>
               <View style={s.signalCard}>
                 <View style={s.signalTopRow}>
                   <View>
                     <Text style={s.signalPrice}>${result.price_at_date.toFixed(2)}</Text>
                     <Text style={s.signalOcc}>
-                      {result.signal.occurrences} similar patterns found
+                      {result.signal.occurrences}개 유사 패턴
                     </Text>
                   </View>
                   <View style={[s.dirBadge, {
@@ -339,7 +339,7 @@ export default function TimeMachinePage() {
                 {/* Fallback: show only 20d win rate if no multi-period data */}
                 {(!sig?.win_rates || Object.keys(sig.win_rates).length === 0) && sig?.win_rate_20d != null && (
                   <Text style={s.signalWinRateFallback}>
-                    1M Win Rate: {sig.win_rate_20d.toFixed(0)}%
+                    1개월 승률: {sig.win_rate_20d.toFixed(0)}%
                   </Text>
                 )}
               </View>
@@ -347,7 +347,7 @@ export default function TimeMachinePage() {
 
             {/* 3. Actual Returns Grid */}
             <View style={s.section}>
-              <Text style={s.sectionLabel}>WHAT ACTUALLY HAPPENED</Text>
+              <Text style={s.sectionLabel}>실제 결과</Text>
               <View style={s.returnsGrid}>
                 {Object.entries(result.actual).map(([days, data]) => {
                   const matched = sig?.direction === 'bullish' ? data.went_up
@@ -379,7 +379,7 @@ export default function TimeMachinePage() {
             {/* 4. Per-Period Accuracy */}
             {sig?.win_rates && Object.keys(sig.win_rates).length > 0 && (
               <View style={s.section}>
-                <Text style={s.sectionLabel}>PREDICTION vs REALITY</Text>
+                <Text style={s.sectionLabel}>예측 vs 실제</Text>
                 <View style={s.predictionCard}>
                   {Object.entries(WIN_RATE_PERIOD_LABELS).map(([period, label]) => {
                     const wr = sig.win_rates?.[period];
@@ -397,7 +397,7 @@ export default function TimeMachinePage() {
                             color: wr >= 55 ? colors.bullish : wr <= 45 ? colors.bearish : colors.neutral,
                           }]}>
                             {predicted === 'Bullish' ? '\u25B2' : predicted === 'Bearish' ? '\u25BC' : '\u25CF'}{' '}
-                            {wr.toFixed(0)}% win rate
+                            {wr.toFixed(0)}% 승률
                           </Text>
                           <Text style={s.predArrow}>{'\u2192'}</Text>
                           <Text style={[s.predActual, {
@@ -421,7 +421,7 @@ export default function TimeMachinePage() {
             {/* 5. Key Indicators */}
             {result.highlights.length > 0 && (
               <View style={s.section}>
-                <Text style={s.sectionLabel}>KEY INDICATORS</Text>
+                <Text style={s.sectionLabel}>핵심 지표</Text>
                 <View style={s.indicatorsGrid}>
                   {result.highlights.map((h, i) => {
                     const isBullish = h.type === 'bullish';
@@ -445,7 +445,7 @@ export default function TimeMachinePage() {
 
             {/* 6. Current Comparison */}
             <View style={s.section}>
-              <Text style={s.sectionLabel}>THEN vs NOW</Text>
+              <Text style={s.sectionLabel}>과거 vs 현재</Text>
               <View style={s.compareCard}>
                 <View style={s.compareRow}>
                   <View style={s.compareCol}>
@@ -462,7 +462,7 @@ export default function TimeMachinePage() {
                     </Text>
                   </View>
                   <View style={s.compareCol}>
-                    <Text style={s.compareDateLabel}>Today</Text>
+                    <Text style={s.compareDateLabel}>현재</Text>
                     <Text style={s.comparePrice}>${result.current_price.toFixed(2)}</Text>
                   </View>
                 </View>
@@ -472,8 +472,7 @@ export default function TimeMachinePage() {
             {/* Disclaimer */}
             <View style={s.disclaimerBox}>
               <Text style={s.disclaimerText}>
-                This analysis is based on historical data and statistical patterns. It is not investment advice.
-                Past performance does not guarantee future results.
+                이 분석은 과거 데이터와 통계적 패턴에 기반합니다. 투자 조언이 아닙니다. 과거 실적이 미래 수익을 보장하지 않습니다.
               </Text>
             </View>
           </>

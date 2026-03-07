@@ -25,7 +25,7 @@ function SectorHeatmap({ sectorHeatmap, colors, onSectorPress }: Props) {
     <View style={s.section}>
       <View style={s.sectionHeader}>
         <View style={[s.sectionDot, { backgroundColor: colors.accent }]} />
-        <Text style={s.sectionLabel}>SECTOR HEATMAP</Text>
+        <Text style={s.sectionLabel}>섹터 히트맵</Text>
       </View>
       <View style={s.heatmapGrid}>
         {sectorHeatmap.map(({ sector, bullPct, avgWinRate, avgChange, total }) => {
@@ -58,7 +58,7 @@ function SectorHeatmap({ sectorHeatmap, colors, onSectorPress }: Props) {
                 {avgChange >= 0 ? '+' : ''}
                 {avgChange.toFixed(1)}%
               </Text>
-              <Text style={s.heatmapCount}>{total} stocks</Text>
+              <Text style={s.heatmapCount}>{total}개 종목</Text>
             </Pressable>
           );
         })}

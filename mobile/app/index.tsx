@@ -94,7 +94,7 @@ function SignalCard({ sig, colors, bullishColor, onPress, onLongPress, period = 
       {sig.occurrences === 0 ? (
         <>
           <Text style={[cardStyles(colors).winRate, { color: colors.textMuted, fontSize: 18 }]}>N/A</Text>
-          <Text style={cardStyles(colors).probLabel}>Insufficient Data</Text>
+          <Text style={cardStyles(colors).probLabel}>데이터 부족</Text>
         </>
       ) : (
         <>
@@ -102,7 +102,7 @@ function SignalCard({ sig, colors, bullishColor, onPress, onLongPress, period = 
             {winRate.toFixed(0)}%
           </Text>
           <Text style={cardStyles(colors).probLabel}>
-            Win Rate{sig.occurrences < 5 ? ' *' : ''}
+            승률{sig.occurrences < 5 ? ' *' : ''}
           </Text>
         </>
       )}
@@ -113,12 +113,12 @@ function SignalCard({ sig, colors, bullishColor, onPress, onLongPress, period = 
           <Text style={[cardStyles(colors).avgText, {
             color: avgReturn >= 0 ? colors.bullish : colors.bearish,
           }]}>
-            Avg {avgReturn >= 0 ? '+' : ''}{avgReturn.toFixed(1)}%
+            평균 {avgReturn >= 0 ? '+' : ''}{avgReturn.toFixed(1)}%
           </Text>
         </View>
       )}
       <Text style={cardStyles(colors).cases}>
-        {sig.occurrences === 0 ? 'No match' : `${sig.occurrences} cases`}
+        {sig.occurrences === 0 ? '매칭 없음' : `${sig.occurrences}건`}
       </Text>
     </Pressable>
   );
@@ -191,7 +191,26 @@ export default function HomeScreen() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [selectedCalDay, setSelectedCalDay] = useState<number | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [etClock, setEtClock] = useState('');
   const debounce = useRef<ReturnType<typeof setTimeout>>(null);
+
+  // Live ET clock - updates every second
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const etStr = now.toLocaleTimeString('en-US', {
+        timeZone: 'America/New_York',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      setEtClock(etStr);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const loadSignals = useCallback(async (dp?: string, forceRefresh = false) => {
     const usePeriod = dp ?? dataPeriod;
@@ -327,27 +346,27 @@ export default function HomeScreen() {
     const text = [
       `📊 ${sig.ticker}${sig.name ? ` - ${sig.name}` : ''}`,
       `$${sig.price.toFixed(2)} (${dir}${sig.change_pct.toFixed(1)}%)`,
-      `Win Rate (${PERIOD_LABELS[period]}): ${wr.toFixed(0)}%`,
-      avgRet ? `Avg Return: ${avgRet >= 0 ? '+' : ''}${avgRet.toFixed(1)}%` : '',
-      `Cases: ${sig.occurrences} | ${sig.sector}`,
-      `Backtest: ${dataPeriod.toUpperCase()} | via Stock Scanner`,
+      `승률 (${PERIOD_LABELS[period]}): ${wr.toFixed(0)}%`,
+      avgRet ? `평균수익: ${avgRet >= 0 ? '+' : ''}${avgRet.toFixed(1)}%` : '',
+      `${sig.occurrences}건 | ${sig.sector}`,
+      `백테스트: ${dataPeriod.toUpperCase()} | Stock Scanner`,
     ].filter(Boolean).join('\n');
     await doShareUtil(text, (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(''), 2000); });
   }, [period, dataPeriod]);
 
   const shareMarketSummary = async () => {
     if (!marketRegime || signals.length === 0) return;
-    const topBull = bullish.slice(0, 5).map(s => `  ${s.ticker}: ${getWinRateForPeriod(s, period).toFixed(0)}% win`).join('\n');
-    const topBear = bearish.slice(0, 5).map(s => `  ${s.ticker}: ${getWinRateForPeriod(s, period).toFixed(0)}% win`).join('\n');
+    const topBull = bullish.slice(0, 5).map(s => `  ${s.ticker}: 승률 ${getWinRateForPeriod(s, period).toFixed(0)}%`).join('\n');
+    const topBear = bearish.slice(0, 5).map(s => `  ${s.ticker}: 승률 ${getWinRateForPeriod(s, period).toFixed(0)}%`).join('\n');
     const text = [
-      `📊 Market Summary (${PERIOD_LABELS[period]} window, ${dataPeriod.toUpperCase()} backtest)`,
-      `Mood: ${marketRegime.mood} (${marketRegime.bullPct}% bullish)`,
-      `${marketRegime.bullCount} bullish / ${marketRegime.bearCount} bearish`,
+      `📊 시장 요약 (${PERIOD_LABELS[period]} 기간, ${dataPeriod.toUpperCase()} 백테스트)`,
+      `분위기: ${marketRegime.mood} (${marketRegime.bullPct}% 강세)`,
+      `${marketRegime.bullCount} 강세 / ${marketRegime.bearCount} 약세`,
       '',
-      topBull ? `Top Bullish:\n${topBull}` : '',
-      topBear ? `Top Bearish:\n${topBear}` : '',
+      topBull ? `강세 상위:\n${topBull}` : '',
+      topBear ? `약세 상위:\n${topBear}` : '',
       '',
-      `Scanned ${scannedCount} stocks | via Stock Scanner`,
+      `${scannedCount}개 종목 스캔 | Stock Scanner`,
     ].filter(Boolean).join('\n');
     await doShareUtil(text, (msg) => { setShareMsg(msg); setTimeout(() => setShareMsg(''), 2000); });
   };
@@ -417,7 +436,7 @@ export default function HomeScreen() {
     const bearCount = nonLev.length - bullCount;
     const bullPct = Math.round((bullCount / nonLev.length) * 100);
     const avgWinRate = nonLev.reduce((sum, s) => sum + getWinRateForPeriod(s, period), 0) / nonLev.length;
-    const mood = bullPct >= 65 ? 'Strong Bull' : bullPct >= 55 ? 'Mild Bull' : bullPct >= 45 ? 'Neutral' : bullPct >= 35 ? 'Mild Bear' : 'Strong Bear';
+    const mood = bullPct >= 65 ? '강한 강세' : bullPct >= 55 ? '약한 강세' : bullPct >= 45 ? '중립' : bullPct >= 35 ? '약한 약세' : '강한 약세';
     return { bullCount, bearCount, bullPct, total: nonLev.length, avgWinRate: Math.round(avgWinRate), mood };
   }, [signals, period]);
   const sectorMomentum = useMemo(() => {
@@ -580,7 +599,7 @@ export default function HomeScreen() {
       {/* Offline banner */}
       {!isOnline && (
         <View style={s.offlineBanner}>
-          <Text style={s.offlineBannerText}>No internet connection</Text>
+          <Text style={s.offlineBannerText}>인터넷 연결 없음</Text>
         </View>
       )}
 
@@ -588,7 +607,7 @@ export default function HomeScreen() {
       {query.length >= 1 && !loading && results.length === 0 && (
         <View style={[s.dropdown, { top: insets.top + 100 }]}>
           <View style={[s.dropdownItem, { justifyContent: 'center' }]}>
-            <Text style={[s.dropdownName, { textAlign: 'center' }]}>No results for "{query}"</Text>
+            <Text style={[s.dropdownName, { textAlign: 'center' }]}>검색 결과 없음: "{query}"</Text>
           </View>
         </View>
       )}
@@ -623,8 +642,8 @@ export default function HomeScreen() {
       {signals.length === 0 && !signalsLoading && !signalsError && (
         <View style={s.emptyState}>
           <Text style={s.emptyStateIcon}>&#x1F50D;</Text>
-          <Text style={s.emptyStateTitle}>No signals found</Text>
-          <Text style={s.emptyStateDesc}>Pull down to refresh or try a different backtest period</Text>
+          <Text style={s.emptyStateTitle}>시그널 없음</Text>
+          <Text style={s.emptyStateDesc}>아래로 당겨 새로고침하거나 다른 기간을 선택하세요</Text>
         </View>
       )}
       <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
@@ -647,6 +666,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : null}
+            {etClock ? <Text style={s.etClockText}>{etClock} ET</Text> : null}
           </View>
           <Text style={s.title}>Stock Scanner</Text>
           <View style={s.topBarRight}>
@@ -689,7 +709,7 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Sign in with Google"
               >
-                <Text style={[s.authBtnText, { color: colors.accent }]}>Login</Text>
+                <Text style={[s.authBtnText, { color: colors.accent }]}>로그인</Text>
               </Pressable>
             ) : null}
           </View>
@@ -698,7 +718,7 @@ export default function HomeScreen() {
         {/* Period controls row - right below title */}
         <View style={s.periodRow}>
           <View style={s.periodGroup}>
-            <Text style={s.periodLabel}>Backtest</Text>
+            <Text style={s.periodLabel}>백테스트</Text>
             <View style={s.miniPillGroup}>
               {(['1y', '3y', '5y', '10y'] as const).map(dp => (
                 <Pressable key={dp} style={[s.miniPill, dataPeriod === dp && s.miniPillActiveBlue]} onPress={() => changeDataPeriod(dp)} accessibilityRole="button" accessibilityLabel={`Backtest period ${dp.toUpperCase()}`}>
@@ -709,7 +729,7 @@ export default function HomeScreen() {
           </View>
           <View style={s.miniDivider} />
           <View style={s.periodGroup}>
-            <Text style={s.periodLabel}>Window</Text>
+            <Text style={s.periodLabel}>기간</Text>
             <View style={s.miniPillGroup}>
               {(['5d', '20d', '60d', '120d', '252d'] as const).map(p => (
                 <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveOrange]} onPress={() => { setPeriod(p); AsyncStorage.setItem('window_period', p).catch(() => {}); }} accessibilityRole="button" accessibilityLabel={`Window period ${PERIOD_LABELS[p]}`}>
@@ -739,7 +759,7 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="Share market summary"
           >
-            <Text style={s.shareTopBtnText}>{shareMsg || 'Share'}</Text>
+            <Text style={s.shareTopBtnText}>{shareMsg || '공유'}</Text>
           </Pressable>
         </View>
 
@@ -749,7 +769,7 @@ export default function HomeScreen() {
             <View style={s.searchIcon}><SearchIcon size={15} color={colors.textMuted} /></View>
             <TextInput
               style={s.searchInput}
-              placeholder="Search ticker or company..."
+              placeholder="종목 코드 또는 기업명 검색..."
               placeholderTextColor={colors.textMuted}
               value={query}
               onChangeText={handleSearch}
@@ -811,24 +831,29 @@ export default function HomeScreen() {
                   <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
                     <View style={{ alignItems: 'center' }}>
                       {wr !== null ? (
-                        <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
+                        <>
+                          <Text style={[s.indexCardWinRate, { color }]}>{wr.toFixed(0)}%</Text>
+                          <Text style={s.indexCardLabel}>승률</Text>
+                        </>
                       ) : (
-                        <Text style={[s.indexCardWinRate, { color: colors.textMuted, fontSize: 14 }]}>N/A</Text>
+                        <>
+                          <Text style={[s.indexCardWinRate, { color: colors.accent, fontSize: 13 }]}>분석하기</Text>
+                          <Text style={s.indexCardLabel}>탭하여 분석</Text>
+                        </>
                       )}
-                      <Text style={s.indexCardLabel}>{wr !== null ? 'Win Rate' : 'Tap to analyze'}</Text>
                     </View>
                     {avgRet !== null && avgRet !== 0 ? (
                       <View style={{ alignItems: 'center' }}>
                         <Text style={[s.indexCardAvg, { color: avgRet >= 0 ? colors.bullish : colors.bearish }]}>
                           {avgRet >= 0 ? '+' : ''}{avgRet.toFixed(1)}%
                         </Text>
-                        <Text style={s.indexCardLabel}>Avg Return</Text>
+                        <Text style={s.indexCardLabel}>평균 수익률</Text>
                       </View>
                     ) : null}
                     {sig ? (
                       <View style={{ alignItems: 'center' }}>
                         <Text style={s.indexCardCases}>{sig.occurrences}</Text>
-                        <Text style={s.indexCardLabel}>Cases</Text>
+                        <Text style={s.indexCardLabel}>사례</Text>
                       </View>
                     ) : null}
                   </View>
@@ -847,9 +872,9 @@ export default function HomeScreen() {
         {showInstallBanner && (
           <View style={[s.installBanner, { backgroundColor: `${colors.accent}10`, borderColor: `${colors.accent}30` }]}>
             <View style={{ flex: 1 }}>
-              <Text style={[s.installBannerTitle, { color: colors.textPrimary }]}>Tip</Text>
+              <Text style={[s.installBannerTitle, { color: colors.textPrimary }]}>팁</Text>
               <Text style={[s.installBannerSub, { color: colors.textSecondary }]}>
-                {Platform.OS === 'web' ? 'Add to home screen from browser menu for quick access' : 'Full app coming soon'}
+                {Platform.OS === 'web' ? '브라우저 메뉴에서 홈 화면에 추가하면 빠르게 접근할 수 있습니다' : '앱 출시 예정'}
               </Text>
             </View>
             <Pressable
@@ -878,7 +903,7 @@ export default function HomeScreen() {
                 <>
                   <View style={s.sectionHeader}>
                     <View style={[s.sectionDot, { backgroundColor: colors.warning }]} />
-                    <Text style={s.sectionLabel}>SEARCHED</Text>
+                    <Text style={s.sectionLabel}>최근 검색</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {visible.slice(0, 10).map(ticker => (
@@ -909,7 +934,7 @@ export default function HomeScreen() {
                 <>
                   <View style={[s.sectionHeader, hasSearched && { marginTop: 8 }]}>
                     <View style={[s.sectionDot, { backgroundColor: colors.accent }]} />
-                    <Text style={s.sectionLabel}>SAVED</Text>
+                    <Text style={s.sectionLabel}>관심 종목</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {watchlist.map((ticker) => (
@@ -947,7 +972,7 @@ export default function HomeScreen() {
                     accessibilityLabel={`Filter by ${sec}`}
                   >
                     <Text style={[s.sectorChipText, isActive && s.sectorChipTextActive]}>
-                      {sec === 'All' ? `All (${signals.length})` : sec}
+                      {sec === 'All' ? `전체 (${signals.length})` : sec}
                     </Text>
                   </Pressable>
                 );
@@ -959,11 +984,11 @@ export default function HomeScreen() {
         {/* Sort Options */}
         {signals.length > 0 && (
           <View style={s.sortRow}>
-            <Text style={s.sortLabel}>Sort</Text>
+            <Text style={s.sortLabel}>정렬</Text>
             {([
-              { key: 'win_rate', label: 'Win Rate' },
-              { key: 'avg_return', label: 'Avg Return' },
-              { key: 'change', label: 'Change %' },
+              { key: 'win_rate', label: '승률' },
+              { key: 'avg_return', label: '평균 수익률' },
+              { key: 'change', label: '변동률' },
             ] as const).map(opt => (
               <Pressable
                 key={opt.key}
@@ -991,7 +1016,7 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Retry loading signals"
             >
-              <Text style={s.errorStateRetryText}>Retry</Text>
+              <Text style={s.errorStateRetryText}>재시도</Text>
             </Pressable>
           </View>
         )}
@@ -1013,7 +1038,7 @@ export default function HomeScreen() {
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <View style={[s.sectionDot, { backgroundColor: colors.bullish }]} />
-              <Text style={s.sectionLabel}>BULLISH</Text>
+              <Text style={s.sectionLabel}>강세 시그널</Text>
               <Text style={s.sectionCount}>{bullish.length}</Text>
             </View>
             <FlatList
@@ -1035,7 +1060,7 @@ export default function HomeScreen() {
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <View style={[s.sectionDot, { backgroundColor: colors.bearish }]} />
-              <Text style={s.sectionLabel}>BEARISH</Text>
+              <Text style={s.sectionLabel}>약세 시그널</Text>
               <Text style={s.sectionCount}>{bearish.length}</Text>
             </View>
             <FlatList
@@ -1060,7 +1085,7 @@ export default function HomeScreen() {
           <View style={s.section}>
             <View style={s.sectionHeader}>
               <View style={[s.sectionDot, { backgroundColor: colors.warning }]} />
-              <Text style={s.sectionLabel}>LEVERAGED ETF</Text>
+              <Text style={s.sectionLabel}>레버리지 ETF</Text>
               <Text style={s.sectionCount}>{leveraged.length}</Text>
             </View>
             <FlatList
@@ -1101,7 +1126,7 @@ export default function HomeScreen() {
         {signalsUpdated ? (
           <View style={s.scanInfo}>
             <Text style={s.scanInfoText}>
-              Scanned {scannedCount} stocks  |  {dataPeriod.toUpperCase()} data  |  Updated {signalsUpdated}
+              {scannedCount}개 종목 스캔  |  {dataPeriod.toUpperCase()} 데이터  |  갱신 {signalsUpdated}
             </Text>
           </View>
         ) : null}
@@ -1144,6 +1169,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statusDot: { width: 7, height: 7, borderRadius: 4 },
   marketBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   marketBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  etClockText: { color: c.textMuted, fontSize: 10, fontWeight: '600', letterSpacing: 0.3, fontVariant: ['tabular-nums'] as any },
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   title: { color: c.textPrimary, fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
   themeBtn: { padding: 12, borderRadius: 8 },

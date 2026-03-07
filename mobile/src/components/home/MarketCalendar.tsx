@@ -41,7 +41,7 @@ function MarketCalendar({ calendarGrid, selectedCalDay, onDaySelect, colors, onT
     <View style={s.section}>
       <View style={s.sectionHeader}>
         <View style={[s.sectionDot, { backgroundColor: '#F59E0B' }]} />
-        <Text style={s.sectionLabel}>MARKET CALENDAR</Text>
+        <Text style={s.sectionLabel}>마켓 캘린더</Text>
         <View style={s.monthNav}>
           {onPrevMonth && (
             <Pressable onPress={onPrevMonth} style={s.monthNavBtn} accessibilityRole="button" accessibilityLabel="Previous month">
@@ -167,7 +167,7 @@ function MarketCalendar({ calendarGrid, selectedCalDay, onDaySelect, colors, onT
                           { color: ev.bullish_pct >= 50 ? colors.bullish : colors.bearish },
                         ]}
                       >
-                        {ev.bullish_pct}% bull
+                        {ev.bullish_pct}% 강세
                       </Text>
                     ) : null}
                   </View>

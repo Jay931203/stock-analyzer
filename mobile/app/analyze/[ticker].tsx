@@ -185,7 +185,7 @@ export default function AnalyzeScreen() {
       hasDataRef.current = true;
     } catch (e: any) {
       if (isInitial) {
-        setError(e.response?.data?.detail ?? e.message ?? 'Analysis failed');
+        setError(e.response?.data?.detail ?? e.message ?? '분석 실패');
       }
     }
     setLoading(false);
@@ -201,7 +201,7 @@ export default function AnalyzeScreen() {
       setData(await api.analyze(ticker, period, true));
     } catch {
       // Only show error if we don't have existing data
-      if (!dataRef.current) setError('Failed to refresh data');
+      if (!dataRef.current) setError('데이터 새로고침 실패');
     }
   }, [ticker, period]);
 
@@ -235,21 +235,21 @@ export default function AnalyzeScreen() {
     const lines = [
       `${ticker_info.ticker} - ${ticker_info.name}`,
       `$${price.current.toFixed(2)} (${dir}${price.change_pct.toFixed(2)}%)`,
-      `Sector: ${ticker_info.sector}`,
+      `섹터: ${ticker_info.sector}`,
       '',
-      `Indicators (${PERIOD_LABELS[windowPeriod]} window):`,
+      `지표 (${PERIOD_LABELS[windowPeriod]} 윈도우):`,
     ];
     for (const key of ALL_INDICATORS) {
       const preview = getIndicatorPreview(key, data, windowPeriod);
       if (preview.winRate !== null) {
-        lines.push(`  ${INDICATOR_META[key]?.label ?? key}: ${preview.value} → ${preview.winRate.toFixed(0)}% win`);
+        lines.push(`  ${INDICATOR_META[key]?.label ?? key}: ${preview.value} → 승률 ${preview.winRate.toFixed(0)}%`);
       }
     }
     if (data.combined) {
       const cp = data.combined.probability.periods?.[wp];
-      if (cp) lines.push('', `Combined: ${cp.win_rate.toFixed(0)}% win (${data.combined.probability.occurrences} cases)`);
+      if (cp) lines.push('', `종합: 승률 ${cp.win_rate.toFixed(0)}% (${data.combined.probability.occurrences}건)`);
     }
-    lines.push('', `Data: ${period.toUpperCase()} backtest | via Stock Scanner`);
+    lines.push('', `데이터: ${period.toUpperCase()} 백테스트 | Stock Scanner`);
     return lines.join('\n');
   };
 
@@ -294,8 +294,8 @@ export default function AnalyzeScreen() {
     return (
       <View style={s.center}>
         <ActivityIndicator size="large" color={colors.accent} />
-        <Text style={s.loadingText}>Analyzing {ticker?.toUpperCase()}</Text>
-        <Text style={s.loadingSub}>Computing indicators...</Text>
+        <Text style={s.loadingText}>{ticker?.toUpperCase()} 분석 중</Text>
+        <Text style={s.loadingSub}>지표 계산 중...</Text>
       </View>
     );
   }
@@ -306,13 +306,13 @@ export default function AnalyzeScreen() {
         <View style={s.errorIconCircle}>
           <Text style={s.errorIconText}>!</Text>
         </View>
-        <Text style={s.errorTitle}>Analysis Failed</Text>
-        <Text style={s.errorText}>{error ?? 'Unknown error'}</Text>
-        <Pressable style={s.retryBtn} onPress={() => loadData()} accessibilityRole="button" accessibilityLabel="Retry analysis">
-          <Text style={s.retryBtnText}>Try Again</Text>
+        <Text style={s.errorTitle}>분석 실패</Text>
+        <Text style={s.errorText}>{error ?? '알 수 없는 오류'}</Text>
+        <Pressable style={s.retryBtn} onPress={() => loadData()} accessibilityRole="button" accessibilityLabel="분석 다시 시도">
+          <Text style={s.retryBtnText}>다시 시도</Text>
         </Pressable>
-        <Pressable style={s.backLink} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} accessibilityRole="button" accessibilityLabel="Go back to home">
-          <Text style={s.backLinkText}>Back to Home</Text>
+        <Pressable style={s.backLink} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} accessibilityRole="button" accessibilityLabel="홈으로 돌아가기">
+          <Text style={s.backLinkText}>홈으로</Text>
         </Pressable>
       </View>
     );
@@ -337,31 +337,31 @@ export default function AnalyzeScreen() {
         {/* HEADER + COMBINED */}
         <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
           <View style={s.navRow}>
-            <Pressable style={s.backBtn} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} accessibilityRole="button" accessibilityLabel="Go back">
+            <Pressable style={s.backBtn} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} accessibilityRole="button" accessibilityLabel="뒤로 가기">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <ChevronLeftIcon size={14} color={colors.accent} />
-                <Text style={s.backBtnText}>Home</Text>
+                <Text style={s.backBtnText}>홈</Text>
               </View>
             </Pressable>
             <View style={s.navRight}>
-              <Text style={s.miniLabel}>Backtest</Text>
+              <Text style={s.miniLabel}>백테스트</Text>
               <View style={s.miniPillGroup}>
                 {(['1y', '3y', '5y', '10y'] as const).map(p => (
-                  <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveBlue]} onPress={() => { setPeriod(p); AsyncStorage.setItem('data_period', p).catch(() => {}); }} accessibilityRole="button" accessibilityLabel={`Backtest period ${p.toUpperCase()}`}>
+                  <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveBlue]} onPress={() => { setPeriod(p); AsyncStorage.setItem('data_period', p).catch(() => {}); }} accessibilityRole="button" accessibilityLabel={`백테스트 기간 ${p.toUpperCase()}`}>
                     <Text style={[s.miniPillText, period === p && s.miniPillTextActive]}>{p.toUpperCase()}</Text>
                   </Pressable>
                 ))}
               </View>
               <View style={s.miniDivider} />
-              <Text style={s.miniLabel}>Window</Text>
+              <Text style={s.miniLabel}>윈도우</Text>
               <View style={s.miniPillGroup}>
                 {(['5d', '20d', '60d', '120d', '252d'] as const).map(wp => (
-                  <Pressable key={wp} style={[s.miniPill, windowPeriod === wp && s.miniPillActiveOrange]} onPress={() => { setWindowPeriod(wp); AsyncStorage.setItem('window_period', wp).catch(() => {}); }} accessibilityRole="button" accessibilityLabel={`Window period ${PERIOD_LABELS[wp]}`}>
+                  <Pressable key={wp} style={[s.miniPill, windowPeriod === wp && s.miniPillActiveOrange]} onPress={() => { setWindowPeriod(wp); AsyncStorage.setItem('window_period', wp).catch(() => {}); }} accessibilityRole="button" accessibilityLabel={`윈도우 기간 ${PERIOD_LABELS[wp]}`}>
                     <Text style={[s.miniPillText, windowPeriod === wp && s.miniPillTextActive]}>{PERIOD_LABELS[wp]}</Text>
                   </Pressable>
                 ))}
               </View>
-              <Pressable onPress={cycleTheme} style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]} accessibilityRole="button" accessibilityLabel="Toggle theme">
+              <Pressable onPress={cycleTheme} style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]} accessibilityRole="button" accessibilityLabel="테마 변경">
                 {themeMode === 'light' ? (
                   <SunIcon size={14} color={colors.textSecondary} />
                 ) : themeMode === 'dark' ? (
@@ -374,9 +374,9 @@ export default function AnalyzeScreen() {
                 style={({ pressed }) => [s.shareBtn, pressed && { opacity: 0.7 }]}
                 onPress={handleShare}
                 accessibilityRole="button"
-                accessibilityLabel="Share analysis"
+                accessibilityLabel="분석 공유"
               >
-                <Text style={s.shareBtnText}>{shareMsg || 'Share'}</Text>
+                <Text style={s.shareBtnText}>{shareMsg || '공유'}</Text>
               </Pressable>
             </View>
           </View>
@@ -387,12 +387,12 @@ export default function AnalyzeScreen() {
               style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
               onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
               accessibilityRole="button"
-              accessibilityLabel={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
+              accessibilityLabel={inWatchlist ? '관심종목에서 제거' : '관심종목에 추가'}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <StarIcon size={13} color={inWatchlist ? colors.accent : colors.textTertiary} filled={inWatchlist} />
                 <Text style={[s.saveBtnText, inWatchlist && s.saveBtnTextActive]}>
-                  {inWatchlist ? 'Saved' : 'Save'}
+                  {inWatchlist ? '저장됨' : '저장'}
                 </Text>
               </View>
             </Pressable>
@@ -407,7 +407,7 @@ export default function AnalyzeScreen() {
               </Text>
             </View>
             {data.combined && data.combined.probability?.periods?.[WINDOW_KEY_MAP[windowPeriod]] && (
-              <Pressable style={s.summaryBtn} onPress={() => setSummaryVisible(true)} accessibilityRole="button" accessibilityLabel="Show analysis summary">
+              <Pressable style={s.summaryBtn} onPress={() => setSummaryVisible(true)} accessibilityRole="button" accessibilityLabel="분석 요약 보기">
                 <Text style={s.summaryBtnText}>?</Text>
               </Pressable>
             )}
@@ -435,7 +435,7 @@ export default function AnalyzeScreen() {
         {/* EARNINGS HISTORY */}
         {earningsData && earningsData.earnings.length > 0 && (
           <View style={s.earningsSection}>
-            <Text style={s.sectionTitle}>EARNINGS HISTORY</Text>
+            <Text style={s.sectionTitle}>어닝 히스토리</Text>
 
             {/* Summary stats bar */}
             <View style={s.earningsStatsRow}>
@@ -444,7 +444,7 @@ export default function AnalyzeScreen() {
                   <Text style={[s.earningsStatValue, { color: earningsData.stats.beat_rate >= 50 ? colors.bullish : colors.bearish }]}>
                     {earningsData.stats.beat_rate}%
                   </Text>
-                  <Text style={s.earningsStatLabel}>Beat Rate</Text>
+                  <Text style={s.earningsStatLabel}>적중률</Text>
                 </View>
               )}
               {earningsData.stats.avg_return_1w !== null && (
@@ -452,7 +452,7 @@ export default function AnalyzeScreen() {
                   <Text style={[s.earningsStatValue, { color: earningsData.stats.avg_return_1w >= 0 ? colors.bullish : colors.bearish }]}>
                     {earningsData.stats.avg_return_1w >= 0 ? '+' : ''}{earningsData.stats.avg_return_1w}%
                   </Text>
-                  <Text style={s.earningsStatLabel}>Avg 1W</Text>
+                  <Text style={s.earningsStatLabel}>1주 평균</Text>
                 </View>
               )}
               {earningsData.stats.avg_return_1m !== null && (
@@ -460,7 +460,7 @@ export default function AnalyzeScreen() {
                   <Text style={[s.earningsStatValue, { color: earningsData.stats.avg_return_1m >= 0 ? colors.bullish : colors.bearish }]}>
                     {earningsData.stats.avg_return_1m >= 0 ? '+' : ''}{earningsData.stats.avg_return_1m}%
                   </Text>
-                  <Text style={s.earningsStatLabel}>Avg 1M</Text>
+                  <Text style={s.earningsStatLabel}>1개월 평균</Text>
                 </View>
               )}
               {earningsData.stats.positive_after_1w_pct !== null && (
@@ -468,26 +468,26 @@ export default function AnalyzeScreen() {
                   <Text style={[s.earningsStatValue, { color: earningsData.stats.positive_after_1w_pct >= 50 ? colors.bullish : colors.bearish }]}>
                     {earningsData.stats.positive_after_1w_pct}%
                   </Text>
-                  <Text style={s.earningsStatLabel}>1W Rise%</Text>
+                  <Text style={s.earningsStatLabel}>1주 상승률</Text>
                 </View>
               )}
             </View>
 
             {/* Column headers */}
             <View style={s.earningsHeaderRow}>
-              <Text style={[s.earningsDate, s.earningsHeaderText]}>Date</Text>
+              <Text style={[s.earningsDate, s.earningsHeaderText]}>날짜</Text>
               <View style={s.earningsEps}>
                 <Text style={s.earningsHeaderText}>EPS</Text>
               </View>
               <View style={s.earningsSurpriseCol}>
-                <Text style={s.earningsHeaderText}>Surprise</Text>
+                <Text style={s.earningsHeaderText}>서프라이즈</Text>
               </View>
               <Text style={[s.earningsReturn, s.earningsHeaderText]}>1W</Text>
               <Text style={[s.earningsReturn, s.earningsHeaderText]}>1M</Text>
             </View>
 
             {/* Earnings rows */}
-            {(showAllEarnings ? earningsData.earnings : earningsData.earnings.slice(0, 4)).map((e, i) => (
+            {(showAllEarnings ? earningsData.earnings : earningsData.earnings.slice(0, 1)).map((e, i) => (
               <View key={i} style={s.earningsRow}>
                 <Text style={s.earningsDate}>{e.date.slice(5)}</Text>
                 <View style={s.earningsEps}>
@@ -515,9 +515,9 @@ export default function AnalyzeScreen() {
               </View>
             ))}
 
-            {earningsData.earnings.length > 4 && (
+            {earningsData.earnings.length > 1 && (
               <Pressable onPress={() => setShowAllEarnings(!showAllEarnings)} style={s.showMoreBtn}>
-                <Text style={s.showMoreText}>{showAllEarnings ? 'Show less' : `Show all ${earningsData.earnings.length}`}</Text>
+                <Text style={s.showMoreText}>{showAllEarnings ? '접기' : `전체 ${earningsData.earnings.length}개 보기`}</Text>
               </Pressable>
             )}
           </View>
@@ -526,7 +526,7 @@ export default function AnalyzeScreen() {
         {/* COMBINED ANALYSIS */}
         <View style={s.headerBlock}>
           <View style={s.combinedSection}>
-            <Text style={s.sectionTitle}>COMBINED ANALYSIS</Text>
+            <Text style={s.sectionTitle}>종합 분석</Text>
 
             <View style={s.toggleRow}>
               {ALL_INDICATORS.filter(k => k !== 'ATR').map(key => {
@@ -537,7 +537,7 @@ export default function AnalyzeScreen() {
                     style={[s.toggleChip, active && s.toggleChipActive]}
                     onPress={() => toggleCombinedIndicator(key)}
                     accessibilityRole="button"
-                    accessibilityLabel={`${active ? 'Disable' : 'Enable'} ${INDICATOR_META[key].label} for combined analysis`}
+                    accessibilityLabel={`종합 분석에서 ${INDICATOR_META[key].labelKo} ${active ? '해제' : '활성화'}`}
                   >
                     <Text style={[s.toggleChipText, active && s.toggleChipTextActive]}>
                       {INDICATOR_META[key].labelKo}
@@ -554,7 +554,7 @@ export default function AnalyzeScreen() {
                 selectedIndicators={activeForCombined}
               />
             ) : (
-              <Text style={s.hintText}>Enable at least 2 indicators for combined analysis</Text>
+              <Text style={s.hintText}>종합 분석을 위해 2개 이상 지표를 선택하세요</Text>
             )}
           </View>
         </View>
@@ -564,20 +564,20 @@ export default function AnalyzeScreen() {
           style={({ pressed }) => [s.timeMachineBtn, pressed && { opacity: 0.8 }]}
           onPress={() => router.push(`/time-machine/${ticker}`)}
           accessibilityRole="button"
-          accessibilityLabel="Open Signal Time Machine"
+          accessibilityLabel="시그널 타임머신 열기"
         >
           <Text style={s.timeMachineBtnIcon}>TM</Text>
           <View style={{ flex: 1 }}>
-            <Text style={s.timeMachineBtnTitle}>Signal Time Machine</Text>
-            <Text style={s.timeMachineBtnSub}>Compare past signals with actual results</Text>
+            <Text style={s.timeMachineBtnTitle}>시그널 타임머신</Text>
+            <Text style={s.timeMachineBtnSub}>과거 시그널과 실제 결과 비교</Text>
           </View>
           <Text style={{ color: colors.accent, fontSize: 16 }}>›</Text>
         </Pressable>
 
         {/* INDICATORS - detailed breakdown, tap for modal */}
         <View style={s.indicatorsSection}>
-          <Text style={s.sectionTitle}>INDICATORS</Text>
-          <Text style={s.hintText}>Tap any indicator for details</Text>
+          <Text style={s.sectionTitle}>지표</Text>
+          <Text style={s.hintText}>탭하여 상세 정보 확인</Text>
 
           {/* Indicator highlight pills */}
           {highlights.length > 0 && (
@@ -606,7 +606,7 @@ export default function AnalyzeScreen() {
                   ]}
                   onPress={() => openModal(key)}
                   accessibilityRole="button"
-                  accessibilityLabel={`${meta.labelKo} indicator, value ${value}${winRate !== null ? `, win rate ${winRate.toFixed(0)}%` : ''}`}
+                  accessibilityLabel={`${meta.labelKo} 지표, 값 ${value}${winRate !== null ? `, 승률 ${winRate.toFixed(0)}%` : ''}`}
                 >
                   <Text style={s.cardLabel}>{meta.labelKo}</Text>
                   <Text style={s.cardValue}>{value}</Text>
@@ -624,15 +624,15 @@ export default function AnalyzeScreen() {
         </View>
 
         <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
-          <Text style={s.footerText}>Updated: {data.analysis_date}</Text>
+          <Text style={s.footerText}>업데이트: {data.analysis_date}</Text>
         </View>
 
         <View style={s.disclaimer}>
           <Text style={s.disclaimerText}>
-            This analysis is based on historical data and is not investment advice. Investment decisions should be made at your own discretion.
+            본 분석은 과거 데이터 기반 통계이며 투자 조언이 아닙니다.
           </Text>
           <Text style={s.disclaimerText}>
-            본 분석은 과거 데이터 기반 통계이며 투자 조언이 아닙니다. 투자 결정은 본인 판단하에 이루어져야 합니다.
+            투자 결정은 본인 판단하에 이루어져야 합니다.
           </Text>
         </View>
       </ScrollView>
@@ -646,11 +646,11 @@ export default function AnalyzeScreen() {
         statusBarTranslucent
       >
         <View style={s.modalOverlay}>
-          <Pressable style={s.modalBackdrop} onPress={() => setSummaryVisible(false)} accessibilityRole="button" accessibilityLabel="Close summary" />
+          <Pressable style={s.modalBackdrop} onPress={() => setSummaryVisible(false)} accessibilityRole="button" accessibilityLabel="요약 닫기" />
           <View style={s.summaryModal}>
             <View style={s.summaryModalHeader}>
-              <Text style={s.summaryModalTitle}>{ticker_info.ticker} Summary</Text>
-              <Pressable style={s.modalCloseBtn} onPress={() => setSummaryVisible(false)} accessibilityRole="button" accessibilityLabel="Close summary">
+              <Text style={s.summaryModalTitle}>{ticker_info.ticker} 요약</Text>
+              <Pressable style={s.modalCloseBtn} onPress={() => setSummaryVisible(false)} accessibilityRole="button" accessibilityLabel="요약 닫기">
                 <Text style={s.modalCloseBtnText}>✕</Text>
               </Pressable>
             </View>
@@ -693,7 +693,7 @@ export default function AnalyzeScreen() {
         statusBarTranslucent
       >
         <View style={s.modalOverlay}>
-          <Pressable style={s.modalBackdrop} onPress={closeModal} accessibilityRole="button" accessibilityLabel="Close indicator detail" />
+          <Pressable style={s.modalBackdrop} onPress={closeModal} accessibilityRole="button" accessibilityLabel="지표 상세 닫기" />
           <Animated.View
             style={[
               s.modalSheet,
@@ -708,7 +708,7 @@ export default function AnalyzeScreen() {
                   {modalIndicator ? `${INDICATOR_META[modalIndicator]?.labelKo} (${INDICATOR_META[modalIndicator]?.label})` : ''}
                 </Text>
               </View>
-              <Pressable style={s.modalCloseBtn} onPress={closeModal} accessibilityRole="button" accessibilityLabel="Close indicator detail">
+              <Pressable style={s.modalCloseBtn} onPress={closeModal} accessibilityRole="button" accessibilityLabel="지표 상세 닫기">
                 <Text style={s.modalCloseBtnText}>✕</Text>
               </Pressable>
             </View>

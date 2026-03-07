@@ -100,7 +100,7 @@ function EarningsSection({ earnings, colors, onPress }: Props) {
     <View style={s.section}>
       <View style={s.sectionHeader}>
         <View style={[s.sectionDot, { backgroundColor: '#8B5CF6' }]} />
-        <Text style={s.sectionLabel}>EARNINGS CALENDAR</Text>
+        <Text style={s.sectionLabel}>어닝 캘린더</Text>
         <Text style={s.sectionCount}>{earnings.length}</Text>
       </View>
       <FlatList

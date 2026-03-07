@@ -60,7 +60,7 @@ function SignalFlips({ flips, colors, onPress }: Props) {
     <View style={s.section}>
       <View style={s.sectionHeader}>
         <View style={[s.sectionDot, { backgroundColor: '#F59E0B' }]} />
-        <Text style={s.sectionLabel}>JUST FLIPPED</Text>
+        <Text style={s.sectionLabel}>시그널 전환</Text>
         <Text style={s.sectionCount}>{flips.length}</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: spacing.lg }}>
@@ -126,7 +126,7 @@ function SignalFlips({ flips, colors, onPress }: Props) {
                     },
                   ]}
                 >
-                  {flip.direction === 'bullish' ? 'NOW BULL' : 'NOW BEAR'}
+                  {flip.direction === 'bullish' ? '강세 전환' : '약세 전환'}
                 </Text>
               </View>
             </View>

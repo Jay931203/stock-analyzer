@@ -132,7 +132,7 @@ function UnusualVolume({ signals, period, colors, onPress }: Props) {
         >
           {wr.toFixed(0)}%
         </Text>
-        <Text style={cs.probLabel}>Win Rate</Text>
+        <Text style={cs.probLabel}>승률</Text>
         {avgReturn !== undefined && avgReturn !== 0 && sig.occurrences > 0 && (
           <View
             style={[
@@ -150,7 +150,7 @@ function UnusualVolume({ signals, period, colors, onPress }: Props) {
                 },
               ]}
             >
-              Avg {avgReturn >= 0 ? '+' : ''}
+              평균 {avgReturn >= 0 ? '+' : ''}
               {avgReturn.toFixed(1)}%
             </Text>
           </View>
@@ -172,7 +172,7 @@ function UnusualVolume({ signals, period, colors, onPress }: Props) {
     <View style={s.section}>
       <View style={s.sectionHeader}>
         <View style={[s.sectionDot, { backgroundColor: '#F97316' }]} />
-        <Text style={s.sectionLabel}>UNUSUAL VOLUME</Text>
+        <Text style={s.sectionLabel}>이상 거래량</Text>
         <Text style={s.sectionCount}>{unusualVolume.length}</Text>
       </View>
       <FlatList

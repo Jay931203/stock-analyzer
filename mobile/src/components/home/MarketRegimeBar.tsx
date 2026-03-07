@@ -34,14 +34,14 @@ function MarketRegimeBar({ signals, period, colors }: Props) {
     const avgWinRate = nonLev.reduce((sum, sig) => sum + getWinRateForPeriod(sig, period), 0) / nonLev.length;
     const mood =
       bullPct >= 65
-        ? 'Strong Bull'
+        ? '강한 강세'
         : bullPct >= 55
-          ? 'Mild Bull'
+          ? '약한 강세'
           : bullPct >= 45
-            ? 'Neutral'
+            ? '중립'
             : bullPct >= 35
-              ? 'Mild Bear'
-              : 'Strong Bear';
+              ? '약한 약세'
+              : '강한 약세';
     return { bullCount, bearCount, bullPct, total: nonLev.length, avgWinRate: Math.round(avgWinRate), mood };
   }, [signals, period]);
 
@@ -50,7 +50,7 @@ function MarketRegimeBar({ signals, period, colors }: Props) {
   return (
     <View style={s.regimeBar}>
       <View style={s.regimeHeader}>
-        <Text style={s.regimeTitle}>MARKET MOOD ({PERIOD_LABELS[period]})</Text>
+        <Text style={s.regimeTitle}>시장 분위기 ({PERIOD_LABELS[period]})</Text>
         <Text
           style={[
             s.regimeMood,
@@ -79,9 +79,9 @@ function MarketRegimeBar({ signals, period, colors }: Props) {
         />
       </View>
       <View style={s.regimeLabels}>
-        <Text style={[s.regimeStat, { color: colors.bullish }]}>{marketRegime.bullCount} Bullish</Text>
+        <Text style={[s.regimeStat, { color: colors.bullish }]}>{marketRegime.bullCount} 강세</Text>
         <Text style={s.regimePct}>{marketRegime.bullPct}%</Text>
-        <Text style={[s.regimeStat, { color: colors.bearish }]}>{marketRegime.bearCount} Bearish</Text>
+        <Text style={[s.regimeStat, { color: colors.bearish }]}>{marketRegime.bearCount} 약세</Text>
       </View>
     </View>
   );
