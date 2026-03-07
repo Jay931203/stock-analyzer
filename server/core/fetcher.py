@@ -573,86 +573,80 @@ def fetch_earnings_dates(tickers: list[str]) -> list[dict]:
 
 
 def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
-    """Fetch past earnings dates with post-earnings price moves.
+    """Fetch past earnings with post-earnings price moves.
 
-    Uses yfinance earnings_dates for historical earnings,
-    then calculates 1-week and 1-month returns after each earnings date.
+    Uses yfinance earnings_history (JSON-based, no lxml) for EPS data.
+    Estimates actual report dates from quarter-end + ~30-60 days using
+    the largest single-day price move in that window as the announcement day.
     """
     from datetime import datetime, timedelta
     try:
         kwargs = {"session": _session} if _session else {}
         stock = yf.Ticker(ticker.upper(), **kwargs)
 
-        # Get earnings dates (past and future)
-        ed = stock.earnings_dates
-        if ed is None or ed.empty:
+        eh = stock.earnings_history
+        if eh is None or eh.empty:
             return []
 
-        # Get price history for return calculation
         df = fetch_price_history(ticker, period="3y")
         if df.empty:
             return []
 
+        # Pre-compute daily returns for fast lookup
+        df_ret = df["Close"].pct_change().abs()
+
         results = []
         now = datetime.now()
 
-        for idx in ed.index[:limit * 2]:  # Look at more than limit to filter
+        # earnings_history index = quarter-end dates, most recent first
+        for quarter_end in eh.index:
             try:
-                # Parse the earnings date
-                if hasattr(idx, 'to_pydatetime'):
-                    earn_dt = idx.to_pydatetime()
-                    if hasattr(earn_dt, 'tzinfo') and earn_dt.tzinfo:
-                        earn_dt = earn_dt.replace(tzinfo=None)
-                else:
+                qe = quarter_end.to_pydatetime().replace(tzinfo=None)
+
+                # Earnings announced ~20-65 days after quarter end
+                search_start = pd.Timestamp(qe + timedelta(days=20))
+                search_end = pd.Timestamp(qe + timedelta(days=65))
+
+                if search_start > pd.Timestamp(now):
                     continue
 
-                # Skip future earnings
-                if earn_dt > now:
+                # Find the day with the biggest price move in the window
+                window_mask = (df.index >= search_start) & (df.index <= search_end)
+                if window_mask.sum() < 2:
                     continue
 
-                earn_date_str = earn_dt.strftime("%Y-%m-%d")
+                window_ret = df_ret[window_mask]
+                announce_idx = window_ret.idxmax()
+                announce_date_str = announce_idx.strftime("%Y-%m-%d")
 
-                # Get EPS surprise data from the row
-                row = ed.loc[idx]
-                eps_estimate = row.get("EPS Estimate", None)
-                reported_eps = row.get("Reported EPS", None)
-                surprise_pct = row.get("Surprise(%)", None)
+                row = eh.loc[quarter_end]
+                eps_estimate = round(float(row["epsEstimate"]), 2) if pd.notna(row["epsEstimate"]) else None
+                reported_eps = round(float(row["epsActual"]), 2) if pd.notna(row["epsActual"]) else None
+                surprise_raw = row["surprisePercent"] if pd.notna(row["surprisePercent"]) else None
+                surprise_pct = round(float(surprise_raw) * 100, 2) if surprise_raw is not None else None
 
-                # Convert to Python floats, handling NaN
-                eps_estimate = float(eps_estimate) if pd.notna(eps_estimate) else None
-                reported_eps = float(reported_eps) if pd.notna(reported_eps) else None
-                surprise_pct = float(surprise_pct) if pd.notna(surprise_pct) else None
-
-                # Calculate post-earnings returns (1W = 5 trading days, 1M = 20 trading days)
-                # Find the closest trading day on or after earnings date
-                earn_date_pd = pd.Timestamp(earn_date_str)
-                mask = df.index >= earn_date_pd
-                if mask.sum() < 2:
+                # Post-earnings returns (1W=5 trading days, 1M=20 trading days)
+                post_mask = df.index >= announce_idx
+                post_df = df.loc[post_mask]
+                if len(post_df) < 2:
                     continue
-
-                post_df = df.loc[mask]
-                close_at_earnings = post_df.iloc[0]["Close"]
+                close_at = post_df.iloc[0]["Close"]
 
                 return_1w = None
                 return_1m = None
-
                 if len(post_df) > 5:
-                    return_1w = round((post_df.iloc[5]["Close"] / close_at_earnings - 1) * 100, 2)
+                    return_1w = round((post_df.iloc[5]["Close"] / close_at - 1) * 100, 2)
                 if len(post_df) > 20:
-                    return_1m = round((post_df.iloc[20]["Close"] / close_at_earnings - 1) * 100, 2)
-
-                # Determine BMO/AMC
-                hour = earn_dt.hour if hasattr(earn_dt, 'hour') else 0
-                time_of_day = "BMO" if hour < 12 else ("AMC" if hour >= 16 else "TBD")
+                    return_1m = round((post_df.iloc[20]["Close"] / close_at - 1) * 100, 2)
 
                 results.append({
-                    "date": earn_date_str,
+                    "date": announce_date_str,
                     "eps_estimate": eps_estimate,
                     "reported_eps": reported_eps,
                     "surprise_pct": surprise_pct,
                     "return_1w": return_1w,
                     "return_1m": return_1m,
-                    "time_of_day": time_of_day,
+                    "time_of_day": "TBD",
                 })
 
                 if len(results) >= limit:
