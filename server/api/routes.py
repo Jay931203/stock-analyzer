@@ -699,10 +699,31 @@ async def earnings_calendar():
 
 
 @router.get("/earnings-history/{ticker}")
-async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20)):
+async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20), _dbg: bool = Query(False)):
     """Get past earnings history with post-earnings price performance."""
     ticker = _validate_ticker(ticker)
     try:
+        if _dbg:
+            import yfinance as yf
+            import traceback
+            d = {"yf": yf.__version__}
+            try:
+                stock = yf.Ticker(ticker)
+                qs_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
+                params = {"modules": "earningsHistory", "corsDomain": "finance.yahoo.com", "formatted": "false", "symbol": ticker}
+                raw = stock._data.get_raw_json(qs_url, user_agent_headers=stock._data.user_agent_headers, params=params)
+                d["raw_type"] = str(type(raw))
+                if isinstance(raw, dict):
+                    eh = raw.get("quoteSummary", {}).get("result", [{}])[0].get("earningsHistory", {}).get("history", [])
+                    d["count"] = len(eh)
+                    if eh:
+                        d["sample"] = str(eh[0])[:200]
+                else:
+                    d["raw_str"] = str(raw)[:200]
+            except Exception as e:
+                d["err"] = f"{type(e).__name__}: {e}"
+                d["tb"] = traceback.format_exc()[-500:]
+            return d
         history = fetch_earnings_history(ticker, limit=limit)
         # Calculate aggregate stats
         beats = sum(1 for e in history if e.get("surprise_pct") and e["surprise_pct"] > 0)
