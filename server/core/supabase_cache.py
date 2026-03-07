@@ -237,6 +237,52 @@ def read_recent_searches(limit: int = 20) -> list[str]:
         return []
 
 
+def read_cached_earnings(ticker: str) -> dict | None:
+    """Read cached earnings history for a ticker from Supabase (stored in analysis_cache with EARN: prefix)."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None
+    try:
+        key = _url_quote(f"EARN:{ticker.upper()}", safe='')
+        url = _rest_url(f"analysis_cache?ticker=eq.{key}&select=data,updated_at")
+        req = urllib.request.Request(url, headers=_headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            rows = json.loads(resp.read().decode())
+        if not rows:
+            return None
+        # Check freshness (7 days for earnings - they don't change often)
+        updated = rows[0].get("updated_at", "")
+        if updated:
+            try:
+                ts = datetime.fromisoformat(updated.replace("Z", "+00:00"))
+                age = (datetime.now(timezone.utc) - ts).total_seconds()
+                if age > 7 * 86400:
+                    return None  # Stale
+            except Exception:
+                pass
+        return rows[0].get("data")
+    except Exception:
+        return None
+
+
+def write_cached_earnings(ticker: str, data: dict) -> bool:
+    """Upsert cached earnings history for a ticker to Supabase (uses analysis_cache with EARN: prefix)."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return False
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        row = {"ticker": f"EARN:{ticker.upper()}", "data": data, "updated_at": now}
+        url = _rest_url("analysis_cache")
+        body = json.dumps(row).encode()
+        req = urllib.request.Request(
+            url, data=body, method="POST",
+            headers=_headers(prefer="resolution=merge-duplicates,return=minimal"),
+        )
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except Exception:
+        return False
+
+
 def write_cached_analysis(ticker: str, data: dict) -> bool:
     """Write (upsert) cached analysis for a single ticker to Supabase."""
     if not SUPABASE_URL or not SUPABASE_KEY:

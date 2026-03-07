@@ -18,7 +18,7 @@ from ..core.signal_flip import snapshot_and_detect, get_flips
 from ..core.economic_calendar import get_economic_events
 from ..core.presets import get_preset, list_presets, PRESETS
 from ..core.smart_matcher import calc_adaptive_combined
-from ..core.supabase_cache import read_cached_signals, write_cached_signals, read_cached_analysis, write_cached_analysis, log_recent_search, read_recent_searches
+from ..core.supabase_cache import read_cached_signals, write_cached_signals, read_cached_analysis, write_cached_analysis, read_cached_earnings, write_cached_earnings, log_recent_search, read_recent_searches
 from .constants import POPULAR_TICKERS, LEVERAGED_ETFS, SECTOR_MAP, TICKER_NAMES, MARKET_CAP_B, NASDAQ_100
 from .schemas import (
     ADXData,
@@ -699,32 +699,22 @@ async def earnings_calendar():
 
 
 @router.get("/earnings-history/{ticker}")
-async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20), _dbg: bool = Query(False)):
+async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20)):
     """Get past earnings history with post-earnings price performance."""
     ticker = _validate_ticker(ticker)
     try:
-        if _dbg:
-            import yfinance as yf
-            import traceback
-            d = {"yf": yf.__version__}
-            try:
-                stock = yf.Ticker(ticker)
-                qs_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
-                params = {"modules": "earningsHistory", "corsDomain": "finance.yahoo.com", "formatted": "false", "symbol": ticker}
-                raw = stock._data.get_raw_json(qs_url, user_agent_headers=stock._data.user_agent_headers, params=params)
-                d["raw_type"] = str(type(raw))
-                if isinstance(raw, dict):
-                    eh = raw.get("quoteSummary", {}).get("result", [{}])[0].get("earningsHistory", {}).get("history", [])
-                    d["count"] = len(eh)
-                    if eh:
-                        d["sample"] = str(eh[0])[:200]
-                else:
-                    d["raw_str"] = str(raw)[:200]
-            except Exception as e:
-                d["err"] = f"{type(e).__name__}: {e}"
-                d["tb"] = traceback.format_exc()[-500:]
-            return d
+        # Try live fetch first, fall back to Supabase cache
         history = fetch_earnings_history(ticker, limit=limit)
+
+        if history:
+            # Cache successful result to Supabase
+            _build_and_cache_earnings(ticker, history)
+        else:
+            # Try reading from Supabase cache
+            cached = read_cached_earnings(ticker)
+            if cached:
+                return cached
+
         # Calculate aggregate stats
         beats = sum(1 for e in history if e.get("surprise_pct") and e["surprise_pct"] > 0)
         total_with_data = sum(1 for e in history if e.get("surprise_pct") is not None)
@@ -753,6 +743,29 @@ async def earnings_history(ticker: str, limit: int = Query(8, ge=1, le=20), _dbg
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _build_and_cache_earnings(ticker: str, history: list[dict]):
+    """Build earnings response and cache to Supabase in background."""
+    beats = sum(1 for e in history if e.get("surprise_pct") and e["surprise_pct"] > 0)
+    total_with_data = sum(1 for e in history if e.get("surprise_pct") is not None)
+    returns_1w = [e["return_1w"] for e in history if e["return_1w"] is not None]
+    returns_1m = [e["return_1m"] for e in history if e["return_1m"] is not None]
+    resp = {
+        "ticker": ticker,
+        "earnings": history,
+        "stats": {
+            "beat_rate": round(beats / total_with_data * 100) if total_with_data > 0 else None,
+            "total_reports": len(history),
+            "avg_return_1w": round(sum(returns_1w) / len(returns_1w), 2) if returns_1w else None,
+            "avg_return_1m": round(sum(returns_1m) / len(returns_1m), 2) if returns_1m else None,
+            "positive_after_1w_pct": round(sum(1 for r in returns_1w if r > 0) / len(returns_1w) * 100) if returns_1w else None,
+        }
+    }
+    try:
+        write_cached_earnings(ticker, resp)
+    except Exception:
+        pass
 
 
 _past_earnings_cache: dict = {"data": None, "ts": 0}
