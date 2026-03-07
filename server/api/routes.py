@@ -780,17 +780,21 @@ _CALENDAR_EARNINGS_TICKERS = [
 
 
 def _fetch_past_earnings_for_calendar() -> list[dict]:
-    """Fetch recent past earnings (last 60 days) from top tickers for calendar display."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    """Fetch recent past earnings (last 60 days) from top tickers for calendar display.
 
+    Reads from Supabase earnings cache (populated by populate_earnings.py script).
+    """
     now = datetime.now()
     cutoff = now - timedelta(days=60)
     events = []
 
-    def _get_past(ticker: str) -> list[dict]:
+    for ticker in _CALENDAR_EARNINGS_TICKERS:
         try:
-            history = fetch_earnings_history(ticker, limit=4)
-            result = []
+            # Read from Supabase cache (fast, no Yahoo API calls)
+            cached = read_cached_earnings(ticker)
+            if not cached:
+                continue
+            history = cached.get("earnings", [])
             for e in history:
                 earn_date = datetime.strptime(e["date"], "%Y-%m-%d")
                 if earn_date >= cutoff:
@@ -799,7 +803,7 @@ def _fetch_past_earnings_for_calendar() -> list[dict]:
                         desc_parts.append(f"EPS: {e['reported_eps']}")
                     if e.get("surprise_pct") is not None:
                         desc_parts.append(f"Surprise: {e['surprise_pct']}%")
-                    result.append({
+                    events.append({
                         "date": e["date"],
                         "type": "EARNINGS",
                         "label": f"{ticker} Earnings",
@@ -807,17 +811,8 @@ def _fetch_past_earnings_for_calendar() -> list[dict]:
                         "ticker": ticker,
                         "desc": ", ".join(desc_parts) if desc_parts else "",
                     })
-            return result
         except Exception:
-            return []
-
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = {executor.submit(_get_past, t): t for t in _CALENDAR_EARNINGS_TICKERS}
-        for future in as_completed(futures):
-            try:
-                events.extend(future.result())
-            except Exception:
-                pass
+            continue
 
     return events
 
