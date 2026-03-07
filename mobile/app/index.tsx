@@ -239,7 +239,7 @@ export default function HomeScreen() {
           setSelectedCalDay(eventDays[0]); // Select next upcoming event day
         }
       }
-      if (res.flips) setFlips(res.flips);
+      if (res.flips?.flips) setFlips(res.flips.flips);
     } catch (e: any) {
       if (signals.length === 0) {
         setSignalsError(e.response?.data?.detail ?? e.message ?? 'Failed to load signals');

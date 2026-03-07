@@ -266,7 +266,7 @@ export interface SignalsResponse {
   updated: string;
   market_state: string;
   calendar?: CalendarEvent[];
-  flips?: FlipItem[];
+  flips?: { flips: FlipItem[]; updated: string; count: number };
 }
 
 export interface TimeMachineActual {
