@@ -302,6 +302,14 @@ export default function PrivacyScreen() {
           연락해 주십시오: stockscanner.app@gmail.com
         </Text>
 
+        {/* Terms of Service link */}
+        <View style={s.divider} />
+        <Pressable onPress={() => router.push('/terms')}>
+          <Text style={[s.paragraph, { color: colors.accent, textDecorationLine: 'underline', textAlign: 'center' }]}>
+            Terms of Service / 서비스 이용약관
+          </Text>
+        </Pressable>
+
         <View style={{ height: spacing.xxxl }} />
       </ScrollView>
     </View>

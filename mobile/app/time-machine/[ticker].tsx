@@ -125,6 +125,8 @@ export default function TimeMachinePage() {
               style={s.backBtn}
               hitSlop={12}
               onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
             >
               <ChevronLeftIcon size={18} color={colors.accent} />
             </Pressable>
@@ -133,7 +135,7 @@ export default function TimeMachinePage() {
               <Text style={s.tickerBadge}>{ticker?.toUpperCase()}</Text>
             </View>
             {result ? (
-              <Pressable style={s.shareBtn} hitSlop={12} onPress={handleShare}>
+              <Pressable style={s.shareBtn} hitSlop={12} onPress={handleShare} accessibilityRole="button" accessibilityLabel="Share analysis">
                 <ShareIcon size={16} color={colors.accent} />
               </Pressable>
             ) : <View style={{ width: 36 }} />}
@@ -154,6 +156,8 @@ export default function TimeMachinePage() {
                   key={p.date}
                   style={[s.presetBtn, active && s.presetBtnActive]}
                   onPress={() => analyze(p.date)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Analyze ${p.label}, ${p.sub || p.date}`}
                 >
                   <Text style={[s.presetLabel, active && s.presetLabelActive]}>{p.label}</Text>
                   <Text style={[s.presetSub, active && s.presetSubActive]}>
@@ -190,6 +194,8 @@ export default function TimeMachinePage() {
                     key={bp.value}
                     style={[s.periodPill, backtestPeriod === bp.value && s.periodPillActive]}
                     onPress={() => setBacktestPeriod(bp.value)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Backtest period ${bp.label}`}
                   >
                     <Text style={[s.periodPillText, backtestPeriod === bp.value && s.periodPillTextActive]}>
                       {bp.label}
@@ -197,7 +203,7 @@ export default function TimeMachinePage() {
                   </Pressable>
                 ))}
               </View>
-              <Pressable style={s.analyzeBtn} onPress={() => analyze(selectedDate)}>
+              <Pressable style={s.analyzeBtn} onPress={() => analyze(selectedDate)} accessibilityRole="button" accessibilityLabel="Analyze selected date">
                 <Text style={s.analyzeBtnText}>Analyze</Text>
               </Pressable>
             </View>

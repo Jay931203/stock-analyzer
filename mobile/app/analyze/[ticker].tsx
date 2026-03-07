@@ -287,7 +287,7 @@ export default function AnalyzeScreen() {
     return (
       <View style={s.center}>
         <Text style={s.errorText}>{error ?? 'Unknown error'}</Text>
-        <Pressable style={s.retryBtn} onPress={() => loadData()}>
+        <Pressable style={s.retryBtn} onPress={() => loadData()} accessibilityRole="button" accessibilityLabel="Retry analysis">
           <Text style={s.retryBtnText}>Retry</Text>
         </Pressable>
       </View>
@@ -313,7 +313,7 @@ export default function AnalyzeScreen() {
         {/* HEADER + COMBINED */}
         <View style={[s.headerBlock, { paddingTop: insets.top + 4 }]}>
           <View style={s.navRow}>
-            <Pressable style={s.backBtn} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }}>
+            <Pressable style={s.backBtn} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }} accessibilityRole="button" accessibilityLabel="Go back">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <ChevronLeftIcon size={14} color={colors.accent} />
                 <Text style={s.backBtnText}>Home</Text>
@@ -323,7 +323,7 @@ export default function AnalyzeScreen() {
               <Text style={s.miniLabel}>Backtest</Text>
               <View style={s.miniPillGroup}>
                 {(['1y', '3y', '5y', '10y'] as const).map(p => (
-                  <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveBlue]} onPress={() => { setPeriod(p); AsyncStorage.setItem('data_period', p).catch(() => {}); }}>
+                  <Pressable key={p} style={[s.miniPill, period === p && s.miniPillActiveBlue]} onPress={() => { setPeriod(p); AsyncStorage.setItem('data_period', p).catch(() => {}); }} accessibilityRole="button" accessibilityLabel={`Backtest period ${p.toUpperCase()}`}>
                     <Text style={[s.miniPillText, period === p && s.miniPillTextActive]}>{p.toUpperCase()}</Text>
                   </Pressable>
                 ))}
@@ -332,12 +332,12 @@ export default function AnalyzeScreen() {
               <Text style={s.miniLabel}>Window</Text>
               <View style={s.miniPillGroup}>
                 {(['5d', '20d', '60d', '120d', '252d'] as const).map(wp => (
-                  <Pressable key={wp} style={[s.miniPill, windowPeriod === wp && s.miniPillActiveOrange]} onPress={() => { setWindowPeriod(wp); AsyncStorage.setItem('window_period', wp).catch(() => {}); }}>
+                  <Pressable key={wp} style={[s.miniPill, windowPeriod === wp && s.miniPillActiveOrange]} onPress={() => { setWindowPeriod(wp); AsyncStorage.setItem('window_period', wp).catch(() => {}); }} accessibilityRole="button" accessibilityLabel={`Window period ${PERIOD_LABELS[wp]}`}>
                     <Text style={[s.miniPillText, windowPeriod === wp && s.miniPillTextActive]}>{PERIOD_LABELS[wp]}</Text>
                   </Pressable>
                 ))}
               </View>
-              <Pressable onPress={cycleTheme} style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}>
+              <Pressable onPress={cycleTheme} style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]} accessibilityRole="button" accessibilityLabel="Toggle theme">
                 {themeMode === 'light' ? (
                   <SunIcon size={14} color={colors.textSecondary} />
                 ) : themeMode === 'dark' ? (
@@ -349,6 +349,8 @@ export default function AnalyzeScreen() {
               <Pressable
                 style={({ pressed }) => [s.shareBtn, pressed && { opacity: 0.7 }]}
                 onPress={handleShare}
+                accessibilityRole="button"
+                accessibilityLabel="Share analysis"
               >
                 <Text style={s.shareBtnText}>{shareMsg || 'Share'}</Text>
               </Pressable>
@@ -360,6 +362,8 @@ export default function AnalyzeScreen() {
             <Pressable
               style={[s.saveBtn, inWatchlist && s.saveBtnActive]}
               onPress={() => { if (inWatchlist) removeFromWatchlist(ticker!); else addToWatchlist(ticker!); setInWatchlist(!inWatchlist); }}
+              accessibilityRole="button"
+              accessibilityLabel={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <StarIcon size={13} color={inWatchlist ? colors.accent : colors.textTertiary} filled={inWatchlist} />
@@ -379,7 +383,7 @@ export default function AnalyzeScreen() {
               </Text>
             </View>
             {data.combined && data.combined.probability?.periods?.[WINDOW_KEY_MAP[windowPeriod]] && (
-              <Pressable style={s.summaryBtn} onPress={() => setSummaryVisible(true)}>
+              <Pressable style={s.summaryBtn} onPress={() => setSummaryVisible(true)} accessibilityRole="button" accessibilityLabel="Show analysis summary">
                 <Text style={s.summaryBtnText}>?</Text>
               </Pressable>
             )}
@@ -428,6 +432,8 @@ export default function AnalyzeScreen() {
                     pressed && s.indicatorCardPressed,
                   ]}
                   onPress={() => openModal(key)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${meta.labelKo} indicator, value ${value}${winRate !== null ? `, win rate ${winRate.toFixed(0)}%` : ''}`}
                 >
                   <Text style={s.cardLabel}>{meta.labelKo}</Text>
                   <Text style={s.cardValue}>{value}</Text>
@@ -455,6 +461,8 @@ export default function AnalyzeScreen() {
         <Pressable
           style={({ pressed }) => [s.timeMachineBtn, pressed && { opacity: 0.8 }]}
           onPress={() => router.push(`/time-machine/${ticker}`)}
+          accessibilityRole="button"
+          accessibilityLabel="Open Signal Time Machine"
         >
           <Text style={s.timeMachineBtnIcon}>TM</Text>
           <View style={{ flex: 1 }}>
@@ -477,6 +485,8 @@ export default function AnalyzeScreen() {
                     key={key}
                     style={[s.toggleChip, active && s.toggleChipActive]}
                     onPress={() => toggleCombinedIndicator(key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${active ? 'Disable' : 'Enable'} ${INDICATOR_META[key].label} for combined analysis`}
                   >
                     <Text style={[s.toggleChipText, active && s.toggleChipTextActive]}>
                       {INDICATOR_META[key].labelKo}
@@ -518,11 +528,11 @@ export default function AnalyzeScreen() {
         statusBarTranslucent
       >
         <View style={s.modalOverlay}>
-          <Pressable style={s.modalBackdrop} onPress={() => setSummaryVisible(false)} />
+          <Pressable style={s.modalBackdrop} onPress={() => setSummaryVisible(false)} accessibilityRole="button" accessibilityLabel="Close summary" />
           <View style={s.summaryModal}>
             <View style={s.summaryModalHeader}>
               <Text style={s.summaryModalTitle}>{ticker_info.ticker} Summary</Text>
-              <Pressable style={s.modalCloseBtn} onPress={() => setSummaryVisible(false)}>
+              <Pressable style={s.modalCloseBtn} onPress={() => setSummaryVisible(false)} accessibilityRole="button" accessibilityLabel="Close summary">
                 <Text style={s.modalCloseBtnText}>✕</Text>
               </Pressable>
             </View>
@@ -564,7 +574,7 @@ export default function AnalyzeScreen() {
         statusBarTranslucent
       >
         <View style={s.modalOverlay}>
-          <Pressable style={s.modalBackdrop} onPress={closeModal} />
+          <Pressable style={s.modalBackdrop} onPress={closeModal} accessibilityRole="button" accessibilityLabel="Close indicator detail" />
           <Animated.View
             style={[
               s.modalSheet,
@@ -579,7 +589,7 @@ export default function AnalyzeScreen() {
                   {modalIndicator ? `${INDICATOR_META[modalIndicator]?.labelKo} (${INDICATOR_META[modalIndicator]?.label})` : ''}
                 </Text>
               </View>
-              <Pressable style={s.modalCloseBtn} onPress={closeModal}>
+              <Pressable style={s.modalCloseBtn} onPress={closeModal} accessibilityRole="button" accessibilityLabel="Close indicator detail">
                 <Text style={s.modalCloseBtnText}>✕</Text>
               </Pressable>
             </View>
