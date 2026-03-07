@@ -564,12 +564,12 @@ export default function AnalyzeScreen() {
           style={({ pressed }) => [s.timeMachineBtn, pressed && { opacity: 0.8 }]}
           onPress={() => router.push(`/time-machine/${ticker}`)}
           accessibilityRole="button"
-          accessibilityLabel="시그널 타임머신 열기"
+          accessibilityLabel="타임머신 열기"
         >
           <Text style={s.timeMachineBtnIcon}>TM</Text>
           <View style={{ flex: 1 }}>
-            <Text style={s.timeMachineBtnTitle}>시그널 타임머신</Text>
-            <Text style={s.timeMachineBtnSub}>과거 시그널과 실제 결과 비교</Text>
+            <Text style={s.timeMachineBtnTitle}>타임머신</Text>
+            <Text style={s.timeMachineBtnSub}>과거 날짜의 시그널과 실제 결과 비교</Text>
           </View>
           <Text style={{ color: colors.accent, fontSize: 16 }}>›</Text>
         </Pressable>

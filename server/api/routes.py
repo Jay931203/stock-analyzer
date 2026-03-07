@@ -1001,7 +1001,7 @@ async def time_machine_range(ticker: str):
     if len(df) < 205:
         raise HTTPException(
             status_code=400,
-            detail=f"Insufficient data for {ticker.upper()}. Need at least 205 trading days, got {len(df)}.",
+            detail=f"{ticker.upper()} 데이터가 부족합니다. 최소 205거래일 필요 (현재 {len(df)}일).",
         )
 
     # First usable date: need 200 data points before it for meaningful indicators
@@ -1048,19 +1048,19 @@ async def time_machine(
     except Exception:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {date}")
 
-    # Must be a weekday (Mon-Fri)
-    if as_of.weekday() >= 5:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Date {date} falls on a weekend. Please select a weekday.",
-        )
+    # Auto-adjust weekends to nearest prior Friday
+    if as_of.weekday() == 5:  # Saturday -> Friday
+        as_of -= pd.Timedelta(days=1)
+    elif as_of.weekday() == 6:  # Sunday -> Friday
+        as_of -= pd.Timedelta(days=2)
+    date = as_of.strftime("%Y-%m-%d")
 
     # Must be at least 5 trading days ago
     five_days_ago = pd.Timestamp.now().normalize() - pd.Timedelta(days=7)  # ~5 trading days
     if as_of > five_days_ago:
         raise HTTPException(
             status_code=400,
-            detail=f"Date {date} is too recent. Select a date at least 5 trading days ago.",
+            detail=f"너무 최근 날짜입니다. 최소 5거래일 이전 날짜를 선택하세요.",
         )
 
     # ── Fetch full price history (always 10y for maximum forward data) ──
@@ -1246,71 +1246,71 @@ def _build_time_machine_highlights(
     rsi = indicators["rsi"]["value"]
     if rsi is not None:
         if rsi < 30:
-            highlights.append({"text": f"RSI was oversold at {rsi:.1f}", "type": "bullish"})
+            highlights.append({"text": f"RSI 과매도 구간 ({rsi:.1f})", "type": "bullish"})
         elif rsi > 70:
-            highlights.append({"text": f"RSI was overbought at {rsi:.1f}", "type": "bearish"})
+            highlights.append({"text": f"RSI 과매수 구간 ({rsi:.1f})", "type": "bearish"})
 
     # MACD cross events
     macd_event = states.get("macd_event")
     if macd_event == "golden_cross":
-        highlights.append({"text": "MACD golden cross was occurring", "type": "bullish"})
+        highlights.append({"text": "MACD 골든크로스 발생", "type": "bullish"})
     elif macd_event == "dead_cross":
-        highlights.append({"text": "MACD dead cross was occurring", "type": "bearish"})
+        highlights.append({"text": "MACD 데드크로스 발생", "type": "bearish"})
 
     # MA alignment
     alignment = states.get("ma_alignment")
     if alignment == "bullish":
-        highlights.append({"text": "Moving averages were in bullish alignment (20 > 50 > 200)", "type": "bullish"})
+        highlights.append({"text": "이동평균 정배열 (20 > 50 > 200)", "type": "bullish"})
     elif alignment == "bearish":
-        highlights.append({"text": "Moving averages were in bearish alignment (20 < 50 < 200)", "type": "bearish"})
+        highlights.append({"text": "이동평균 역배열 (20 < 50 < 200)", "type": "bearish"})
 
     # Bollinger Band extremes
     bb_zone = states.get("bb_zone")
     if bb_zone == "below_lower":
-        highlights.append({"text": "Price was below the lower Bollinger Band", "type": "bullish"})
+        highlights.append({"text": "볼린저밴드 하단 이탈", "type": "bullish"})
     elif bb_zone == "above_upper":
-        highlights.append({"text": "Price was above the upper Bollinger Band", "type": "bearish"})
+        highlights.append({"text": "볼린저밴드 상단 이탈", "type": "bearish"})
 
     # Volume spike
     vol_ratio = indicators["volume"]["ratio"]
     if vol_ratio is not None and vol_ratio >= 2.0:
-        highlights.append({"text": f"Volume was {vol_ratio:.1f}x above average (spike)", "type": "bearish"})
+        highlights.append({"text": f"거래량 평균 대비 {vol_ratio:.1f}배 급증", "type": "bearish"})
 
     # Drawdown
     dd_state = states.get("drawdown_60d")
     dd_60 = indicators.get("drawdown", {}).get("from_60d_high")
     if dd_state == "crash_20pct_plus" and dd_60 is not None:
-        highlights.append({"text": f"Stock was down {abs(dd_60):.1f}% from 60-day high (crash territory)", "type": "bullish"})
+        highlights.append({"text": f"60일 고점 대비 {abs(dd_60):.1f}% 하락 (폭락 구간)", "type": "bullish"})
     elif dd_state == "correction_10_20" and dd_60 is not None:
-        highlights.append({"text": f"Stock was in correction, down {abs(dd_60):.1f}% from 60-day high", "type": "bullish"})
+        highlights.append({"text": f"60일 고점 대비 {abs(dd_60):.1f}% 조정 중", "type": "bullish"})
 
     # ADX trend strength
     adx_trend = states.get("adx_trend")
     adx_val = indicators.get("adx", {}).get("adx")
     if adx_trend == "very_strong_trend" and adx_val is not None:
-        highlights.append({"text": f"ADX was {adx_val:.1f} (very strong trend)", "type": "bullish"})
+        highlights.append({"text": f"ADX {adx_val:.1f} (매우 강한 추세)", "type": "bullish"})
 
     # Consecutive days
     consec_days = indicators.get("consecutive", {}).get("days", 0)
     if consec_days >= 5:
-        highlights.append({"text": f"{consec_days} consecutive up days", "type": "bearish"})
+        highlights.append({"text": f"{consec_days}일 연속 상승", "type": "bearish"})
     elif consec_days <= -5:
-        highlights.append({"text": f"{abs(consec_days)} consecutive down days", "type": "bullish"})
+        highlights.append({"text": f"{abs(consec_days)}일 연속 하락", "type": "bullish"})
 
     # Actual outcome highlights
     if "20" in actual_returns:
         ret = actual_returns["20"]["return_pct"]
         if ret > 10:
-            highlights.append({"text": f"Stock actually rose {ret:.1f}% in 20 days", "type": "bullish"})
+            highlights.append({"text": f"이후 20거래일간 {ret:.1f}% 상승", "type": "bullish"})
         elif ret < -10:
-            highlights.append({"text": f"Stock actually fell {abs(ret):.1f}% in 20 days", "type": "bearish"})
+            highlights.append({"text": f"이후 20거래일간 {abs(ret):.1f}% 하락", "type": "bearish"})
 
     if "60" in actual_returns:
         ret = actual_returns["60"]["return_pct"]
         if ret > 20:
-            highlights.append({"text": f"Stock surged {ret:.1f}% over 60 days", "type": "bullish"})
+            highlights.append({"text": f"이후 60거래일간 {ret:.1f}% 급등", "type": "bullish"})
         elif ret < -20:
-            highlights.append({"text": f"Stock dropped {abs(ret):.1f}% over 60 days", "type": "bearish"})
+            highlights.append({"text": f"이후 60거래일간 {abs(ret):.1f}% 급락", "type": "bearish"})
 
     return highlights
 
