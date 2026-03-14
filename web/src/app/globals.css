@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* Design tokens — TradingView meets Linear dark theme                */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --background: #09090b;       /* zinc-950 */
+  --foreground: #fafafa;       /* zinc-50  */
+  --muted: #27272a;            /* zinc-800 */
+  --muted-foreground: #a1a1aa; /* zinc-400 */
+  --card: #18181b;             /* zinc-900 */
+  --card-foreground: #fafafa;
+  --border: #27272a;           /* zinc-800 */
+  --input: #27272a;
+  --primary: #6366f1;          /* indigo-500 */
+  --primary-foreground: #ffffff;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --accent: #6366f1;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;      /* red-500 */
+  --destructive-foreground: #ffffff;
+  --success: #22c55e;          /* green-500 */
+  --warning: #eab308;          /* yellow-500 */
+  --ring: #6366f1;
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-ring: var(--ring);
+  --radius: var(--radius);
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-inter-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace);
+}
+
+/* ------------------------------------------------------------------ */
+/* Base resets                                                        */
+/* ------------------------------------------------------------------ */
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ------------------------------------------------------------------ */
+/* Utility classes                                                    */
+/* ------------------------------------------------------------------ */
+
+/* Subtle grid background for hero sections */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(99, 102, 241, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+/* Glass effect for nav */
+.glass {
+  background: rgba(9, 9, 11, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Pulse dot animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Skeleton loading */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, var(--muted) 25%, #3f3f46 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
