@@ -82,10 +82,9 @@ async def analyze_ticker(
 ):
     """Full analysis: all indicators + historical probabilities.
     Always returns cached data instantly if available. Recomputes in background if stale.
-    Free: 5/day, Pro: unlimited.
+    All features open during launch phase.
     """
     ticker = _validate_ticker(ticker)
-    await check_and_log_usage(user, "analysis", ticker)
     # ── Always return cache if available (even if stale) ──
     cached = read_cached_analysis(ticker)
     if cached and cached.get("data"):
@@ -389,10 +388,9 @@ async def smart_probability(
 ):
     """
     Adaptive combined probability with progressive bin widening.
-    Pro feature — free users get 1/day, anonymous get 0.
+    Open to all users during launch phase.
     """
     ticker = _validate_ticker(ticker)
-    await check_and_log_usage(user, "smart_prob", ticker)
     key_map = {
         "RSI": "rsi", "MACD": "macd", "MA": "ma", "Drawdown": "drawdown",
         "ADX": "adx", "BB": "bb", "Vol": "volume", "Stoch": "stoch",
@@ -472,8 +470,8 @@ _TRENDING_TTL = 300  # 5 minutes
 _signals_cache: dict = {"data": None, "ts": 0}
 _signals_period_cache: dict = {}  # keyed by "signals_{period}", max 4 entries (1y/3y/5y/10y)
 _SIGNALS_TTL = 600  # 10 minutes
-_EDGE_CACHE_SHORT = "public, s-maxage=60, stale-while-revalidate=600"
-_EDGE_CACHE_MEDIUM = "public, s-maxage=300, stale-while-revalidate=21600"
+_EDGE_CACHE_SHORT = "public, s-maxage=300, stale-while-revalidate=3600"
+_EDGE_CACHE_MEDIUM = "public, s-maxage=900, stale-while-revalidate=21600"
 _EARNINGS_CALENDAR_CACHE_KEY = "CACHE:EARNINGS_CALENDAR"
 
 # In-memory cache for computed indicators (survives within Vercel warm instance)
@@ -596,10 +594,9 @@ async def get_signals(
 ):
     """
     Combined probability for popular stocks.
-    Free/anonymous: top 5 signals only. Pro: full list.
+    Returns all signals for all users (gating disabled during launch phase).
     Always returns cached data instantly. Refreshes in background if stale.
     """
-    await check_and_log_usage(user, "signals")
     _set_cache_control(response, _EDGE_CACHE_SHORT)
     is_default = data_period == "3y"
     now = time.time()
@@ -655,14 +652,10 @@ async def get_signals(
                 pass
         background_tasks.add_task(_bg_refresh)
 
-    # Non-premium users only see top 5 signals
+    # Show all signals to everyone (gating disabled during launch phase)
     all_signals = signals_data["signals"][:limit]
-    if not user.is_premium:
-        visible_signals = all_signals[:5]
-        total_available = len(all_signals)
-    else:
-        visible_signals = all_signals
-        total_available = len(all_signals)
+    visible_signals = all_signals
+    total_available = len(all_signals)
 
     payload = {
         "signals": visible_signals,
