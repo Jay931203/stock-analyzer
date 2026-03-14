@@ -32,3 +32,6 @@ server/.env
 # Vercel build output
 public/
 .github/
+
+.env*.local
+.env.production
