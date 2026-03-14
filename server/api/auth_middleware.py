@@ -61,7 +61,7 @@ class UserContext:
     status: str = "active"
     is_premium: bool = False
     api_key: Optional[str] = None
-    stripe_customer_id: Optional[str] = None
+    ls_customer_id: Optional[str] = None
     current_period_end: Optional[str] = None
 
     @property
@@ -91,7 +91,7 @@ def _fetch_subscription_by_user(user_id: str) -> Optional[dict]:
         safe = _url_quote(user_id, safe="")
         url = _sb_rest_url(
             f"subscriptions?user_id=eq.{safe}"
-            f"&select=plan,status,api_key,stripe_customer_id,current_period_end"
+            f"&select=plan,status,api_key,ls_customer_id,current_period_end"
         )
         req = urllib.request.Request(url, headers=_sb_headers())
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -109,7 +109,7 @@ def _fetch_subscription_by_api_key(api_key: str) -> Optional[dict]:
         safe = _url_quote(api_key, safe="")
         url = _sb_rest_url(
             f"subscriptions?api_key=eq.{safe}"
-            f"&select=user_id,plan,status,stripe_customer_id,current_period_end"
+            f"&select=user_id,plan,status,ls_customer_id,current_period_end"
         )
         req = urllib.request.Request(url, headers=_sb_headers())
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -168,7 +168,7 @@ async def get_user_context(
             status=sub.get("status", "active"),
             is_premium=sub.get("plan") in ("pro", "api"),
             api_key=x_api_key,
-            stripe_customer_id=sub.get("stripe_customer_id"),
+            ls_customer_id=sub.get("ls_customer_id"),
             current_period_end=sub.get("current_period_end"),
         )
 
@@ -189,7 +189,7 @@ async def get_user_context(
             status=status,
             is_premium=plan in ("pro", "api"),
             api_key=sub.get("api_key") if sub else None,
-            stripe_customer_id=sub.get("stripe_customer_id") if sub else None,
+            ls_customer_id=sub.get("ls_customer_id") if sub else None,
             current_period_end=sub.get("current_period_end") if sub else None,
         )
 

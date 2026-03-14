@@ -6,8 +6,8 @@
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    stripe_customer_id TEXT,
-    stripe_subscription_id TEXT,
+    ls_customer_id TEXT,
+    ls_subscription_id TEXT,
     plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'api')),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'canceled', 'past_due', 'trialing')),
     current_period_end TIMESTAMPTZ,
@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 
 -- ─── Indexes ────────────────────────────────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer ON subscriptions(stripe_customer_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_sub ON subscriptions(stripe_subscription_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_ls_customer ON subscriptions(ls_customer_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_ls_sub ON subscriptions(ls_subscription_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_api_key ON subscriptions(api_key);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_user_created ON usage_logs(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_daily_usage_date ON daily_usage(date);

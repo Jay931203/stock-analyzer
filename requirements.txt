@@ -7,5 +7,4 @@ numpy
 pydantic==2.10.4
 requests
 httpx>=0.27.0
-stripe>=11.0.0
 python-jose[cryptography]>=3.3.0
