@@ -25,6 +25,7 @@ import TopLoadingBar from '../src/components/TopLoadingBar';
 import SignalCardSkeleton from '../src/components/SignalCardSkeleton';
 import AdSlot from '../src/components/AdSlot';
 import { useAuth } from '../src/contexts/AuthContext';
+import LandingPage from '../src/components/landing/LandingPage';
 import { usePremium } from '../src/contexts/PremiumContext';
 import PlanBadge from '../src/components/PlanBadge';
 import UsageIndicator from '../src/components/UsageIndicator';
@@ -179,7 +180,7 @@ function scheduleNonCriticalTask(task: () => void, delayMs = 500): () => void {
 
 export default function HomeScreen() {
   const { colors, isDark, themeMode, cycleTheme } = useTheme();
-  const { user, signInWithGoogle, signOut } = useAuth();
+  const { user, session, loading: authLoading, signInWithGoogle, signOut } = useAuth();
   const { isPro, showPaywall } = usePremium();
   const isOnline = useNetworkStatus();
   const insets = useSafeAreaInsets();
@@ -622,6 +623,16 @@ export default function HomeScreen() {
       />
     );
   }, [colors, period, goToAnalysis, shareSignal]);
+
+  // Show landing page for unauthenticated visitors
+  if (!authLoading && !session) {
+    return (
+      <LandingPage
+        onSignUp={signInWithGoogle}
+        onSignIn={signInWithGoogle}
+      />
+    );
+  }
 
   return (
     <View style={s.container}>
