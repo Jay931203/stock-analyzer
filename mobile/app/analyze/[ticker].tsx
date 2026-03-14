@@ -29,6 +29,7 @@ import { PERIOD_LABELS } from '../../src/constants/ui';
 import { doShare } from '../../src/utils/share';
 import { usePremium } from '../../src/contexts/PremiumContext';
 import UpgradeOverlay from '../../src/components/UpgradeOverlay';
+import PriceChart from '../../src/components/PriceChart';
 
 const INDICATOR_META: Record<string, { label: string; labelKo: string }> = {
   RSI: { label: 'RSI', labelKo: '과매수/과매도' },
@@ -434,6 +435,12 @@ export default function AnalyzeScreen() {
             <Week52Gauge current={price.current} low={price.low_52w} high={price.high_52w} distribution={indicators.week52?.price_distribution} />
           </View>
         )}
+
+        {/* PRICE CHART */}
+        <PriceChart
+          ticker={ticker!}
+          priceData={price}
+        />
 
         {/* EARNINGS HISTORY */}
         {earningsData && earningsData.earnings.length > 0 && (

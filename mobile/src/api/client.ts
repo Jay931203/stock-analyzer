@@ -423,6 +423,19 @@ const api = {
     return res.data;
   },
 
+  async getChartData(ticker: string, period: string = '1y'): Promise<{ ticker: string; period: string; candles: { time: string; open: number; high: number; low: number; close: number; volume: number }[] }> {
+    const cacheKey = `chart:${ticker}:${period}`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+
+    const res = await axios.get(`${BASE_URL}/api/chart/${ticker}`, {
+      params: { period },
+      timeout: 15000,
+    });
+    setCache(cacheKey, res.data);
+    return res.data;
+  },
+
   async earningsHistory(ticker: string, limit = 8): Promise<EarningsHistoryResponse> {
     const cacheKey = `eh:${ticker}`;
     const cached = getCached(cacheKey);
