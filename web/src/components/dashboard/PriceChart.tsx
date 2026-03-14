@@ -17,6 +17,22 @@ const PERIOD_MAP: Record<ChartPeriod, string> = {
   "5Y": "5y",
 };
 
+/** Calculate Simple Moving Average from close prices */
+function calcSMA(
+  candles: { time: string; close: number }[],
+  window: number,
+): { time: string; value: number }[] {
+  const result: { time: string; value: number }[] = [];
+  for (let i = window - 1; i < candles.length; i++) {
+    let sum = 0;
+    for (let j = i - window + 1; j <= i; j++) {
+      sum += candles[j].close;
+    }
+    result.push({ time: candles[i].time, value: sum / window });
+  }
+  return result;
+}
+
 interface PriceChartProps {
   ticker: string;
   className?: string;
@@ -123,36 +139,45 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
           })),
         );
 
-        // Overlay indicators (SMA lines)
-        if (data.indicators) {
-          const INDICATOR_COLORS: Record<string, string> = {
-            SMA_20: "#6366f1",
-            SMA20: "#6366f1",
-            sma_20: "#6366f1",
-            SMA_50: "#f97316",
-            SMA50: "#f97316",
-            sma_50: "#f97316",
-          };
+        // Calculate SMA 20 and SMA 50 on the frontend
+        const closePrices = data.candles.map((c) => ({
+          time: c.time,
+          close: c.close,
+        }));
 
-          for (const ind of data.indicators) {
-            const color = INDICATOR_COLORS[ind.name] || "#6366f1";
-            const lineSeries = chart.addSeries(LineSeries, {
-              color,
-              lineWidth: 1,
-              priceLineVisible: false,
-              lastValueVisible: false,
-              crosshairMarkerVisible: false,
-            });
+        const sma20 = calcSMA(closePrices, 20);
+        const sma50 = calcSMA(closePrices, 50);
 
-            lineSeries.setData(
-              ind.values
-                .filter((v) => v.value != null)
-                .map((v) => ({
-                  time: v.time as unknown as import("lightweight-charts").UTCTimestamp,
-                  value: v.value,
-                })),
-            );
-          }
+        if (sma20.length > 0) {
+          const sma20Series = chart.addSeries(LineSeries, {
+            color: "#6366f1",
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          sma20Series.setData(
+            sma20.map((v) => ({
+              time: v.time as unknown as import("lightweight-charts").UTCTimestamp,
+              value: v.value,
+            })),
+          );
+        }
+
+        if (sma50.length > 0) {
+          const sma50Series = chart.addSeries(LineSeries, {
+            color: "#f97316",
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          sma50Series.setData(
+            sma50.map((v) => ({
+              time: v.time as unknown as import("lightweight-charts").UTCTimestamp,
+              value: v.value,
+            })),
+          );
         }
 
         chart.timeScale().fitContent();

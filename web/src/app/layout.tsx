@@ -26,6 +26,9 @@ export const metadata: Metadata = {
     "stock market",
     "probability analysis",
   ],
+  icons: {
+    icon: "/favicon.svg",
+  },
   openGraph: {
     title: "Stock Scanner — AI-Powered Signal Analysis",
     description:

@@ -30,13 +30,15 @@ export function Header() {
         const data = await res.json();
         if (cancelled) return;
 
+        // Actual response: { prices: { SPY: { price, change, change_pct, market_state }, ... } }
+        const prices = data.prices || {};
         const updated = ["SPY", "QQQ", "DIA"].map((sym) => {
-          const d = data[sym] || {};
+          const d = prices[sym] || {};
           return {
             symbol: sym,
             price: d.price ?? 0,
             change: d.change ?? 0,
-            changePercent: d.change_percent ?? 0,
+            changePercent: d.change_pct ?? 0,
           };
         });
         setIndices(updated);

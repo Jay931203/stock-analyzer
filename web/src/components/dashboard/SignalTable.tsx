@@ -9,8 +9,7 @@ import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 type SortKey =
   | "ticker"
   | "price"
-  | "change"
-  | "signal"
+  | "change_pct"
   | "win_rate_5d"
   | "win_rate_20d"
   | "win_rate_60d"
@@ -28,10 +27,9 @@ interface Column {
 }
 
 const COLUMNS: Column[] = [
-  { key: "ticker", label: "Ticker", align: "left", width: "w-20" },
+  { key: "ticker", label: "Ticker", align: "left", width: "w-28" },
   { key: "price", label: "Price", align: "right", width: "w-24" },
-  { key: "change", label: "Change%", shortLabel: "Chg%", align: "right", width: "w-20" },
-  { key: "signal", label: "Signal", align: "left", width: "w-28" },
+  { key: "change_pct", label: "Change%", shortLabel: "Chg%", align: "right", width: "w-20" },
   { key: "win_rate_5d", label: "WR 5d", align: "right", width: "w-16" },
   { key: "win_rate_20d", label: "WR 20d", align: "right", width: "w-16" },
   { key: "win_rate_60d", label: "WR 60d", align: "right", width: "w-16" },
@@ -52,6 +50,13 @@ function getStrengthColor(s: number): string {
   return "bg-red-500";
 }
 
+/** Derive direction from win_rate_20d */
+function getDirection(sig: Signal): "bullish" | "bearish" | "neutral" {
+  if (sig.win_rate_20d > 50) return "bullish";
+  if (sig.win_rate_20d < 50) return "bearish";
+  return "neutral";
+}
+
 interface SignalTableProps {
   signals: Signal[];
   loading?: boolean;
@@ -61,6 +66,7 @@ export function SignalTable({ signals, loading }: SignalTableProps) {
   const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>("strength");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
 
   const handleSort = useCallback(
     (key: SortKey) => {
@@ -84,19 +90,6 @@ export function SignalTable({ signals, loading }: SignalTableProps) {
         case "ticker":
           av = a.ticker;
           bv = b.ticker;
-          break;
-        case "signal":
-          av = a.signal;
-          bv = b.signal;
-          break;
-        case "change":
-          av = a.avg_return_5d;
-          bv = b.avg_return_5d;
-          break;
-        case "win_rate_60d":
-          // Use win_rate_20d as proxy if 60d not available
-          av = a.win_rate_20d;
-          bv = b.win_rate_20d;
           break;
         default:
           av = (a as unknown as Record<string, number>)[sortKey] ?? 0;
@@ -164,136 +157,160 @@ export function SignalTable({ signals, loading }: SignalTableProps) {
         </thead>
         <tbody>
           {sorted.map((sig, idx) => {
-            const isBullish = sig.direction === "bullish";
-            const isBearish = sig.direction === "bearish";
+            const direction = getDirection(sig);
+            const isBullish = direction === "bullish";
+            const isExpanded = expandedTicker === sig.ticker;
 
             return (
-              <tr
-                key={sig.ticker}
-                onClick={() =>
-                  router.push(`/dashboard/analyze/${sig.ticker}`)
-                }
-                className="border-b border-zinc-800/50 cursor-pointer hover:bg-zinc-800/40 transition-colors group"
-              >
-                {/* # */}
-                <td className="px-3 py-2.5 text-zinc-600 font-mono text-xs">
-                  {idx + 1}
-                </td>
+              <>
+                <tr
+                  key={sig.ticker}
+                  onClick={() =>
+                    router.push(`/dashboard/analyze/${sig.ticker}`)
+                  }
+                  className="border-b border-zinc-800/50 cursor-pointer hover:bg-zinc-800/40 transition-colors group"
+                >
+                  {/* # */}
+                  <td className="px-3 py-2.5 text-zinc-600 font-mono text-xs">
+                    {idx + 1}
+                  </td>
 
-                {/* Ticker */}
-                <td className="px-3 py-2.5">
-                  <span className="font-mono font-semibold text-zinc-100 group-hover:text-indigo-400 transition-colors">
-                    {sig.ticker}
-                  </span>
-                </td>
-
-                {/* Price */}
-                <td className="px-3 py-2.5 text-right font-mono text-zinc-200">
-                  ${sig.price.toFixed(2)}
-                </td>
-
-                {/* Change% - using avg_return_5d as proxy */}
-                <td className="px-3 py-2.5 text-right">
-                  <span
-                    className={cn(
-                      "font-mono text-xs",
-                      sig.avg_return_5d >= 0
-                        ? "text-emerald-400"
-                        : "text-red-400",
-                    )}
-                  >
-                    {sig.avg_return_5d >= 0 ? "+" : ""}
-                    {sig.avg_return_5d.toFixed(2)}%
-                  </span>
-                </td>
-
-                {/* Signal */}
-                <td className="px-3 py-2.5">
-                  <span
-                    className={cn(
-                      "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border",
-                      isBullish &&
-                        "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-                      isBearish &&
-                        "bg-red-500/10 text-red-400 border-red-500/20",
-                      !isBullish &&
-                        !isBearish &&
-                        "bg-zinc-700/30 text-zinc-400 border-zinc-700",
-                    )}
-                  >
-                    {sig.signal}
-                  </span>
-                </td>
-
-                {/* Win Rate 5d */}
-                <td className="px-3 py-2.5 text-right">
-                  <span
-                    className={cn(
-                      "font-mono text-xs",
-                      getWinRateColor(sig.win_rate_5d),
-                    )}
-                  >
-                    {sig.win_rate_5d.toFixed(0)}%
-                  </span>
-                </td>
-
-                {/* Win Rate 20d */}
-                <td className="px-3 py-2.5 text-right">
-                  <span
-                    className={cn(
-                      "font-mono text-xs",
-                      getWinRateColor(sig.win_rate_20d),
-                    )}
-                  >
-                    {sig.win_rate_20d.toFixed(0)}%
-                  </span>
-                </td>
-
-                {/* Win Rate 60d (using 20d as proxy) */}
-                <td className="px-3 py-2.5 text-right">
-                  <span
-                    className={cn(
-                      "font-mono text-xs",
-                      getWinRateColor(sig.win_rate_20d),
-                    )}
-                  >
-                    {sig.win_rate_20d.toFixed(0)}%
-                  </span>
-                </td>
-
-                {/* Avg Return 20d */}
-                <td className="px-3 py-2.5 text-right">
-                  <span
-                    className={cn(
-                      "font-mono text-xs",
-                      sig.avg_return_20d >= 0
-                        ? "text-emerald-400"
-                        : "text-red-400",
-                    )}
-                  >
-                    {sig.avg_return_20d >= 0 ? "+" : ""}
-                    {sig.avg_return_20d.toFixed(2)}%
-                  </span>
-                </td>
-
-                {/* Strength bar */}
-                <td className="px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          "h-full rounded-full transition-all",
-                          getStrengthColor(sig.strength),
-                        )}
-                        style={{ width: `${Math.min(sig.strength, 100)}%` }}
-                      />
+                  {/* Ticker + name */}
+                  <td className="px-3 py-2.5">
+                    <div>
+                      <span className="font-mono font-semibold text-zinc-100 group-hover:text-indigo-400 transition-colors">
+                        {sig.ticker}
+                      </span>
+                      {sig.name && (
+                        <div className="text-[10px] text-zinc-600 truncate max-w-[100px]">
+                          {sig.name}
+                        </div>
+                      )}
                     </div>
-                    <span className="font-mono text-xs text-zinc-400 w-7 text-right">
-                      {sig.strength.toFixed(0)}
+                  </td>
+
+                  {/* Price */}
+                  <td className="px-3 py-2.5 text-right font-mono text-zinc-200">
+                    ${sig.price.toFixed(2)}
+                  </td>
+
+                  {/* Change% */}
+                  <td className="px-3 py-2.5 text-right">
+                    <span
+                      className={cn(
+                        "font-mono text-xs",
+                        sig.change_pct >= 0
+                          ? "text-emerald-400"
+                          : "text-red-400",
+                      )}
+                    >
+                      {sig.change_pct >= 0 ? "+" : ""}
+                      {sig.change_pct.toFixed(2)}%
                     </span>
-                  </div>
-                </td>
-              </tr>
+                  </td>
+
+                  {/* Win Rate 5d */}
+                  <td className="px-3 py-2.5 text-right">
+                    <span
+                      className={cn(
+                        "font-mono text-xs",
+                        getWinRateColor(sig.win_rate_5d),
+                      )}
+                    >
+                      {sig.win_rate_5d.toFixed(0)}%
+                    </span>
+                  </td>
+
+                  {/* Win Rate 20d */}
+                  <td className="px-3 py-2.5 text-right">
+                    <span
+                      className={cn(
+                        "font-mono text-xs",
+                        getWinRateColor(sig.win_rate_20d),
+                      )}
+                    >
+                      {sig.win_rate_20d.toFixed(0)}%
+                    </span>
+                  </td>
+
+                  {/* Win Rate 60d */}
+                  <td className="px-3 py-2.5 text-right">
+                    <span
+                      className={cn(
+                        "font-mono text-xs",
+                        getWinRateColor(sig.win_rate_60d),
+                      )}
+                    >
+                      {sig.win_rate_60d.toFixed(0)}%
+                    </span>
+                  </td>
+
+                  {/* Avg Return 20d */}
+                  <td className="px-3 py-2.5 text-right">
+                    <span
+                      className={cn(
+                        "font-mono text-xs",
+                        sig.avg_return_20d >= 0
+                          ? "text-emerald-400"
+                          : "text-red-400",
+                      )}
+                    >
+                      {sig.avg_return_20d >= 0 ? "+" : ""}
+                      {sig.avg_return_20d.toFixed(2)}%
+                    </span>
+                  </td>
+
+                  {/* Strength bar */}
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            getStrengthColor(sig.strength),
+                          )}
+                          style={{ width: `${Math.min(sig.strength, 100)}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-xs text-zinc-400 w-7 text-right">
+                        {sig.strength.toFixed(0)}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+
+                {/* Expand row on click to show condition + metadata */}
+                {isExpanded && (
+                  <tr key={`${sig.ticker}-detail`} className="border-b border-zinc-800/50">
+                    <td colSpan={9} className="px-6 py-3 bg-zinc-900/80">
+                      <div className="flex flex-wrap gap-4 text-xs">
+                        <div>
+                          <span className="text-zinc-500">Condition:</span>{" "}
+                          <span className="text-zinc-300">{sig.condition}</span>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500">Sector:</span>{" "}
+                          <span className="text-zinc-300">{sig.sector}</span>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500">Tier:</span>{" "}
+                          <span className="text-zinc-300">{sig.tier}</span>
+                        </div>
+                        {sig.volume_level && (
+                          <div>
+                            <span className="text-zinc-500">Volume:</span>{" "}
+                            <span className="text-zinc-300">{sig.volume_level}</span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-zinc-500">Occurrences:</span>{" "}
+                          <span className="text-zinc-300">{sig.occurrences}</span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             );
           })}
         </tbody>
@@ -315,7 +332,6 @@ function SignalTableSkeleton() {
           <div className="w-14 h-4 bg-zinc-800 rounded animate-pulse" />
           <div className="w-16 h-4 bg-zinc-800 rounded animate-pulse" />
           <div className="w-12 h-4 bg-zinc-800 rounded animate-pulse" />
-          <div className="w-20 h-5 bg-zinc-800 rounded-md animate-pulse" />
           <div className="w-10 h-4 bg-zinc-800 rounded animate-pulse" />
           <div className="w-10 h-4 bg-zinc-800 rounded animate-pulse" />
           <div className="w-10 h-4 bg-zinc-800 rounded animate-pulse" />

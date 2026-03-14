@@ -4,14 +4,15 @@ import { useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
-import { TimeMachineCard } from "@/components/dashboard/TimeMachineCard";
+import { api, type TimeMachineResponse } from "@/lib/api";
 import {
   Clock,
   ArrowLeft,
   Loader2,
   AlertCircle,
   Calendar,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 const PRESET_DATES = [
@@ -23,31 +24,12 @@ const PRESET_DATES = [
   { label: "2024 Election", date: "2024-11-05", description: "US presidential" },
 ] as const;
 
-interface TimeMachineResult {
-  ticker: string;
-  date: string;
-  signal: string;
-  direction: "bullish" | "bearish" | "neutral";
-  strength: number;
-  verdict: "correct" | "incorrect" | "partial";
-  forward_returns: {
-    period: string;
-    expected: number;
-    actual: number;
-  }[];
-  indicators: {
-    name: string;
-    state: string;
-    value: number | string;
-  }[];
-}
-
 export default function TimeMachinePage() {
   const params = useParams<{ ticker: string }>();
   const ticker = (params.ticker || "").toUpperCase();
 
   const [selectedDate, setSelectedDate] = useState("");
-  const [result, setResult] = useState<TimeMachineResult | null>(null);
+  const [result, setResult] = useState<TimeMachineResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,32 +42,8 @@ export default function TimeMachinePage() {
       setResult(null);
 
       try {
-        const raw = await api.getTimeMachine(ticker, date);
-
-        const mapped: TimeMachineResult = {
-          ticker: (raw.ticker as string) || ticker,
-          date: (raw.date as string) || date,
-          signal: (raw.signal as string) || "Unknown",
-          direction:
-            (raw.direction as TimeMachineResult["direction"]) || "neutral",
-          strength: (raw.strength as number) || 0,
-          verdict:
-            (raw.verdict as TimeMachineResult["verdict"]) || "partial",
-          forward_returns: Array.isArray(raw.forward_returns)
-            ? (raw.forward_returns as TimeMachineResult["forward_returns"])
-            : [
-                { period: "1W", expected: 0, actual: 0 },
-                { period: "2W", expected: 0, actual: 0 },
-                { period: "1M", expected: 0, actual: 0 },
-                { period: "3M", expected: 0, actual: 0 },
-                { period: "6M", expected: 0, actual: 0 },
-              ],
-          indicators: Array.isArray(raw.indicators)
-            ? (raw.indicators as TimeMachineResult["indicators"])
-            : [],
-        };
-
-        setResult(mapped);
+        const data = await api.getTimeMachine(ticker, date);
+        setResult(data);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to run time machine",
@@ -218,46 +176,162 @@ export default function TimeMachinePage() {
       {/* Result */}
       {result && !loading && (
         <div className="space-y-4">
-          <TimeMachineCard
-            ticker={result.ticker}
-            date={result.date}
-            signal={result.signal}
-            direction={result.direction}
-            verdict={result.verdict}
-            strength={result.strength}
-            forwardReturns={result.forward_returns.map((fr) => ({
-              period: fr.period,
-              expected: fr.expected,
-              actual: fr.actual,
-            }))}
-          />
+          {/* Verdict card */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            {/* Verdict header */}
+            <div
+              className={cn(
+                "flex items-center justify-between px-5 py-4 border-b",
+                result.accuracy.was_correct
+                  ? "bg-emerald-500/10 border-emerald-500/20"
+                  : "bg-red-500/10 border-red-500/20",
+              )}
+            >
+              <div className="flex items-center gap-3">
+                {result.accuracy.was_correct ? (
+                  <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                ) : (
+                  <XCircle className="w-6 h-6 text-red-400" />
+                )}
+                <div>
+                  <h3 className="text-lg font-semibold text-zinc-100">
+                    {result.ticker}{" "}
+                    <span className="text-zinc-500 font-normal text-sm">
+                      on {result.date}
+                    </span>
+                  </h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span
+                      className={cn(
+                        "text-xs font-medium px-2 py-0.5 rounded-md border",
+                        result.signal.direction === "bullish"
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                          : "bg-red-500/10 text-red-400 border-red-500/20",
+                      )}
+                    >
+                      {result.signal.direction}
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      WR: {result.signal.win_rate_20d.toFixed(0)}% | n={result.signal.occurrences}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div
+                  className={cn(
+                    "text-sm font-semibold px-3 py-1.5 rounded-lg border",
+                    result.accuracy.was_correct
+                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                      : "bg-red-500/10 border-red-500/20 text-red-400",
+                  )}
+                >
+                  {result.accuracy.was_correct ? "Correct" : "Incorrect"}
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-1">
+                  Predicted: {result.accuracy.predicted_direction} | Actual: {result.accuracy.actual_direction}
+                </div>
+              </div>
+            </div>
 
-          {/* Indicator states at that date */}
-          {result.indicators.length > 0 && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-              <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
-                Indicator States on {result.date}
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {result.indicators.map((ind) => (
+            {/* Price info */}
+            <div className="px-5 py-3 border-b border-zinc-800 flex items-center gap-6 text-sm">
+              <div>
+                <span className="text-zinc-500">Price at date: </span>
+                <span className="font-mono text-zinc-200">${result.price_at_date.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Current: </span>
+                <span className="font-mono text-zinc-200">${result.current_price.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Forward returns */}
+            <div className="px-5 py-4">
+              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
+                Actual Forward Returns
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                {Object.entries(result.actual).map(([period, data]) => (
                   <div
-                    key={ind.name}
-                    className="bg-zinc-800/40 rounded-lg p-3"
+                    key={period}
+                    className="text-center bg-zinc-800/40 rounded-lg p-3"
                   >
-                    <div className="text-[11px] text-zinc-500 mb-1">
-                      {ind.name}
+                    <div className="text-[11px] text-zinc-500 font-medium mb-2">
+                      {period}
                     </div>
-                    <div className="text-sm font-mono font-semibold text-zinc-200">
-                      {typeof ind.value === "number"
-                        ? ind.value.toFixed(2)
-                        : ind.value}
+                    <div
+                      className={cn(
+                        "text-lg font-mono font-semibold",
+                        data.return_pct >= 0 ? "text-emerald-400" : "text-red-400",
+                      )}
+                    >
+                      {data.return_pct >= 0 ? "+" : ""}
+                      {data.return_pct.toFixed(1)}%
                     </div>
-                    <div className="text-[11px] text-zinc-500 mt-0.5">
-                      {ind.state}
+                    <div className="text-[10px] text-zinc-600 mt-1">
+                      ${data.end_price.toFixed(2)}
+                    </div>
+                    <div className="mt-1.5">
+                      {data.went_up ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mx-auto" />
+                      ) : (
+                        <XCircle className="w-3.5 h-3.5 text-red-500 mx-auto" />
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Signal conditions */}
+          {result.signal.conditions.length > 0 && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+              <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
+                Signal Conditions on {result.date}
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {result.signal.conditions.map((cond, i) => (
+                  <div
+                    key={i}
+                    className="bg-zinc-800/40 rounded-lg p-3"
+                  >
+                    <div className="text-[11px] text-zinc-500 mb-1">
+                      {cond.indicator}
+                    </div>
+                    <div className="text-sm font-mono font-semibold text-zinc-200">
+                      {cond.state}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Highlights */}
+          {result.highlights && result.highlights.length > 0 && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+              <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
+                Highlights
+              </h3>
+              <ul className="space-y-2">
+                {result.highlights.map((h, i) => (
+                  <li
+                    key={i}
+                    className={cn(
+                      "text-sm px-3 py-2 rounded-lg",
+                      h.type === "positive"
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : h.type === "negative"
+                          ? "bg-red-500/10 text-red-400"
+                          : "bg-zinc-800/40 text-zinc-300",
+                    )}
+                  >
+                    {h.text}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

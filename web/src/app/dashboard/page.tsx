@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils";
 import {
   api,
   type Signal,
-  type MarketRegime,
-  type SignalFlip,
+  type FlipItem,
 } from "@/lib/api";
 import { SignalTable } from "@/components/dashboard/SignalTable";
 import {
@@ -49,15 +48,16 @@ function getMarketState(): { label: string; color: string } {
 
 export default function ScannerPage() {
   const [signals, setSignals] = useState<Signal[]>([]);
-  const [marketRegime, setMarketRegime] = useState<MarketRegime | null>(null);
-  const [flips, setFlips] = useState<SignalFlip[]>([]);
+  const [marketStateLabel, setMarketStateLabel] = useState<string | null>(null);
+  const [flips, setFlips] = useState<FlipItem[]>([]);
   const [period, setPeriod] = useState<Period>("3y");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [scanned, setScanned] = useState(0);
 
-  const marketState = getMarketState();
+  const localMarketState = getMarketState();
 
   const fetchSignals = useCallback(
     async (showRefresh = false) => {
@@ -68,9 +68,11 @@ export default function ScannerPage() {
       try {
         const data = await api.getSignals(period);
         setSignals(data.signals);
-        setMarketRegime(data.market_regime);
-        setFlips(data.flips || []);
-        setLastUpdated(data.generated_at || new Date().toISOString());
+        setMarketStateLabel(data.market_state || null);
+        setScanned(data.scanned || 0);
+        // flips is nested: { flips: FlipItem[], updated, count }
+        setFlips(data.flips?.flips || []);
+        setLastUpdated(data.updated || new Date().toISOString());
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch signals");
       } finally {
@@ -99,11 +101,11 @@ export default function ScannerPage() {
               <span
                 className={cn(
                   "flex items-center gap-1.5 text-xs font-medium",
-                  marketState.color,
+                  localMarketState.color,
                 )}
               >
                 <Circle className="w-2 h-2 fill-current" />
-                {marketState.label}
+                {marketStateLabel || localMarketState.label}
               </span>
             </div>
             {lastUpdated && (
@@ -116,6 +118,11 @@ export default function ScannerPage() {
                   timeZone: "America/New_York",
                 })}{" "}
                 ET
+                {scanned > 0 && (
+                  <span className="ml-2 text-zinc-600">
+                    ({scanned} tickers scanned)
+                  </span>
+                )}
               </p>
             )}
           </div>
@@ -180,38 +187,24 @@ export default function ScannerPage() {
       {/* Right sidebar panels */}
       <aside className="hidden xl:block w-72 border-l border-zinc-800 bg-zinc-950/50 overflow-y-auto shrink-0">
         <div className="p-4 space-y-5">
-          {/* Market Regime */}
+          {/* Market State */}
           <div>
             <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
-              Market Regime
+              Market State
             </h3>
-            {marketRegime ? (
-              <div
-                className="rounded-lg border p-3"
-                style={{
-                  borderColor: `${marketRegime.color}33`,
-                  backgroundColor: `${marketRegime.color}08`,
-                }}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp
-                    className="w-4 h-4"
-                    style={{ color: marketRegime.color }}
-                  />
-                  <span
-                    className="text-sm font-semibold"
-                    style={{ color: marketRegime.color }}
-                  >
-                    {marketRegime.label}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 leading-relaxed">
-                  {marketRegime.description}
-                </p>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-indigo-400" />
+                <span className="text-sm font-semibold text-zinc-200">
+                  {marketStateLabel || localMarketState.label}
+                </span>
               </div>
-            ) : (
-              <div className="h-20 bg-zinc-800/30 rounded-lg animate-pulse" />
-            )}
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                {scanned > 0
+                  ? `Scanned ${scanned} tickers for signals`
+                  : "Signal scanner active"}
+              </p>
+            </div>
           </div>
 
           {/* Signal Flips */}
@@ -229,10 +222,18 @@ export default function ScannerPage() {
                     <span className="font-mono font-semibold text-zinc-200 w-12">
                       {flip.ticker}
                     </span>
-                    <span className="text-red-400 truncate">{flip.from}</span>
+                    <span className={cn(
+                      "truncate",
+                      flip.direction === "bullish" ? "text-emerald-400" : "text-red-400",
+                    )}>
+                      {flip.prev_win_rate.toFixed(0)}%
+                    </span>
                     <ArrowRightLeft className="w-3 h-3 text-zinc-600 shrink-0" />
-                    <span className="text-emerald-400 truncate">
-                      {flip.to}
+                    <span className={cn(
+                      "truncate",
+                      flip.direction === "bullish" ? "text-emerald-400" : "text-red-400",
+                    )}>
+                      {flip.curr_win_rate.toFixed(0)}%
                     </span>
                   </div>
                 ))}
@@ -259,13 +260,13 @@ export default function ScannerPage() {
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-lg p-3 text-center">
                 <div className="text-lg font-mono font-semibold text-emerald-400">
-                  {signals.filter((s) => s.direction === "bullish").length}
+                  {signals.filter((s) => s.win_rate_20d > 50).length}
                 </div>
                 <div className="text-[10px] text-zinc-500 mt-0.5">Bullish</div>
               </div>
               <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-lg p-3 text-center">
                 <div className="text-lg font-mono font-semibold text-red-400">
-                  {signals.filter((s) => s.direction === "bearish").length}
+                  {signals.filter((s) => s.win_rate_20d < 50).length}
                 </div>
                 <div className="text-[10px] text-zinc-500 mt-0.5">Bearish</div>
               </div>

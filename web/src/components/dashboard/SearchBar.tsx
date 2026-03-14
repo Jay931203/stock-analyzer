@@ -4,16 +4,21 @@ import {
   useState,
   useEffect,
   useRef,
-  useCallback,
+  useMemo,
   type KeyboardEvent,
 } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { api, type SearchResult } from "@/lib/api";
+import { TICKER_DB, type SearchResult } from "@/lib/api";
 import { Search, Command, Clock, X } from "lucide-react";
 
 const RECENT_KEY = "stock-scanner-recent";
 const MAX_RECENT = 8;
+
+// Build a flat array once for search
+const ALL_TICKERS: SearchResult[] = Object.entries(TICKER_DB).map(
+  ([symbol, name]) => ({ symbol, name }),
+);
 
 function getRecent(): SearchResult[] {
   if (typeof window === "undefined") return [];
@@ -34,13 +39,37 @@ export function SearchBar() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
   const [recent, setRecent] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Client-side filter
+  const results = useMemo(() => {
+    if (query.length < 1) return [];
+    const q = query.toUpperCase();
+    const qLower = query.toLowerCase();
+
+    // Exact ticker match first, then prefix match, then contains
+    const exact: SearchResult[] = [];
+    const prefix: SearchResult[] = [];
+    const contains: SearchResult[] = [];
+
+    for (const item of ALL_TICKERS) {
+      if (item.symbol === q) {
+        exact.push(item);
+      } else if (item.symbol.startsWith(q)) {
+        prefix.push(item);
+      } else if (
+        item.symbol.includes(q) ||
+        item.name.toLowerCase().includes(qLower)
+      ) {
+        contains.push(item);
+      }
+    }
+
+    return [...exact, ...prefix, ...contains].slice(0, 8);
+  }, [query]);
 
   // Cmd+K listener
   useEffect(() => {
@@ -61,7 +90,6 @@ export function SearchBar() {
       setTimeout(() => inputRef.current?.focus(), 50);
     } else {
       setQuery("");
-      setResults([]);
       setSelectedIdx(0);
     }
   }, [open]);
@@ -81,29 +109,6 @@ export function SearchBar() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const doSearch = useCallback(async (q: string) => {
-    if (q.length < 1) {
-      setResults([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await api.search(q);
-      setResults(data.slice(0, 8));
-      setSelectedIdx(0);
-    } catch {
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleInput = (value: string) => {
-    setQuery(value);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(value), 200);
-  };
-
   const navigate = (item: SearchResult) => {
     addRecent(item);
     setOpen(false);
@@ -120,8 +125,19 @@ export function SearchBar() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIdx((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && displayList[selectedIdx]) {
-      navigate(displayList[selectedIdx]);
+    } else if (e.key === "Enter") {
+      if (displayList[selectedIdx]) {
+        navigate(displayList[selectedIdx]);
+      } else if (query.length > 0) {
+        // Allow navigating to arbitrary ticker
+        const sym = query.toUpperCase().trim();
+        if (sym) {
+          const item = { symbol: sym, name: TICKER_DB[sym] || sym };
+          addRecent(item);
+          setOpen(false);
+          router.push(`/dashboard/analyze/${sym}`);
+        }
+      }
     }
   };
 
@@ -152,7 +168,10 @@ export function SearchBar() {
               <input
                 ref={inputRef}
                 value={query}
-                onChange={(e) => handleInput(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setSelectedIdx(0);
+                }}
                 onKeyDown={handleKeyDown}
                 placeholder="Search by ticker or company name..."
                 className="flex-1 py-3.5 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 outline-none"
@@ -163,7 +182,7 @@ export function SearchBar() {
                 <button
                   onClick={() => {
                     setQuery("");
-                    setResults([]);
+                    setSelectedIdx(0);
                   }}
                   className="text-zinc-500 hover:text-zinc-300"
                 >
@@ -182,45 +201,39 @@ export function SearchBar() {
                 </div>
               )}
 
-              {loading && (
-                <div className="flex items-center justify-center py-8 text-zinc-500 text-sm">
-                  Searching...
+              {query.length > 0 && results.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-8 text-zinc-500 text-sm gap-2">
+                  <span>No results for &quot;{query}&quot;</span>
+                  <span className="text-xs text-zinc-600">
+                    Press Enter to search &quot;{query.toUpperCase()}&quot;
+                    directly
+                  </span>
                 </div>
               )}
 
-              {!loading && query.length > 0 && results.length === 0 && (
-                <div className="flex items-center justify-center py-8 text-zinc-500 text-sm">
-                  No results found
-                </div>
-              )}
-
-              {!loading &&
-                displayList.map((item, idx) => (
-                  <button
-                    key={item.symbol}
-                    onClick={() => navigate(item)}
-                    onMouseEnter={() => setSelectedIdx(idx)}
-                    className={cn(
-                      "flex items-center gap-3 w-full px-4 py-2.5 text-left transition-colors",
-                      idx === selectedIdx
-                        ? "bg-indigo-600/15"
-                        : "hover:bg-zinc-800/60",
-                    )}
-                  >
-                    {showRecent && (
-                      <Clock className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-                    )}
-                    <span className="font-mono font-semibold text-sm text-zinc-100 w-16 shrink-0">
-                      {item.symbol}
-                    </span>
-                    <span className="text-sm text-zinc-400 truncate flex-1">
-                      {item.name}
-                    </span>
-                    <span className="text-[11px] text-zinc-600 shrink-0">
-                      {item.exchange}
-                    </span>
-                  </button>
-                ))}
+              {displayList.map((item, idx) => (
+                <button
+                  key={item.symbol}
+                  onClick={() => navigate(item)}
+                  onMouseEnter={() => setSelectedIdx(idx)}
+                  className={cn(
+                    "flex items-center gap-3 w-full px-4 py-2.5 text-left transition-colors",
+                    idx === selectedIdx
+                      ? "bg-indigo-600/15"
+                      : "hover:bg-zinc-800/60",
+                  )}
+                >
+                  {showRecent && (
+                    <Clock className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                  )}
+                  <span className="font-mono font-semibold text-sm text-zinc-100 w-16 shrink-0">
+                    {item.symbol}
+                  </span>
+                  <span className="text-sm text-zinc-400 truncate flex-1">
+                    {item.name}
+                  </span>
+                </button>
+              ))}
             </div>
 
             {/* Footer */}

@@ -8,31 +8,12 @@ import {
   Bell,
   LineChart,
   Zap,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
-/* ------------------------------------------------------------------ */
-/* Mock data for the signal table                                     */
-/* ------------------------------------------------------------------ */
-
-const MOCK_SIGNALS = [
-  { ticker: "NVDA", price: 875.28, signal: "RSI Oversold Bounce", direction: "bullish" as const, winRate: 78, avgReturn: 4.2, strength: 92 },
-  { ticker: "AAPL", price: 213.07, signal: "MACD Cross Up", direction: "bullish" as const, winRate: 72, avgReturn: 2.8, strength: 85 },
-  { ticker: "TSLA", price: 178.54, signal: "BB Squeeze Break", direction: "bullish" as const, winRate: 68, avgReturn: 6.1, strength: 88 },
-  { ticker: "MSFT", price: 428.73, signal: "Golden Cross", direction: "bullish" as const, winRate: 74, avgReturn: 3.5, strength: 81 },
-  { ticker: "META", price: 502.30, signal: "Volume Breakout", direction: "bullish" as const, winRate: 71, avgReturn: 3.9, strength: 79 },
-  { ticker: "AMZN", price: 186.49, signal: "RSI Divergence", direction: "bearish" as const, winRate: 65, avgReturn: -2.1, strength: 73 },
-  { ticker: "AMD", price: 162.88, signal: "Stochastic Cross", direction: "bullish" as const, winRate: 69, avgReturn: 5.3, strength: 84 },
-  { ticker: "GOOG", price: 155.72, signal: "Support Bounce", direction: "bullish" as const, winRate: 76, avgReturn: 2.4, strength: 77 },
-  { ticker: "JPM", price: 198.45, signal: "Death Cross", direction: "bearish" as const, winRate: 62, avgReturn: -1.8, strength: 70 },
-  { ticker: "V", price: 281.63, signal: "MACD Histogram", direction: "neutral" as const, winRate: 58, avgReturn: 1.2, strength: 55 },
-];
+import { FeatureDemo } from "@/components/landing/FeatureDemo";
 
 /* ------------------------------------------------------------------ */
 /* Feature cards data                                                 */
@@ -139,41 +120,6 @@ const PRICING = [
 ];
 
 /* ------------------------------------------------------------------ */
-/* Helper components                                                  */
-/* ------------------------------------------------------------------ */
-
-function DirectionIcon({ direction }: { direction: "bullish" | "bearish" | "neutral" }) {
-  if (direction === "bullish") return <TrendingUp className="h-4 w-4 text-success" />;
-  if (direction === "bearish") return <TrendingDown className="h-4 w-4 text-destructive" />;
-  return <Minus className="h-4 w-4 text-muted-foreground" />;
-}
-
-function WinRateBar({ value }: { value: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
-        <div
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${value}%` }}
-        />
-      </div>
-      <span className="font-mono text-xs">{value}%</span>
-    </div>
-  );
-}
-
-function StrengthDot({ value }: { value: number }) {
-  const color =
-    value >= 80 ? "bg-success" : value >= 60 ? "bg-warning" : "bg-muted-foreground";
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className={`h-2 w-2 rounded-full ${color}`} />
-      <span className="font-mono text-xs">{value}</span>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Page                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -259,94 +205,19 @@ export default function LandingPage() {
       </section>
 
       {/* ============================================================ */}
-      {/* LIVE SIGNAL PREVIEW                                          */}
+      {/* INTERACTIVE DEMO                                             */}
       {/* ============================================================ */}
       <section className="relative mx-auto max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          {/* Table header bar */}
-          <div className="flex items-center justify-between border-b border-border px-5 py-3">
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold">Today&apos;s Signals</span>
-              <Badge variant="success" className="ml-1">LIVE</Badge>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              Updated 2 min ago
-            </span>
-          </div>
+        <FeatureDemo />
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">Ticker</th>
-                  <th className="px-5 py-3 font-medium text-right">Price</th>
-                  <th className="px-5 py-3 font-medium">Signal</th>
-                  <th className="px-5 py-3 font-medium">Win Rate (20d)</th>
-                  <th className="px-5 py-3 font-medium text-right">Avg Return</th>
-                  <th className="px-5 py-3 font-medium">Strength</th>
-                </tr>
-              </thead>
-              <tbody>
-                {MOCK_SIGNALS.map((s, i) => (
-                  <tr
-                    key={s.ticker}
-                    className={`border-b border-border/50 transition-colors hover:bg-muted/30 ${
-                      i >= 6 ? "blur-[3px] select-none" : ""
-                    }`}
-                  >
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <DirectionIcon direction={s.direction} />
-                        <span className="font-semibold font-mono">{s.ticker}</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-right font-mono">
-                      ${s.price.toFixed(2)}
-                    </td>
-                    <td className="px-5 py-3">
-                      <Badge
-                        variant={
-                          s.direction === "bullish"
-                            ? "success"
-                            : s.direction === "bearish"
-                              ? "danger"
-                              : "secondary"
-                        }
-                      >
-                        {s.signal}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3">
-                      <WinRateBar value={s.winRate} />
-                    </td>
-                    <td
-                      className={`px-5 py-3 text-right font-mono ${
-                        s.avgReturn >= 0 ? "text-success" : "text-destructive"
-                      }`}
-                    >
-                      {s.avgReturn >= 0 ? "+" : ""}
-                      {s.avgReturn.toFixed(1)}%
-                    </td>
-                    <td className="px-5 py-3">
-                      <StrengthDot value={s.strength} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Blurred overlay CTA */}
-          <div className="relative -mt-24 flex flex-col items-center justify-center bg-gradient-to-t from-card via-card/95 to-transparent px-4 pt-16 pb-8">
-            <p className="mb-3 text-sm font-medium text-muted-foreground">
-              Sign up to see all 101 signals
-            </p>
-            <Button size="sm" className="gap-1.5">
-              Unlock Full Scanner <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+        {/* CTA below demo */}
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            Sign up to see all 101 live signals
+          </p>
+          <Button size="sm" className="gap-1.5">
+            Unlock Full Scanner <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </section>
 
