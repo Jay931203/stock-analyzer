@@ -558,12 +558,22 @@ async def refresh_signals(authorization: str = Header(None), response: Response 
     write_cached_signals(result["signals"])
     earnings_snapshot = _build_earnings_calendar_snapshot(result)
 
+    # Check alerts against fresh signals
+    alerts_triggered = 0
+    try:
+        from ..core.alert_checker import check_alerts_against_signals
+        triggered = await check_alerts_against_signals(result["signals"])
+        alerts_triggered = len(triggered)
+    except Exception as e:
+        print(f"[refresh] Alert check error: {e}")
+
     return {
         "status": "ok",
         "signals_count": len(result["signals"]),
         "scanned": len(POPULAR_TICKERS),
         "updated": result["updated"],
         "earnings_count": len(earnings_snapshot.get("earnings", [])),
+        "alerts_triggered": alerts_triggered,
     }
 
 
@@ -1789,3 +1799,40 @@ def _parse_conditions(conditions_str: str) -> list[dict]:
         elif cond.startswith("madist_"):
             parsed.append({"indicator": "ma20_distance", "state": cond[7:]})
     return parsed
+
+
+# ── Chart Data ──────────────────────────────────────────────────────────────
+
+
+@router.get("/chart/{ticker}")
+async def get_chart_data(
+    ticker: str,
+    period: str = Query("1y", pattern="^(1m|3m|6m|1y|2y|5y)$"),
+    response: Response = None,
+):
+    """Return OHLCV data for charting. Lightweight endpoint."""
+    ticker = _validate_ticker(ticker)
+    _set_cache_control(response, _EDGE_CACHE_MEDIUM)
+
+    period_map = {"1m": "1y", "3m": "1y", "6m": "1y", "1y": "2y", "2y": "3y", "5y": "5y"}
+    fetch_period = period_map.get(period, "2y")
+
+    df = fetch_price_history(ticker, period=fetch_period)
+
+    # Trim to requested display period
+    trim_days = {"1m": 22, "3m": 66, "6m": 132, "1y": 252, "2y": 504, "5y": 1260}
+    days = trim_days.get(period, 252)
+    df = df.iloc[-days:]
+
+    candles = []
+    for date, row in df.iterrows():
+        candles.append({
+            "time": date.strftime("%Y-%m-%d"),
+            "open": round(float(row["Open"]), 2),
+            "high": round(float(row["High"]), 2),
+            "low": round(float(row["Low"]), 2),
+            "close": round(float(row["Close"]), 2),
+            "volume": int(row["Volume"]) if "Volume" in row.index else 0,
+        })
+
+    return {"ticker": ticker, "period": period, "candles": candles}

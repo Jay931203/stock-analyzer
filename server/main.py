@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .api.routes import router
 from .api.og import og_image_router, share_router
 from .api.billing import router as billing_router
+from .api.alerts import router as alerts_router
 
 # Simple in-memory rate limiter (per IP, resets every minute)
 _rate_counts: dict[str, list[float]] = {}
@@ -91,6 +92,7 @@ app.include_router(router)
 app.include_router(og_image_router, prefix="/api")
 app.include_router(share_router)
 app.include_router(billing_router)
+app.include_router(alerts_router)
 
 
 @app.get("/health")
