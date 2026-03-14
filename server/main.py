@@ -13,6 +13,7 @@ from .api.routes import router
 from .api.og import og_image_router, share_router
 from .api.billing import router as billing_router
 from .api.alerts import router as alerts_router
+from .api.api_v1 import router as api_v1_router
 
 # Simple in-memory rate limiter (per IP, resets every minute)
 _rate_counts: dict[str, list[float]] = {}
@@ -42,8 +43,24 @@ _IS_DEV = not (os.environ.get("VERCEL") or os.environ.get("RAILWAY_ENVIRONMENT")
 
 app = FastAPI(
     title="Stock Analyzer API",
-    description="Technical analysis with historical probability backtesting",
-    version="0.1.0",
+    description=(
+        "Technical analysis with historical probability backtesting.\n\n"
+        "## Internal Endpoints\n"
+        "Used by the Stock Analyzer web/mobile app.\n\n"
+        "## Developer API v1\n"
+        "Programmatic access for developers. All `/api/v1/` endpoints require "
+        "an API-tier subscription and `X-API-Key` header authentication.\n\n"
+        "Rate limit: 10,000 requests/day. Responses use a consistent envelope "
+        "with `data` + `meta` keys."
+    ),
+    version="1.0.0",
+    openapi_tags=[
+        {
+            "name": "Developer API v1",
+            "description": "Public developer API — requires X-API-Key header (API-tier subscription, $49/mo). "
+                           "10,000 requests/day. All responses wrapped in {data, meta} envelope.",
+        },
+    ],
 )
 
 app.add_middleware(
@@ -93,6 +110,7 @@ app.include_router(og_image_router, prefix="/api")
 app.include_router(share_router)
 app.include_router(billing_router)
 app.include_router(alerts_router)
+app.include_router(api_v1_router)
 
 
 @app.get("/health")
