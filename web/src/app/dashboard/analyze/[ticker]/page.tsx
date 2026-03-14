@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { formatCurrency, formatPercent } from "@/lib/utils";
 import { api, type AnalysisResponse } from "@/lib/api";
 import { PriceChart } from "@/components/dashboard/PriceChart";
 import { IndicatorCard } from "@/components/dashboard/IndicatorCard";
@@ -13,9 +14,14 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  ChevronLeft,
   Lock,
   Loader2,
   AlertCircle,
+  ArrowLeft,
+  BarChart3,
+  Target,
 } from "lucide-react";
 
 const ANALYSIS_PERIODS = [
@@ -47,7 +53,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
     const wr20 = prob?.periods?.["20d"];
     items.push({
       name: "RSI",
-      value: ind.rsi.value ?? "--",
+      value: ind.rsi.value != null ? ind.rsi.value.toFixed(1) : "--",
       state: prob?.condition || (ind.rsi.value != null ? `RSI ${ind.rsi.value.toFixed(0)}` : "N/A"),
       state_color: ind.rsi.value != null
         ? ind.rsi.value > 70 ? "red" : ind.rsi.value < 30 ? "green" : "neutral"
@@ -250,8 +256,53 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   return items;
 }
 
+/** Horizontal win-rate bar for combined section */
+function WinRateBar({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  const barColor =
+    value >= 60
+      ? "bg-emerald-500"
+      : value >= 50
+        ? "bg-indigo-500"
+        : value >= 40
+          ? "bg-amber-500"
+          : "bg-red-500";
+
+  const textColor =
+    value >= 60
+      ? "text-emerald-400"
+      : value >= 50
+        ? "text-indigo-400"
+        : value >= 40
+          ? "text-amber-400"
+          : "text-red-400";
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-zinc-500 w-10 shrink-0 font-mono">
+        {label}
+      </span>
+      <div className="flex-1 h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div
+          className={cn("h-full rounded-full transition-all duration-700", barColor)}
+          style={{ width: `${Math.min(value, 100)}%` }}
+        />
+      </div>
+      <span className={cn("text-xs font-mono font-semibold w-14 text-right", textColor)}>
+        {value.toFixed(1)}%
+      </span>
+    </div>
+  );
+}
+
 export default function AnalyzePage() {
   const params = useParams<{ ticker: string }>();
+  const router = useRouter();
   const ticker = (params.ticker || "").toUpperCase();
 
   const [period, setPeriod] = useState<AnalysisPeriod>("10y");
@@ -301,19 +352,35 @@ export default function AnalyzePage() {
     }
   };
 
+  // -- Loading skeleton --
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center gap-4">
-          <div className="w-32 h-8 bg-zinc-800 rounded animate-pulse" />
-          <div className="w-24 h-6 bg-zinc-800 rounded animate-pulse" />
+      <div className="p-6 space-y-6 max-w-7xl">
+        {/* Breadcrumb skeleton */}
+        <div className="flex items-center gap-2">
+          <div className="w-20 h-4 bg-zinc-800 rounded animate-pulse" />
+          <div className="w-4 h-4" />
+          <div className="w-16 h-4 bg-zinc-800 rounded animate-pulse" />
         </div>
-        <div className="w-full h-[400px] bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />
+        {/* Header skeleton */}
+        <div className="flex items-center gap-6">
+          <div className="space-y-2">
+            <div className="w-40 h-8 bg-zinc-800 rounded animate-pulse" />
+            <div className="w-24 h-5 bg-zinc-800 rounded animate-pulse" />
+          </div>
+          <div className="space-y-2 ml-auto">
+            <div className="w-28 h-8 bg-zinc-800 rounded animate-pulse" />
+            <div className="w-20 h-4 bg-zinc-800 rounded animate-pulse" />
+          </div>
+        </div>
+        {/* Chart skeleton */}
+        <div className="w-full h-[440px] bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />
+        {/* Indicators skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="h-40 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse"
+              className="h-44 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse"
             />
           ))}
         </div>
@@ -321,17 +388,27 @@ export default function AnalyzePage() {
     );
   }
 
+  // -- Error state --
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <AlertCircle className="w-10 h-10 text-red-400" />
+        <p className="text-sm font-mono text-zinc-300">{ticker}</p>
         <p className="text-sm text-red-400">{error}</p>
-        <button
-          onClick={fetchAnalysis}
-          className="px-4 py-2 rounded-lg bg-zinc-800 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
-        >
-          Retry
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchAnalysis}
+            className="px-4 py-2 rounded-lg bg-zinc-800 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+          >
+            Retry
+          </button>
+          <Link
+            href="/dashboard"
+            className="px-4 py-2 rounded-lg bg-zinc-800 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+          >
+            Back to Scanner
+          </Link>
+        </div>
       </div>
     );
   }
@@ -344,24 +421,55 @@ export default function AnalyzePage() {
   const positive = price.change_pct >= 0;
 
   // Derive direction from combined win rate
+  const combinedWr5 = combined?.probability?.periods?.["5d"]?.win_rate ?? 50;
   const combinedWr20 = combined?.probability?.periods?.["20d"]?.win_rate ?? 50;
+  const combinedWr60 = combined?.probability?.periods?.["60d"]?.win_rate ?? 50;
+  const combinedAvg20 = combined?.probability?.periods?.["20d"]?.avg_return ?? 0;
   const direction = combinedWr20 > 50 ? "bullish" : combinedWr20 < 50 ? "bearish" : "neutral";
-  const signalLabel = combined?.probability?.condition || direction;
-  const strength = combined?.probability?.occurrences
-    ? Math.min(
-        ((combinedWr20 / 100) * 100),
-        100,
-      )
-    : 50;
+
+  // 52-week range
+  const has52w = price.high_52w != null && price.low_52w != null;
+  const range52w =
+    has52w && price.high_52w! > price.low_52w!
+      ? ((price.current - price.low_52w!) / (price.high_52w! - price.low_52w!)) * 100
+      : null;
+
+  // Conditions as bullet list
+  const conditions = combined?.conditions ?? [];
 
   return (
     <div className="p-6 space-y-6 max-w-7xl">
-      {/* Top section: ticker info */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-xs text-zinc-500">
+        <Link
+          href="/dashboard"
+          className="hover:text-zinc-300 transition-colors"
+        >
+          Scanner
+        </Link>
+        <ChevronRight className="w-3 h-3" />
+        <span className="font-mono font-semibold text-zinc-300">
+          {ticker}
+        </span>
+        <ChevronRight className="w-3 h-3" />
+        <span className="text-zinc-400">Analysis</span>
+      </nav>
+
+      {/* Top section: ticker info + price */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="flex items-start gap-5">
+          {/* Back button */}
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors mt-0.5 shrink-0"
+            aria-label="Back to scanner"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-zinc-100 font-mono">
+              <h1 className="text-2xl font-bold text-zinc-100 font-mono tracking-tight">
                 {info.ticker}
               </h1>
               <span
@@ -384,27 +492,61 @@ export default function AnalyzePage() {
               )}
             </p>
           </div>
-          <div className="ml-4">
-            <div className="text-2xl font-mono font-bold text-zinc-100">
-              ${price.current.toFixed(2)}
-            </div>
-            <div
-              className={cn(
-                "flex items-center gap-1 text-sm font-mono",
-                positive ? "text-emerald-400" : "text-red-400",
-              )}
-            >
-              {positive ? (
-                <TrendingUp className="w-3.5 h-3.5" />
-              ) : (
-                <TrendingDown className="w-3.5 h-3.5" />
-              )}
-              {positive ? "+" : ""}
-              {price.change.toFixed(2)} ({positive ? "+" : ""}
-              {price.change_pct.toFixed(2)}%)
-            </div>
+        </div>
+
+        {/* Price display */}
+        <div className="text-right">
+          <div className="text-3xl font-mono font-bold text-zinc-100 tracking-tight">
+            {formatCurrency(price.current)}
+          </div>
+          <div
+            className={cn(
+              "flex items-center justify-end gap-1.5 text-sm font-mono mt-0.5",
+              positive ? "text-emerald-400" : "text-red-400",
+            )}
+          >
+            {positive ? (
+              <TrendingUp className="w-4 h-4" />
+            ) : (
+              <TrendingDown className="w-4 h-4" />
+            )}
+            <span className="font-semibold">
+              {positive ? "+" : ""}{formatCurrency(price.change).replace("$", "$")}
+            </span>
+            <span className="text-zinc-600">|</span>
+            <span className="font-semibold">
+              {formatPercent(price.change_pct)}
+            </span>
           </div>
         </div>
+      </div>
+
+      {/* 52-Week Range + Period selector + Time Machine CTA */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* 52-week range */}
+        {has52w && (
+          <div className="flex items-center gap-3 flex-1 max-w-md">
+            <span className="text-[11px] text-zinc-500 shrink-0">52W</span>
+            <span className="text-xs font-mono text-zinc-500">
+              {formatCurrency(price.low_52w!)}
+            </span>
+            <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden relative">
+              <div
+                className="absolute h-full bg-indigo-500/40 rounded-full"
+                style={{ width: `${Math.min(range52w ?? 0, 100)}%` }}
+              />
+              {range52w != null && (
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-indigo-400 rounded-full border-2 border-zinc-900 shadow-sm"
+                  style={{ left: `${Math.min(Math.max(range52w, 0), 100)}%`, marginLeft: "-5px" }}
+                />
+              )}
+            </div>
+            <span className="text-xs font-mono text-zinc-500">
+              {formatCurrency(price.high_52w!)}
+            </span>
+          </div>
+        )}
 
         <div className="flex items-center gap-3">
           {/* Period selector */}
@@ -414,9 +556,9 @@ export default function AnalyzePage() {
                 key={p.value}
                 onClick={() => setPeriod(p.value)}
                 className={cn(
-                  "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
                   period === p.value
-                    ? "bg-indigo-600/20 text-indigo-400"
+                    ? "bg-indigo-600/20 text-indigo-400 shadow-sm"
                     : "text-zinc-500 hover:text-zinc-300",
                 )}
               >
@@ -425,13 +567,14 @@ export default function AnalyzePage() {
             ))}
           </div>
 
-          {/* Time Machine link */}
+          {/* Time Machine CTA */}
           <Link
             href={`/dashboard/time-machine/${ticker}`}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/15 border border-indigo-500/25 text-sm font-medium text-indigo-400 hover:bg-indigo-600/25 hover:border-indigo-500/40 transition-all"
           >
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-4 h-4" />
             Time Machine
+            <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
           </Link>
         </div>
       </div>
@@ -443,9 +586,15 @@ export default function AnalyzePage() {
 
       {/* Indicators Grid */}
       <div>
-        <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-4">
-          Technical Indicators
-        </h2>
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart3 className="w-4 h-4 text-zinc-500" />
+          <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
+            Technical Indicators
+          </h2>
+          <span className="text-xs text-zinc-600 font-mono ml-auto">
+            {indicators.length} active
+          </span>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {indicators.map((ind) => (
             <IndicatorCard
@@ -463,86 +612,126 @@ export default function AnalyzePage() {
       </div>
 
       {/* Combined Probability */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-sm font-medium text-zinc-300">
-              Combined Signal Probability
-            </h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              {signalLabel}
-            </p>
-          </div>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+        {/* Header with large score */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between p-5 pb-4 gap-4">
           <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-2xl font-mono font-bold text-indigo-400">
+            <Target className="w-5 h-5 text-indigo-400 shrink-0" />
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-200">
+                Combined Signal
+              </h2>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Based on {combined?.probability?.occurrences ?? 0} historical matches
+              </p>
+            </div>
+          </div>
+
+          {/* Large score number */}
+          <div className="flex items-center gap-6">
+            <div className="text-center">
+              <div
+                className={cn(
+                  "text-4xl font-mono font-bold tracking-tight",
+                  combinedWr20 >= 60
+                    ? "text-emerald-400"
+                    : combinedWr20 >= 50
+                      ? "text-indigo-400"
+                      : combinedWr20 >= 40
+                        ? "text-amber-400"
+                        : "text-red-400",
+                )}
+              >
                 {combinedWr20.toFixed(1)}%
               </div>
-              <div className="text-[10px] text-zinc-500">Combined Win Rate (20d)</div>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-mono font-bold text-zinc-200">
-                {combined?.probability?.occurrences ?? 0}
+              <div className="text-[10px] text-zinc-500 mt-0.5">
+                Win Rate (20d)
               </div>
-              <div className="text-[10px] text-zinc-500">Occurrences</div>
+            </div>
+            <div className="text-center">
+              <div
+                className={cn(
+                  "text-2xl font-mono font-bold",
+                  combinedAvg20 >= 0 ? "text-emerald-400" : "text-red-400",
+                )}
+              >
+                {combinedAvg20 >= 0 ? "+" : ""}{combinedAvg20.toFixed(2)}%
+              </div>
+              <div className="text-[10px] text-zinc-500 mt-0.5">
+                Avg Return (20d)
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Strength bar */}
-        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden mb-4">
-          <div
-            className={cn(
-              "h-full rounded-full transition-all",
-              combinedWr20 >= 60
-                ? "bg-emerald-500"
-                : combinedWr20 >= 50
-                  ? "bg-indigo-500"
-                  : combinedWr20 >= 40
-                    ? "bg-amber-500"
-                    : "bg-red-500",
-            )}
-            style={{ width: `${Math.min(combinedWr20, 100)}%` }}
-          />
+        {/* Win rate bars by period */}
+        <div className="px-5 pb-4 space-y-2">
+          <WinRateBar label="5d" value={combinedWr5} />
+          <WinRateBar label="20d" value={combinedWr20} />
+          <WinRateBar label="60d" value={combinedWr60} />
         </div>
 
-        {/* Smart Analysis button */}
-        <button
-          onClick={handleSmartAnalysis}
-          className="flex items-center gap-2 w-full px-4 py-2.5 rounded-lg bg-indigo-600/10 border border-indigo-500/20 text-sm font-medium text-indigo-400 hover:bg-indigo-600/20 transition-colors"
-        >
-          {smartExpanded ? (
-            <ChevronUp className="w-4 h-4" />
-          ) : (
-            <ChevronDown className="w-4 h-4" />
-          )}
-          Smart Analysis
-          <span className="ml-auto flex items-center gap-1 text-[10px] text-indigo-500/70">
-            <Lock className="w-3 h-3" />
-            Pro
-          </span>
-        </button>
-
-        {/* Smart Analysis results */}
-        {smartExpanded && (
-          <div className="mt-3 p-4 rounded-lg bg-zinc-800/40 border border-zinc-800">
-            {smartLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
-              </div>
-            ) : smartResult ? (
-              <div className="text-sm text-zinc-300">
-                <pre className="font-mono text-xs text-zinc-400 whitespace-pre-wrap overflow-x-auto">
-                  {JSON.stringify(smartResult, null, 2)}
-                </pre>
-              </div>
-            ) : (
-              <p className="text-sm text-zinc-500 text-center py-4">
-                Upgrade to Pro to unlock Smart Analysis
-              </p>
-            )}
+        {/* Conditions */}
+        {conditions.length > 0 && (
+          <div className="px-5 py-4 border-t border-zinc-800/60">
+            <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2.5">
+              Active Conditions
+            </h4>
+            <ul className="space-y-1.5">
+              {conditions.map((cond, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-zinc-400"
+                >
+                  <span className="w-1 h-1 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+                  <span className="font-mono text-xs leading-relaxed">
+                    {cond}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
+
+        {/* Smart Analysis button */}
+        <div className="px-5 pb-5">
+          <button
+            onClick={handleSmartAnalysis}
+            className="flex items-center gap-2 w-full px-4 py-2.5 rounded-lg bg-indigo-600/10 border border-indigo-500/20 text-sm font-medium text-indigo-400 hover:bg-indigo-600/20 transition-colors"
+          >
+            {smartExpanded ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+            Smart Analysis
+            <span className="ml-auto flex items-center gap-1 text-[10px] text-indigo-500/70">
+              <Lock className="w-3 h-3" />
+              Pro
+            </span>
+          </button>
+
+          {/* Smart Analysis results */}
+          {smartExpanded && (
+            <div className="mt-3 p-4 rounded-lg bg-zinc-800/40 border border-zinc-800">
+              {smartLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+                </div>
+              ) : smartResult ? (
+                <div className="text-sm text-zinc-300">
+                  <pre className="font-mono text-xs text-zinc-400 whitespace-pre-wrap overflow-x-auto">
+                    {JSON.stringify(smartResult, null, 2)}
+                  </pre>
+                </div>
+              ) : (
+                <p className="text-sm text-zinc-500 text-center py-4">
+                  Upgrade to Pro to unlock Smart Analysis
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

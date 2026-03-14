@@ -11,6 +11,9 @@ import {
   TrendingDown,
   Minus,
   ArrowUpDown,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -85,7 +88,7 @@ function ScannerTab() {
   });
 
   const SortHeader = ({ label, field, align }: { label: string; field: SortKey; align?: string }) => (
-    <th className={cn("px-4 py-2.5 font-medium", align)}>
+    <th className={cn("px-4 py-3 font-medium", align)}>
       <button
         onClick={() => handleSort(field)}
         className="inline-flex items-center gap-1 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
@@ -99,12 +102,26 @@ function ScannerTab() {
 
   return (
     <div className="overflow-x-auto">
+      {/* Live indicator bar */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/50 bg-success/[0.03]">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+          </span>
+          <span className="text-xs text-muted-foreground">Live Signals</span>
+        </div>
+        <span className="text-xs text-muted-foreground font-mono tabular-nums">
+          7 signals active
+        </span>
+      </div>
+
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+          <tr className="border-b border-border text-left text-xs text-muted-foreground uppercase tracking-wider">
             <SortHeader label="Ticker" field="ticker" />
-            <th className="px-4 py-2.5 font-medium text-right">Price</th>
-            <th className="px-4 py-2.5 font-medium">Signal</th>
+            <th className="px-4 py-3 font-medium text-right">Price</th>
+            <th className="px-4 py-3 font-medium">Signal</th>
             <SortHeader label="Win Rate" field="winRate" />
             <SortHeader label="Avg Return" field="avgReturn" align="text-right" />
             <SortHeader label="Strength" field="strength" />
@@ -115,58 +132,77 @@ function ScannerTab() {
             <tr
               key={s.ticker}
               className={cn(
-                "border-b border-border/50 transition-all duration-200",
-                hoveredRow === i ? "bg-primary/5" : "hover:bg-muted/30",
+                "border-b border-border/30 transition-all duration-200 group/row",
+                hoveredRow === i ? "bg-primary/[0.06]" : "hover:bg-muted/30",
               )}
               onMouseEnter={() => setHoveredRow(i)}
               onMouseLeave={() => setHoveredRow(null)}
             >
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <DirectionIcon direction={s.direction} />
-                  <span className="font-semibold font-mono">{s.ticker}</span>
+              <td className="px-4 py-3.5">
+                <div className="flex items-center gap-2.5">
+                  <div className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+                    s.direction === "bullish" ? "bg-success/10" : "bg-destructive/10",
+                  )}>
+                    <DirectionIcon direction={s.direction} />
+                  </div>
+                  <span className="font-semibold font-mono tracking-wide">{s.ticker}</span>
                 </div>
               </td>
-              <td className="px-4 py-3 text-right font-mono tabular-nums">
+              <td className="px-4 py-3.5 text-right font-mono tabular-nums text-muted-foreground">
                 ${s.price.toFixed(2)}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3.5">
                 <Badge
                   variant={
                     s.direction === "bullish" ? "success" : s.direction === "bearish" ? "danger" : "secondary"
                   }
+                  className="font-medium"
                 >
                   {s.signal}
                 </Badge>
               </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
+              <td className="px-4 py-3.5">
+                <div className="flex items-center gap-2.5">
                   <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-primary transition-all duration-500"
+                      className={cn(
+                        "h-full rounded-full transition-all duration-500",
+                        s.winRate >= 75 ? "bg-success" : s.winRate >= 70 ? "bg-primary" : "bg-warning",
+                      )}
                       style={{ width: `${s.winRate}%` }}
                     />
                   </div>
-                  <span className="font-mono text-xs tabular-nums">{s.winRate}%</span>
+                  <span className={cn(
+                    "font-mono text-xs tabular-nums font-medium",
+                    s.winRate >= 75 ? "text-success" : s.winRate >= 70 ? "text-primary" : "text-warning",
+                  )}>{s.winRate}%</span>
                 </div>
               </td>
               <td
                 className={cn(
-                  "px-4 py-3 text-right font-mono tabular-nums",
+                  "px-4 py-3.5 text-right font-mono tabular-nums font-medium",
                   s.avgReturn >= 0 ? "text-success" : "text-destructive",
                 )}
               >
                 {s.avgReturn >= 0 ? "+" : ""}{s.avgReturn.toFixed(1)}%
               </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-1.5">
-                  <div
-                    className={cn(
-                      "h-2 w-2 rounded-full",
-                      s.strength >= 80 ? "bg-success" : s.strength >= 60 ? "bg-warning" : "bg-muted-foreground",
-                    )}
-                  />
-                  <span className="font-mono text-xs tabular-nums">{s.strength}</span>
+              <td className="px-4 py-3.5">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <div
+                        key={n}
+                        className={cn(
+                          "h-3 w-1 rounded-full transition-colors",
+                          n <= Math.round(s.strength / 20)
+                            ? s.strength >= 80 ? "bg-success" : s.strength >= 60 ? "bg-warning" : "bg-muted-foreground"
+                            : "bg-muted",
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{s.strength}</span>
                 </div>
               </td>
             </tr>
@@ -185,63 +221,96 @@ function AnalysisTab() {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
 
   return (
-    <div className="p-4">
+    <div className="p-4 sm:p-5">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 px-1">
+      <div className="flex items-center justify-between mb-5 px-1">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-bold font-mono">NVDA</span>
-          <Badge variant="success">Bullish</Badge>
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+            <BarChart3 className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold font-mono tracking-wide">NVDA</span>
+              <Badge variant="success" className="gap-1">
+                <TrendingUp className="h-3 w-3" />
+                Bullish
+              </Badge>
+            </div>
+            <span className="text-xs text-muted-foreground">NVIDIA Corporation</span>
+          </div>
         </div>
         <div className="text-right">
           <div className="text-lg font-mono font-bold tabular-nums">$875.28</div>
-          <div className="text-xs font-mono text-success tabular-nums">+2.34%</div>
+          <div className="text-xs font-mono text-success tabular-nums font-medium">+$20.14 (+2.34%)</div>
         </div>
       </div>
 
       {/* Indicator grid */}
       <div className="grid grid-cols-3 gap-2.5">
-        {INDICATORS.map((ind, i) => (
-          <div
-            key={ind.name}
-            className={cn(
-              "rounded-lg border p-3 transition-all duration-300 cursor-default",
-              hoveredCard === i
-                ? "bg-primary/5 border-primary/30 scale-[1.02]"
-                : "bg-muted/20 border-border hover:border-border/80",
-            )}
-            onMouseEnter={() => setHoveredCard(i)}
-            onMouseLeave={() => setHoveredCard(null)}
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] text-muted-foreground">{ind.name}</span>
-              <Badge variant={ind.color} className="text-[10px] px-1.5 py-0">
-                {ind.state}
-              </Badge>
-            </div>
-            <div className="text-sm font-mono font-semibold tabular-nums">{ind.value}</div>
-            <p
+        {INDICATORS.map((ind, i) => {
+          const isGood = ind.color === "success";
+          const isBad = ind.color === "danger";
+          return (
+            <div
+              key={ind.name}
               className={cn(
-                "text-[10px] text-muted-foreground/70 leading-relaxed mt-1 overflow-hidden transition-all duration-300",
-                hoveredCard === i ? "max-h-20 opacity-100" : "max-h-0 opacity-0",
+                "rounded-lg border p-3 transition-all duration-300 cursor-default relative overflow-hidden",
+                hoveredCard === i
+                  ? isGood
+                    ? "bg-success/[0.06] border-success/30 scale-[1.02]"
+                    : isBad
+                    ? "bg-destructive/[0.06] border-destructive/30 scale-[1.02]"
+                    : "bg-warning/[0.06] border-warning/30 scale-[1.02]"
+                  : "bg-muted/20 border-border hover:border-border/80",
               )}
+              onMouseEnter={() => setHoveredCard(i)}
+              onMouseLeave={() => setHoveredCard(null)}
             >
-              {ind.description}
-            </p>
-          </div>
-        ))}
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] text-muted-foreground font-medium">{ind.name}</span>
+                <Badge variant={ind.color} className="text-[10px] px-1.5 py-0">
+                  {ind.state}
+                </Badge>
+              </div>
+              <div className="text-sm font-mono font-semibold tabular-nums">{ind.value}</div>
+              <p
+                className={cn(
+                  "text-[10px] text-muted-foreground/70 leading-relaxed mt-1 overflow-hidden transition-all duration-300",
+                  hoveredCard === i ? "max-h-20 opacity-100" : "max-h-0 opacity-0",
+                )}
+              >
+                {ind.description}
+              </p>
+            </div>
+          );
+        })}
       </div>
 
       {/* Combined score */}
-      <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3 flex items-center justify-between">
+      <div className="mt-5 rounded-xl border border-primary/20 bg-gradient-to-r from-primary/[0.06] to-primary/[0.02] p-4 flex items-center justify-between">
         <div>
-          <span className="text-xs text-muted-foreground">Combined Signal Probability</span>
-          <div className="text-sm font-medium text-foreground mt-0.5">
-            7 of 9 indicators bullish
+          <div className="flex items-center gap-1.5 mb-1">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <span className="text-xs text-muted-foreground font-medium">Combined Signal Probability</span>
+          </div>
+          <div className="flex items-center gap-3 mt-1">
+            <div className="flex items-center gap-1">
+              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+              <span className="text-xs text-success font-medium">7 bullish</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <XCircle className="h-3.5 w-3.5 text-warning" />
+              <span className="text-xs text-warning font-medium">1 neutral</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <XCircle className="h-3.5 w-3.5 text-destructive" />
+              <span className="text-xs text-destructive font-medium">1 caution</span>
+            </div>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-mono font-bold text-primary tabular-nums">78.4%</div>
-          <div className="text-[10px] text-muted-foreground">Win Rate (20d)</div>
+          <div className="text-3xl font-mono font-bold text-primary tabular-nums">78.4%</div>
+          <div className="text-[10px] text-muted-foreground font-medium">Historical Win Rate (20d)</div>
         </div>
       </div>
     </div>
@@ -256,24 +325,41 @@ function TimeMachineTab() {
   const [revealed, setRevealed] = useState(false);
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 sm:p-5 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-warning" />
-          <span className="text-sm font-semibold">March 23, 2020</span>
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
+            <Clock className="h-4 w-4 text-warning" />
+          </div>
+          <div>
+            <span className="text-sm font-semibold">March 23, 2020</span>
+            <p className="text-[11px] text-muted-foreground">COVID-19 market crash bottom</p>
+          </div>
         </div>
-        <Badge variant="outline" className="font-mono text-xs">AAPL</Badge>
+        <Badge variant="outline" className="font-mono text-xs gap-1.5 px-2.5">
+          <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+          AAPL
+        </Badge>
       </div>
 
       {/* Signal card */}
-      <div className="rounded-lg border border-border bg-background p-4">
-        <div className="flex items-center justify-between">
+      <div className="rounded-xl border border-border bg-background p-4 relative overflow-hidden">
+        {/* Subtle scan line effect */}
+        <div className="absolute inset-0 pointer-events-none opacity-50 scan-line" />
+
+        <div className="flex items-center justify-between relative">
           <div>
-            <p className="text-xs text-muted-foreground">Signal Fired</p>
-            <p className="mt-0.5 font-semibold">Oversold Bounce</p>
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Signal Fired</p>
+            <p className="mt-1 font-semibold text-base">Oversold Bounce</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">RSI hit 22.3 with volume spike</p>
           </div>
-          <Badge variant="success" className="font-mono text-sm">92% win rate</Badge>
+          <div className="text-right">
+            <Badge variant="success" className="font-mono text-sm px-3 py-1">
+              92% win rate
+            </Badge>
+            <p className="text-[10px] text-muted-foreground mt-1">Based on 847 historical matches</p>
+          </div>
         </div>
       </div>
 
@@ -281,14 +367,25 @@ function TimeMachineTab() {
       <button
         onClick={() => setRevealed(true)}
         className={cn(
-          "w-full py-3 rounded-lg text-sm font-medium transition-all duration-300",
+          "w-full py-3.5 rounded-xl text-sm font-semibold transition-all duration-500 relative overflow-hidden",
           revealed
             ? "bg-success/10 text-success border border-success/20 cursor-default"
-            : "bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 hover:shadow-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
         disabled={revealed}
       >
-        {revealed ? "Signal was CORRECT" : "Reveal What Actually Happened"}
+        {revealed ? (
+          <span className="flex items-center justify-center gap-2">
+            <CheckCircle2 className="h-4 w-4" />
+            Signal was CORRECT
+          </span>
+        ) : (
+          <span className="relative z-10">Reveal What Actually Happened</span>
+        )}
+        {/* Animated shimmer on CTA */}
+        {!revealed && (
+          <span className="absolute inset-0 -translate-x-full animate-[shimmer-btn_3s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+        )}
       </button>
 
       {/* Results — animated reveal */}
@@ -300,17 +397,26 @@ function TimeMachineTab() {
       >
         {/* Return stats */}
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
-            <p className="text-[10px] text-muted-foreground">Price at Signal</p>
-            <p className="mt-1 font-mono font-semibold tabular-nums">$57.31</p>
+          <div className={cn(
+            "rounded-xl border border-border bg-muted/20 p-3 text-center",
+            revealed && "animate-reveal-up",
+          )}>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Price at Signal</p>
+            <p className="mt-1.5 font-mono font-semibold tabular-nums text-lg">$57.31</p>
           </div>
-          <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
-            <p className="text-[10px] text-muted-foreground">6 Months Later</p>
-            <p className="mt-1 font-mono font-semibold text-success tabular-nums">$119.05</p>
+          <div className={cn(
+            "rounded-xl border border-border bg-muted/20 p-3 text-center",
+            revealed && "animate-reveal-up delay-100",
+          )} style={{ animationDelay: revealed ? "100ms" : undefined }}>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">6 Months Later</p>
+            <p className="mt-1.5 font-mono font-semibold text-success tabular-nums text-lg">$119.05</p>
           </div>
-          <div className="rounded-lg border border-success/20 bg-success/5 p-3 text-center">
-            <p className="text-[10px] text-muted-foreground">Return</p>
-            <p className="mt-1 font-mono font-bold text-success text-lg tabular-nums">+108%</p>
+          <div className={cn(
+            "rounded-xl border border-success/30 bg-success/[0.06] p-3 text-center",
+            revealed && "animate-scale-in",
+          )} style={{ animationDelay: revealed ? "200ms" : undefined }}>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Return</p>
+            <p className="mt-1.5 font-mono font-bold text-success text-2xl tabular-nums">+108%</p>
           </div>
         </div>
 
@@ -324,15 +430,18 @@ function TimeMachineTab() {
                 i < 9 ? "bg-destructive/60" : "bg-success/60",
               )}
               style={{
-                height: `${v}%`,
-                transitionDelay: `${i * 20}ms`,
+                height: revealed ? `${v}%` : "0%",
+                transitionDelay: revealed ? `${300 + i * 25}ms` : "0ms",
               }}
             />
           ))}
         </div>
-        <div className="mt-1 flex justify-between px-1 text-[10px] text-muted-foreground">
+        <div className="mt-2 flex justify-between px-1 text-[10px] text-muted-foreground">
           <span>Mar 2020</span>
-          <span className="text-success font-medium">Signal</span>
+          <span className="text-success font-medium flex items-center gap-1">
+            <span className="h-1 w-1 rounded-full bg-success" />
+            Signal Fired Here
+          </span>
           <span>Sep 2020</span>
         </div>
       </div>
@@ -348,46 +457,67 @@ export function FeatureDemo() {
   const [activeTab, setActiveTab] = useState<TabId>("scanner");
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      {/* Tab bar */}
-      <div className="flex items-center border-b border-border bg-muted/20">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors relative",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                isActive
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground/70",
-              )}
-              aria-selected={isActive}
-              role="tab"
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{tab.label}</span>
-              {/* Active indicator */}
-              {isActive && (
-                <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />
-              )}
-            </button>
-          );
-        })}
-        <div className="flex-1" />
-        <span className="px-4 text-xs text-muted-foreground hidden sm:block">
-          Interactive Demo
-        </span>
-      </div>
+    <div className="relative group/demo">
+      {/* Outer glow */}
+      <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-primary/20 via-primary/5 to-transparent opacity-0 group-hover/demo:opacity-100 transition-opacity duration-500 blur-sm" />
+      <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-primary/20 via-transparent to-transparent animate-border-glow" />
 
-      {/* Tab content */}
-      <div className="min-h-[380px]">
-        {activeTab === "scanner" && <ScannerTab />}
-        {activeTab === "analysis" && <AnalysisTab />}
-        {activeTab === "timemachine" && <TimeMachineTab />}
+      <div className="relative rounded-xl border border-border bg-card overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex items-center border-b border-border bg-muted/30">
+          {/* Window controls */}
+          <div className="flex items-center gap-1.5 pl-4 pr-2">
+            <div className="h-3 w-3 rounded-full bg-destructive/40" />
+            <div className="h-3 w-3 rounded-full bg-warning/40" />
+            <div className="h-3 w-3 rounded-full bg-success/40" />
+          </div>
+
+          <div className="h-6 w-px bg-border mx-2" />
+
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-3.5 text-sm font-medium transition-all duration-200 relative",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                  isActive
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground/70",
+                )}
+                aria-selected={isActive}
+                role="tab"
+              >
+                <Icon className={cn("h-3.5 w-3.5", isActive && "text-primary")} />
+                <span className="hidden sm:inline">{tab.label}</span>
+                {/* Active indicator */}
+                {isActive && (
+                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />
+                )}
+              </button>
+            );
+          })}
+          <div className="flex-1" />
+          <div className="flex items-center gap-2 px-4">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
+            </span>
+            <span className="text-xs text-muted-foreground hidden sm:block">
+              Interactive Demo
+            </span>
+          </div>
+        </div>
+
+        {/* Tab content */}
+        <div className="min-h-[420px]">
+          {activeTab === "scanner" && <ScannerTab />}
+          {activeTab === "analysis" && <AnalysisTab />}
+          {activeTab === "timemachine" && <TimeMachineTab />}
+        </div>
       </div>
     </div>
   );

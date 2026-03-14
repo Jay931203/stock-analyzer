@@ -82,8 +82,8 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
             fontSize: 11,
           },
           grid: {
-            vertLines: { color: "#27272a", style: LineStyle.Dotted },
-            horzLines: { color: "#27272a", style: LineStyle.Dotted },
+            vertLines: { color: "#1e1e22", style: LineStyle.Dotted },
+            horzLines: { color: "#1e1e22", style: LineStyle.Dotted },
           },
           crosshair: {
             mode: CrosshairMode.Normal,
@@ -218,30 +218,34 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
 
   return (
     <div className={cn("relative", className)}>
-      {/* Period selector */}
-      <div className="flex items-center gap-1 mb-3">
-        {CHART_PERIODS.map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={cn(
-              "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
-              period === p
-                ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30"
-                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60",
-            )}
-          >
-            {p}
-          </button>
-        ))}
+      {/* Top bar: Period selector + Legend */}
+      <div className="flex items-center justify-between mb-3">
+        {/* Period buttons */}
+        <div className="flex items-center bg-zinc-800/50 rounded-lg p-0.5 gap-0.5">
+          {CHART_PERIODS.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={cn(
+                "px-2.5 py-1.5 rounded-md text-xs font-medium transition-all",
+                period === p
+                  ? "bg-indigo-600/20 text-indigo-400 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/40",
+              )}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+
         {/* Legend */}
-        <div className="ml-auto flex items-center gap-3 text-[10px] text-zinc-500">
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-0.5 bg-indigo-500 rounded-full inline-block" />
+        <div className="flex items-center gap-4 text-[11px] text-zinc-500">
+          <span className="flex items-center gap-1.5">
+            <span className="w-4 h-[2px] bg-indigo-500 rounded-full inline-block" />
             SMA 20
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-0.5 bg-orange-500 rounded-full inline-block" />
+          <span className="flex items-center gap-1.5">
+            <span className="w-4 h-[2px] bg-orange-500 rounded-full inline-block" />
             SMA 50
           </span>
         </div>
@@ -250,11 +254,14 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
       {/* Chart container */}
       <div
         ref={containerRef}
-        className="w-full h-[400px] md:h-[400px] sm:h-[300px] rounded-lg overflow-hidden"
+        className="w-full h-[400px] rounded-lg overflow-hidden"
       >
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 z-10 rounded-lg">
-            <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 z-10 rounded-lg backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+              <span className="text-xs text-zinc-500">Loading chart...</span>
+            </div>
           </div>
         )}
         {error && (

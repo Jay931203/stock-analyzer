@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { formatCurrency, formatPercent } from "@/lib/utils";
 import { api, type TimeMachineResponse } from "@/lib/api";
 import {
   Clock,
@@ -13,6 +14,9 @@ import {
   Calendar,
   CheckCircle2,
   XCircle,
+  ChevronRight,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 
 const PRESET_DATES = [
@@ -55,13 +59,36 @@ export default function TimeMachinePage() {
     [ticker],
   );
 
+  const totalReturn = result
+    ? ((result.current_price - result.price_at_date) / result.price_at_date) * 100
+    : 0;
+
   return (
     <div className="p-6 max-w-5xl space-y-6">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-xs text-zinc-500">
+        <Link
+          href="/dashboard"
+          className="hover:text-zinc-300 transition-colors"
+        >
+          Scanner
+        </Link>
+        <ChevronRight className="w-3 h-3" />
+        <Link
+          href={`/dashboard/analyze/${ticker}`}
+          className="hover:text-zinc-300 transition-colors font-mono font-semibold"
+        >
+          {ticker}
+        </Link>
+        <ChevronRight className="w-3 h-3" />
+        <span className="text-zinc-400">Time Machine</span>
+      </nav>
+
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link
           href={`/dashboard/analyze/${ticker}`}
-          className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"
+          className="flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors shrink-0"
           aria-label="Back to analysis"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -103,13 +130,13 @@ export default function TimeMachinePage() {
                   onChange={(e) => setSelectedDate(e.target.value)}
                   max={new Date().toISOString().split("T")[0]}
                   min="2015-01-01"
-                  className="w-full pl-10 pr-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 outline-none focus:border-indigo-500 transition-colors [color-scheme:dark]"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm font-mono text-zinc-200 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all [color-scheme:dark]"
                 />
               </div>
               <button
                 onClick={() => runTimeMachine(selectedDate)}
                 disabled={!selectedDate || loading}
-                className="px-4 py-2.5 rounded-lg bg-indigo-600 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-5 py-2.5 rounded-lg bg-indigo-600 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm shadow-indigo-500/20"
               >
                 {loading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -133,14 +160,14 @@ export default function TimeMachinePage() {
                 onClick={() => runTimeMachine(preset.date)}
                 disabled={loading}
                 className={cn(
-                  "flex flex-col items-center px-3 py-2.5 rounded-lg border text-center transition-colors",
+                  "flex flex-col items-center px-3 py-2.5 rounded-lg border text-center transition-all",
                   selectedDate === preset.date
-                    ? "bg-indigo-600/15 border-indigo-500/30 text-indigo-400"
-                    : "bg-zinc-800/40 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300",
+                    ? "bg-indigo-600/15 border-indigo-500/30 text-indigo-400 shadow-sm shadow-indigo-500/10"
+                    : "bg-zinc-800/40 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300 hover:bg-zinc-800/60",
                 )}
               >
                 <span className="text-xs font-medium">{preset.label}</span>
-                <span className="text-[10px] text-zinc-600 mt-0.5">
+                <span className="text-[10px] text-zinc-600 mt-0.5 font-mono">
                   {preset.date}
                 </span>
               </button>
@@ -163,13 +190,30 @@ export default function TimeMachinePage() {
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading skeleton */}
       {loading && (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-          <p className="text-sm text-zinc-500">
-            Reconstructing signals for {selectedDate}...
-          </p>
+        <div className="space-y-4">
+          {/* Verdict skeleton */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="h-20 bg-zinc-800/30 animate-pulse" />
+            <div className="px-5 py-4 space-y-3">
+              <div className="w-48 h-5 bg-zinc-800 rounded animate-pulse" />
+              <div className="grid grid-cols-5 gap-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-24 bg-zinc-800/40 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            </div>
+          </div>
+          {/* Conditions skeleton */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div className="w-32 h-4 bg-zinc-800 rounded animate-pulse mb-3" />
+            <div className="grid grid-cols-4 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-16 bg-zinc-800/40 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -178,29 +222,35 @@ export default function TimeMachinePage() {
         <div className="space-y-4">
           {/* Verdict card */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-            {/* Verdict header */}
+            {/* Large verdict banner */}
             <div
               className={cn(
-                "flex items-center justify-between px-5 py-4 border-b",
+                "flex items-center justify-between px-6 py-5",
                 result.accuracy.was_correct
-                  ? "bg-emerald-500/10 border-emerald-500/20"
-                  : "bg-red-500/10 border-red-500/20",
+                  ? "bg-emerald-500/8 border-b border-emerald-500/15"
+                  : "bg-red-500/8 border-b border-red-500/15",
               )}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 {result.accuracy.was_correct ? (
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                  <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/20">
+                    <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+                  </div>
                 ) : (
-                  <XCircle className="w-6 h-6 text-red-400" />
+                  <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-red-500/15 border border-red-500/20">
+                    <XCircle className="w-7 h-7 text-red-400" />
+                  </div>
                 )}
                 <div>
-                  <h3 className="text-lg font-semibold text-zinc-100">
-                    {result.ticker}{" "}
-                    <span className="text-zinc-500 font-normal text-sm">
-                      on {result.date}
-                    </span>
-                  </h3>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div
+                    className={cn(
+                      "text-2xl font-bold",
+                      result.accuracy.was_correct ? "text-emerald-400" : "text-red-400",
+                    )}
+                  >
+                    {result.accuracy.was_correct ? "CORRECT" : "INCORRECT"}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
                     <span
                       className={cn(
                         "text-xs font-medium px-2 py-0.5 rounded-md border",
@@ -211,76 +261,119 @@ export default function TimeMachinePage() {
                     >
                       {result.signal.direction}
                     </span>
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-xs text-zinc-500 font-mono">
                       WR: {result.signal.win_rate_20d.toFixed(0)}% | n={result.signal.occurrences}
                     </span>
                   </div>
                 </div>
               </div>
               <div className="text-right">
+                <div className="text-xs text-zinc-500 mb-1">
+                  Predicted: {result.accuracy.predicted_direction}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  Actual: {result.accuracy.actual_direction}
+                </div>
+              </div>
+            </div>
+
+            {/* Price comparison */}
+            <div className="px-6 py-4 border-b border-zinc-800 flex flex-wrap items-center gap-6">
+              <div>
+                <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+                  Price on {result.date}
+                </div>
+                <div className="text-xl font-mono font-bold text-zinc-200">
+                  {formatCurrency(result.price_at_date)}
+                </div>
+              </div>
+              <div className="flex items-center text-zinc-600">
+                {totalReturn >= 0 ? (
+                  <TrendingUp className="w-5 h-5" />
+                ) : (
+                  <TrendingDown className="w-5 h-5" />
+                )}
+              </div>
+              <div>
+                <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+                  Current Price
+                </div>
+                <div className="text-xl font-mono font-bold text-zinc-200">
+                  {formatCurrency(result.current_price)}
+                </div>
+              </div>
+              <div className="ml-auto text-right">
+                <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
+                  Total Return
+                </div>
                 <div
                   className={cn(
-                    "text-sm font-semibold px-3 py-1.5 rounded-lg border",
-                    result.accuracy.was_correct
-                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                      : "bg-red-500/10 border-red-500/20 text-red-400",
+                    "text-xl font-mono font-bold",
+                    totalReturn >= 0 ? "text-emerald-400" : "text-red-400",
                   )}
                 >
-                  {result.accuracy.was_correct ? "Correct" : "Incorrect"}
-                </div>
-                <div className="text-[10px] text-zinc-500 mt-1">
-                  Predicted: {result.accuracy.predicted_direction} | Actual: {result.accuracy.actual_direction}
+                  {formatPercent(totalReturn)}
                 </div>
               </div>
             </div>
 
-            {/* Price info */}
-            <div className="px-5 py-3 border-b border-zinc-800 flex items-center gap-6 text-sm">
-              <div>
-                <span className="text-zinc-500">Price at date: </span>
-                <span className="font-mono text-zinc-200">${result.price_at_date.toFixed(2)}</span>
-              </div>
-              <div>
-                <span className="text-zinc-500">Current: </span>
-                <span className="font-mono text-zinc-200">${result.current_price.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Forward returns */}
-            <div className="px-5 py-4">
+            {/* Forward returns table */}
+            <div className="px-6 py-5">
               <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
                 Actual Forward Returns
               </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                {Object.entries(result.actual).map(([period, data]) => (
-                  <div
-                    key={period}
-                    className="text-center bg-zinc-800/40 rounded-lg p-3"
-                  >
-                    <div className="text-[11px] text-zinc-500 font-medium mb-2">
-                      {period}
-                    </div>
-                    <div
-                      className={cn(
-                        "text-lg font-mono font-semibold",
-                        data.return_pct >= 0 ? "text-emerald-400" : "text-red-400",
-                      )}
-                    >
-                      {data.return_pct >= 0 ? "+" : ""}
-                      {data.return_pct.toFixed(1)}%
-                    </div>
-                    <div className="text-[10px] text-zinc-600 mt-1">
-                      ${data.end_price.toFixed(2)}
-                    </div>
-                    <div className="mt-1.5">
-                      {data.went_up ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mx-auto" />
-                      ) : (
-                        <XCircle className="w-3.5 h-3.5 text-red-500 mx-auto" />
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-800">
+                      <th className="text-left text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2 pr-4">
+                        Period
+                      </th>
+                      <th className="text-right text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2 pr-4">
+                        Return
+                      </th>
+                      <th className="text-right text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2 pr-4">
+                        End Price
+                      </th>
+                      <th className="text-center text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2">
+                        Direction
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(result.actual).map(([period, data]) => (
+                      <tr key={period} className="border-b border-zinc-800/50 last:border-0">
+                        <td className="py-2.5 pr-4">
+                          <span className="text-xs font-mono font-medium text-zinc-400">
+                            {period}
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-4 text-right">
+                          <span
+                            className={cn(
+                              "font-mono font-semibold",
+                              data.return_pct >= 0 ? "text-emerald-400" : "text-red-400",
+                            )}
+                          >
+                            {formatPercent(data.return_pct)}
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-4 text-right">
+                          <span className="font-mono text-zinc-400">
+                            {formatCurrency(data.end_price)}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-center">
+                          {data.went_up ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500 inline-block" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-500 inline-block" />
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -291,21 +384,24 @@ export default function TimeMachinePage() {
               <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
                 Signal Conditions on {result.date}
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              <ul className="space-y-2">
                 {result.signal.conditions.map((cond, i) => (
-                  <div
+                  <li
                     key={i}
-                    className="bg-zinc-800/40 rounded-lg p-3"
+                    className="flex items-start gap-3 px-3 py-2.5 rounded-lg bg-zinc-800/40"
                   >
-                    <div className="text-[11px] text-zinc-500 mb-1">
-                      {cond.indicator}
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+                    <div>
+                      <div className="text-[11px] text-zinc-500 uppercase tracking-wider">
+                        {cond.indicator}
+                      </div>
+                      <div className="text-sm font-mono font-semibold text-zinc-200 mt-0.5">
+                        {cond.state}
+                      </div>
                     </div>
-                    <div className="text-sm font-mono font-semibold text-zinc-200">
-                      {cond.state}
-                    </div>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
 
@@ -320,7 +416,7 @@ export default function TimeMachinePage() {
                   <li
                     key={i}
                     className={cn(
-                      "text-sm px-3 py-2 rounded-lg",
+                      "text-sm px-4 py-2.5 rounded-lg flex items-start gap-2",
                       h.type === "positive"
                         ? "bg-emerald-500/10 text-emerald-400"
                         : h.type === "negative"
@@ -328,7 +424,12 @@ export default function TimeMachinePage() {
                           : "bg-zinc-800/40 text-zinc-300",
                     )}
                   >
-                    {h.text}
+                    {h.type === "positive" ? (
+                      <TrendingUp className="w-4 h-4 mt-0.5 shrink-0" />
+                    ) : h.type === "negative" ? (
+                      <TrendingDown className="w-4 h-4 mt-0.5 shrink-0" />
+                    ) : null}
+                    <span>{h.text}</span>
                   </li>
                 ))}
               </ul>
@@ -339,16 +440,20 @@ export default function TimeMachinePage() {
 
       {/* Empty state */}
       {!result && !loading && !error && (
-        <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-          <Clock className="w-12 h-12 text-zinc-700" />
-          <p className="text-sm text-zinc-500">
-            Select a date to see what signals looked like in the past
-          </p>
-          <p className="text-xs text-zinc-600 max-w-md">
-            The Time Machine reconstructs technical indicator states from
-            historical data and compares the generated signals against actual
-            forward returns.
-          </p>
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-zinc-800/60 border border-zinc-700/40">
+            <Clock className="w-8 h-8 text-zinc-600" />
+          </div>
+          <div>
+            <p className="text-sm text-zinc-400 font-medium">
+              Select a date to travel back in time
+            </p>
+            <p className="text-xs text-zinc-600 max-w-md mt-1.5 leading-relaxed">
+              The Time Machine reconstructs technical indicator states from
+              historical data and compares the generated signals against actual
+              forward returns.
+            </p>
+          </div>
         </div>
       )}
     </div>

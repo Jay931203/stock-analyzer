@@ -5,79 +5,83 @@ export default function DashboardLoading() {
     <div className="flex gap-0 h-full">
       {/* Main content */}
       <div className="flex-1 min-w-0 p-6 overflow-y-auto">
+        {/* Market closed banner skeleton */}
+        <div className="mb-4">
+          <Skeleton className="h-16 w-full rounded-xl" />
+        </div>
+
         {/* Header skeleton */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-3">
               <Skeleton className="h-7 w-36" />
-              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-6 w-28 rounded-full" />
             </div>
-            <Skeleton className="h-4 w-32 mt-2" />
+            <Skeleton className="h-4 w-40 mt-2" />
           </div>
           <div className="flex items-center gap-3">
-            {/* Period selector skeleton */}
             <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-7 w-10 mx-0.5 rounded-md" />
               ))}
             </div>
-            <Skeleton className="h-8 w-20 rounded-lg" />
+            <Skeleton className="h-8 w-24 rounded-lg" />
           </div>
         </div>
 
-        {/* Signal count skeleton */}
-        <Skeleton className="h-4 w-28 mb-4" />
-
         {/* Table skeleton */}
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+          {/* Count bar */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/80">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-3 w-32" />
+          </div>
           {/* Table header */}
-          <div className="border-b border-border">
-            <div className="grid grid-cols-6 gap-4 px-5 py-3">
-              <Skeleton className="h-4 w-14" />
-              <Skeleton className="h-4 w-10" />
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-20 ml-auto" />
-              <Skeleton className="h-4 w-16" />
+          <div className="border-b border-zinc-800">
+            <div className="flex items-center gap-4 px-4 py-2.5">
+              <Skeleton className="h-3 w-6" />
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-14 hidden lg:block" />
+              <Skeleton className="h-3 w-14" />
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-3 w-10" />
+              <Skeleton className="h-3 w-10" />
+              <Skeleton className="h-3 w-10 hidden lg:block" />
+              <Skeleton className="h-3 w-14 hidden lg:block" />
+              <Skeleton className="flex-1 h-2 rounded-full" />
+              <Skeleton className="h-3 w-10" />
             </div>
           </div>
 
           {/* Table rows */}
-          {Array.from({ length: 10 }).map((_, i) => (
+          {Array.from({ length: 12 }).map((_, i) => (
             <div
               key={i}
-              className="grid grid-cols-6 gap-4 items-center px-5 py-3.5 border-b border-border/50"
+              className="flex items-center gap-4 px-4 py-3 border-b border-zinc-800/50"
             >
-              {/* Ticker */}
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-4 w-4 rounded-full" />
-                <Skeleton className="h-4 w-12" />
+              <Skeleton className="w-6 h-4" />
+              <div className="space-y-1">
+                <Skeleton className="w-14 h-4" />
+                <Skeleton className="w-20 h-2.5" />
               </div>
-              {/* Price */}
-              <Skeleton className="h-4 w-16" />
-              {/* Signal */}
-              <Skeleton className="h-6 w-28 rounded-md" />
-              {/* Win Rate */}
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-1.5 w-16 rounded-full" />
-                <Skeleton className="h-4 w-8" />
-              </div>
-              {/* Avg Return */}
-              <Skeleton className="h-4 w-12 ml-auto" />
-              {/* Strength */}
-              <div className="flex items-center gap-1.5">
-                <Skeleton className="h-2 w-2 rounded-full" />
-                <Skeleton className="h-4 w-6" />
-              </div>
+              <Skeleton className="w-14 h-5 rounded-md hidden lg:block" />
+              <Skeleton className="w-16 h-4" />
+              <Skeleton className="w-14 h-5 rounded" />
+              <Skeleton className="w-10 h-4" />
+              <Skeleton className="w-10 h-4" />
+              <Skeleton className="w-10 h-4 hidden lg:block" />
+              <Skeleton className="w-14 h-4 hidden lg:block" />
+              <Skeleton className="flex-1 h-2 rounded-full" />
+              <Skeleton className="w-10 h-3" />
             </div>
           ))}
         </div>
       </div>
 
       {/* Right sidebar skeleton */}
-      <aside className="hidden xl:block w-72 border-l border-zinc-800 bg-zinc-950/50 shrink-0">
+      <aside className="hidden lg:block w-72 border-l border-zinc-800 bg-zinc-950/50 shrink-0">
         <div className="p-4 space-y-5">
-          {/* Market Regime */}
+          {/* Market State */}
           <div>
             <Skeleton className="h-3 w-24 mb-3" />
             <Skeleton className="h-20 w-full rounded-lg" />
@@ -93,13 +97,18 @@ export default function DashboardLoading() {
             </div>
           </div>
 
+          {/* Separator */}
+          <div className="border-t border-zinc-800" />
+
           {/* Summary */}
           <div>
             <Skeleton className="h-3 w-16 mb-3" />
             <div className="grid grid-cols-2 gap-2">
-              <Skeleton className="h-16 rounded-lg" />
-              <Skeleton className="h-16 rounded-lg" />
-              <Skeleton className="h-16 rounded-lg col-span-2" />
+              <Skeleton className="h-[72px] rounded-lg" />
+              <Skeleton className="h-[72px] rounded-lg" />
+              <Skeleton className="h-[72px] rounded-lg" />
+              <Skeleton className="h-[72px] rounded-lg" />
+              <Skeleton className="h-14 rounded-lg col-span-2" />
             </div>
           </div>
         </div>

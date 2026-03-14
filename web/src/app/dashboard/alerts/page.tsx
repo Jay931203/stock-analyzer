@@ -4,7 +4,7 @@ import { Bell, Plus, Lock } from "lucide-react";
 
 export default function AlertsPage() {
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
+    <div className="max-w-3xl mx-auto space-y-8 p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">Alerts</h1>

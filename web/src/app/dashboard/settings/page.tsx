@@ -4,7 +4,7 @@ import { User, CreditCard, Bell, Shield } from "lucide-react";
 
 export default function SettingsPage() {
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-2xl mx-auto space-y-8 p-6">
       <div>
         <h1 className="text-2xl font-bold text-zinc-100">Settings</h1>
         <p className="text-zinc-500 mt-1">Manage your account and preferences</p>

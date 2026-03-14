@@ -293,7 +293,26 @@ class StockAPI {
   private async fetch<T>(path: string, init?: RequestInit): Promise<T> {
     const headers: HeadersInit = { "Content-Type": "application/json" };
 
-    const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+    // 30-second timeout to avoid hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error("Request timed out. The server may be slow — please try again.");
+      }
+      throw new Error("Network error. Please check your connection and try again.");
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));

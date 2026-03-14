@@ -1,26 +1,74 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useState } from "react";
+import { LineChart, ArrowRight, Search } from "lucide-react";
+
+const POPULAR_TICKERS = ["AAPL", "NVDA", "TSLA", "MSFT", "GOOGL", "AMZN", "META", "AMD"];
 
 export default function AnalyzePage() {
   const router = useRouter();
+  const [ticker, setTicker] = useState("");
 
-  useEffect(() => {
-    // Redirect to dashboard — user needs to pick a ticker first
-    router.replace("/dashboard");
-  }, [router]);
+  const go = (t: string) => router.push(`/dashboard/analyze/${t}`);
 
   return (
-    <div className="flex items-center justify-center h-[60vh]">
-      <div className="text-center space-y-4">
-        <h2 className="text-xl font-semibold text-zinc-200">
-          Select a stock to analyze
-        </h2>
-        <p className="text-zinc-500 text-sm">
-          Use the search bar above or click a ticker in the signal scanner
+    <div className="max-w-2xl mx-auto space-y-8 p-6">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
+          <LineChart className="w-6 h-6 text-indigo-400" />
+          Stock Analysis
+        </h1>
+        <p className="text-zinc-500 mt-1">
+          Deep-dive into any stock with 12 technical indicators and probability-based signals.
         </p>
       </div>
+
+      {/* Ticker input */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6 space-y-4">
+        <label className="text-sm font-medium text-zinc-300">Enter a ticker to analyze</label>
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+            <input
+              type="text"
+              value={ticker}
+              onChange={(e) => setTicker(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && ticker && go(ticker)}
+              placeholder="e.g. AAPL, ORCL, TSLA"
+              className="w-full pl-10 pr-4 py-2.5 bg-zinc-950 border border-zinc-700 rounded-lg text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-mono"
+            />
+          </div>
+          <button
+            onClick={() => ticker && go(ticker)}
+            disabled={!ticker}
+            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+          >
+            Analyze <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Quick picks */}
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-zinc-400">Or pick a popular stock</p>
+        <div className="grid grid-cols-4 gap-3">
+          {POPULAR_TICKERS.map((t) => (
+            <button
+              key={t}
+              onClick={() => go(t)}
+              className="px-4 py-3 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-200 font-mono text-sm font-medium transition-colors"
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tip */}
+      <p className="text-xs text-zinc-600 text-center">
+        Tip: Press <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 font-mono text-zinc-500">Ctrl+K</kbd> anywhere to quickly search for any ticker
+      </p>
     </div>
   );
 }

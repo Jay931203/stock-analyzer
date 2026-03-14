@@ -3,13 +3,31 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { SearchBar } from "./SearchBar";
-import { TrendingUp, TrendingDown, User, LogOut } from "lucide-react";
+import { TrendingUp, TrendingDown, User, LogOut, Circle } from "lucide-react";
 
 interface IndexPrice {
   symbol: string;
   price: number;
   change: number;
   changePercent: number;
+  marketState?: string;
+}
+
+function formatPrice(price: number): string {
+  return price.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function getMarketStateBadge(state?: string): { label: string; color: string } | null {
+  if (!state) return null;
+  const s = state.toLowerCase();
+  if (s.includes("open") || s === "regular") return { label: "Live", color: "bg-emerald-500" };
+  if (s.includes("pre")) return { label: "Pre", color: "bg-amber-500" };
+  if (s.includes("after") || s.includes("post")) return { label: "AH", color: "bg-amber-500" };
+  if (s.includes("closed")) return { label: "Closed", color: "bg-zinc-600" };
+  return null;
 }
 
 export function Header() {
@@ -18,6 +36,7 @@ export function Header() {
     { symbol: "QQQ", price: 0, change: 0, changePercent: 0 },
     { symbol: "DIA", price: 0, change: 0, changePercent: 0 },
   ]);
+  const [marketBadge, setMarketBadge] = useState<{ label: string; color: string } | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -30,7 +49,6 @@ export function Header() {
         const data = await res.json();
         if (cancelled) return;
 
-        // Actual response: { prices: { SPY: { price, change, change_pct, market_state }, ... } }
         const prices = data.prices || {};
         const updated = ["SPY", "QQQ", "DIA"].map((sym) => {
           const d = prices[sym] || {};
@@ -39,9 +57,14 @@ export function Header() {
             price: d.price ?? 0,
             change: d.change ?? 0,
             changePercent: d.change_pct ?? 0,
+            marketState: d.market_state,
           };
         });
         setIndices(updated);
+
+        // Get market state from first available index
+        const firstState = updated.find((u) => u.marketState)?.marketState;
+        setMarketBadge(getMarketStateBadge(firstState));
       } catch {
         // silently fail
       }
@@ -62,20 +85,30 @@ export function Header() {
       <SearchBar />
 
       {/* Market indices */}
-      <div className="hidden md:flex items-center gap-4 ml-auto">
+      <div className="hidden md:flex items-center gap-5 ml-auto">
+        {/* Market state badge */}
+        {marketBadge && (
+          <span className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-400 border border-zinc-700 rounded-full px-2.5 py-1">
+            <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", marketBadge.color)} />
+            {marketBadge.label}
+          </span>
+        )}
+
         {indices.map((idx) => {
           const positive = idx.change >= 0;
           return (
             <div key={idx.symbol} className="flex items-center gap-1.5 text-xs">
               <span className="text-zinc-500 font-medium">{idx.symbol}</span>
               <span className="font-mono text-zinc-200">
-                {idx.price > 0 ? idx.price.toFixed(2) : "--"}
+                {idx.price > 0 ? `$${formatPrice(idx.price)}` : "--"}
               </span>
               {idx.price > 0 && (
                 <span
                   className={cn(
-                    "flex items-center gap-0.5 font-mono",
-                    positive ? "text-emerald-400" : "text-red-400",
+                    "flex items-center gap-0.5 font-mono text-[11px] px-1.5 py-0.5 rounded",
+                    positive
+                      ? "text-emerald-400 bg-emerald-500/10"
+                      : "text-red-400 bg-red-500/10",
                   )}
                 >
                   {positive ? (
