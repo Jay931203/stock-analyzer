@@ -25,6 +25,9 @@ import TopLoadingBar from '../src/components/TopLoadingBar';
 import SignalCardSkeleton from '../src/components/SignalCardSkeleton';
 import AdSlot from '../src/components/AdSlot';
 import { useAuth } from '../src/contexts/AuthContext';
+import { usePremium } from '../src/contexts/PremiumContext';
+import PlanBadge from '../src/components/PlanBadge';
+import UsageIndicator from '../src/components/UsageIndicator';
 import { PERIOD_LABELS } from '../src/constants/ui';
 import { doShare as doShareUtil } from '../src/utils/share';
 import { useNetworkStatus } from '../src/hooks/useNetworkStatus';
@@ -177,6 +180,7 @@ function scheduleNonCriticalTask(task: () => void, delayMs = 500): () => void {
 export default function HomeScreen() {
   const { colors, isDark, themeMode, cycleTheme } = useTheme();
   const { user, signInWithGoogle, signOut } = useAuth();
+  const { isPro, showPaywall } = usePremium();
   const isOnline = useNetworkStatus();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
@@ -698,6 +702,8 @@ export default function HomeScreen() {
           </View>
           <Text style={s.title}>Stock Scanner</Text>
           <View style={s.topBarRight}>
+            <UsageIndicator />
+            <PlanBadge />
             <Pressable
               onPress={cycleTheme}
               style={({ pressed }) => [s.themeBtn, pressed && s.themeBtnPressed]}
@@ -1071,7 +1077,7 @@ export default function HomeScreen() {
             </View>
             <FlatList
               horizontal
-              data={bullish}
+              data={isPro ? bullish : bullish.slice(0, 5)}
               keyExtractor={item => item.ticker}
               renderItem={renderBullishItem}
               showsHorizontalScrollIndicator={false}
@@ -1079,6 +1085,22 @@ export default function HomeScreen() {
               initialNumToRender={5}
               maxToRenderPerBatch={5}
               windowSize={3}
+              ListFooterComponent={!isPro && bullish.length > 5 ? (
+                <Pressable
+                  style={[s.upgradeCard, { borderColor: `${colors.accent}40` }]}
+                  onPress={showPaywall}
+                  accessibilityRole="button"
+                  accessibilityLabel={`See all ${bullish.length} bullish signals — Upgrade to Pro`}
+                >
+                  <Text style={[s.upgradeCardIcon, { color: colors.accent }]}>{'\uD83D\uDD12'}</Text>
+                  <Text style={[s.upgradeCardTitle, { color: colors.textPrimary }]}>
+                    +{bullish.length - 5} more
+                  </Text>
+                  <Text style={[s.upgradeCardSub, { color: colors.textSecondary }]}>
+                    Upgrade to see all signals
+                  </Text>
+                </Pressable>
+              ) : null}
             />
           </View>
         )}
@@ -1093,7 +1115,7 @@ export default function HomeScreen() {
             </View>
             <FlatList
               horizontal
-              data={bearish}
+              data={isPro ? bearish : bearish.slice(0, 5)}
               keyExtractor={item => item.ticker}
               renderItem={renderBearishItem}
               showsHorizontalScrollIndicator={false}
@@ -1101,6 +1123,22 @@ export default function HomeScreen() {
               initialNumToRender={5}
               maxToRenderPerBatch={5}
               windowSize={3}
+              ListFooterComponent={!isPro && bearish.length > 5 ? (
+                <Pressable
+                  style={[s.upgradeCard, { borderColor: `${colors.accent}40` }]}
+                  onPress={showPaywall}
+                  accessibilityRole="button"
+                  accessibilityLabel={`See all ${bearish.length} bearish signals — Upgrade to Pro`}
+                >
+                  <Text style={[s.upgradeCardIcon, { color: colors.accent }]}>{'\uD83D\uDD12'}</Text>
+                  <Text style={[s.upgradeCardTitle, { color: colors.textPrimary }]}>
+                    +{bearish.length - 5} more
+                  </Text>
+                  <Text style={[s.upgradeCardSub, { color: colors.textSecondary }]}>
+                    Upgrade to see all signals
+                  </Text>
+                </Pressable>
+              ) : null}
             />
           </View>
         )}
@@ -1407,6 +1445,35 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   disclaimerText: {
     color: c.textMuted,
     fontSize: 10,
+    textAlign: 'center' as const,
+    lineHeight: 16,
+  },
+
+  // Upgrade card (shown at end of gated signal lists)
+  upgradeCard: {
+    width: 140,
+    minHeight: 160,
+    backgroundColor: c.bgCard,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed' as any,
+    marginLeft: spacing.sm,
+    padding: spacing.lg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  upgradeCardIcon: {
+    fontSize: 24,
+    marginBottom: spacing.sm,
+  },
+  upgradeCardTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    marginBottom: 4,
+    textAlign: 'center' as const,
+  },
+  upgradeCardSub: {
+    fontSize: 11,
     textAlign: 'center' as const,
     lineHeight: 16,
   },

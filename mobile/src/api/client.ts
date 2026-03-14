@@ -2,6 +2,24 @@ import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AnalysisResponse, CalendarEvent, EarningsHistoryResponse, EarningsItem, FlipItem, ProbabilityData, SearchResult, SignalsResponse, SmartProbabilityResult, TimeMachineRange, TimeMachineResponse, TrendingStock } from '../types/analysis';
+import { supabase } from '../lib/supabase';
+
+export interface SubscriptionStatus {
+  plan: string;
+  status: string;
+  current_period_end?: string;
+}
+
+export interface UsageToday {
+  analysis: number;
+  smart_prob: number;
+  signals: number;
+  limits: {
+    analysis: number;
+    smart_prob: number;
+    signals: number;
+  };
+}
 
 // Simple in-memory cache for analysis results (avoids redundant server calls)
 const _cache = new Map<string, { data: any; ts: number }>();
@@ -108,7 +126,57 @@ export function getBaseUrl() {
   return BASE_URL;
 }
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` };
+    }
+  } catch {}
+  return {};
+}
+
 const api = {
+  // ── Billing / Subscription ──
+
+  async getSubscriptionStatus(): Promise<SubscriptionStatus> {
+    const headers = await getAuthHeaders();
+    const res = await axios.get(`${BASE_URL}/api/billing/status`, {
+      headers,
+      timeout: 10000,
+    });
+    return res.data;
+  },
+
+  async createCheckout(plan: 'pro' | 'api'): Promise<{ checkout_url: string }> {
+    const headers = await getAuthHeaders();
+    const res = await axios.post(`${BASE_URL}/api/billing/checkout`, { plan }, {
+      headers,
+      timeout: 15000,
+    });
+    return res.data;
+  },
+
+  async getBillingPortal(): Promise<{ portal_url: string }> {
+    const headers = await getAuthHeaders();
+    const res = await axios.get(`${BASE_URL}/api/billing/portal`, {
+      headers,
+      timeout: 10000,
+    });
+    return res.data;
+  },
+
+  async getUsageToday(): Promise<UsageToday> {
+    const headers = await getAuthHeaders();
+    const res = await axios.get(`${BASE_URL}/api/billing/usage`, {
+      headers,
+      timeout: 10000,
+    });
+    return res.data;
+  },
+
+  // ── Analysis ──
+
   async analyze(ticker: string, period = '10y', forceRefresh = false): Promise<AnalysisResponse> {
     const cacheKey = `analyze:${ticker}:${period}`;
     if (!forceRefresh) {

@@ -6,8 +6,11 @@ import time
 from datetime import datetime, timezone, timedelta
 
 import pandas as pd
-from fastapi import APIRouter, Header, HTTPException, Path, Query, BackgroundTasks, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, BackgroundTasks, Response
 from pydantic import BaseModel, Field
+
+from .auth_middleware import UserContext, get_optional_user
+from .usage import check_and_log_usage
 
 _IS_VERCEL = os.environ.get("VERCEL") is not None
 
@@ -71,11 +74,18 @@ def _validate_ticker(ticker: str) -> str:
 
 
 @router.get("/analyze/{ticker}", response_model=AnalysisResponse)
-async def analyze_ticker(ticker: str, background_tasks: BackgroundTasks, period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$")):
+async def analyze_ticker(
+    ticker: str,
+    background_tasks: BackgroundTasks,
+    period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$"),
+    user: UserContext = Depends(get_optional_user),
+):
     """Full analysis: all indicators + historical probabilities.
     Always returns cached data instantly if available. Recomputes in background if stale.
+    Free: 5/day, Pro: unlimited.
     """
     ticker = _validate_ticker(ticker)
+    await check_and_log_usage(user, "analysis", ticker)
     # ── Always return cache if available (even if stale) ──
     cached = read_cached_analysis(ticker)
     if cached and cached.get("data"):
@@ -371,12 +381,18 @@ class SmartProbabilityRequest(BaseModel):
 
 
 @router.post("/smart-probability/{ticker}")
-async def smart_probability(ticker: str, req: SmartProbabilityRequest, period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$")):
+async def smart_probability(
+    ticker: str,
+    req: SmartProbabilityRequest,
+    period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$"),
+    user: UserContext = Depends(get_optional_user),
+):
     """
     Adaptive combined probability with progressive bin widening.
-    Uses in-memory caches to avoid recomputation on back-to-back requests.
+    Pro feature — free users get 1/day, anonymous get 0.
     """
     ticker = _validate_ticker(ticker)
+    await check_and_log_usage(user, "smart_prob", ticker)
     key_map = {
         "RSI": "rsi", "MACD": "macd", "MA": "ma", "Drawdown": "drawdown",
         "ADX": "adx", "BB": "bb", "Vol": "volume", "Stoch": "stoch",
@@ -566,11 +582,14 @@ async def get_signals(
     include_flips: bool = Query(False),
     background_tasks: BackgroundTasks = None,
     response: Response = None,
+    user: UserContext = Depends(get_optional_user),
 ):
     """
     Combined probability for popular stocks.
+    Free/anonymous: top 5 signals only. Pro: full list.
     Always returns cached data instantly. Refreshes in background if stale.
     """
+    await check_and_log_usage(user, "signals")
     _set_cache_control(response, _EDGE_CACHE_SHORT)
     is_default = data_period == "3y"
     now = time.time()
@@ -626,11 +645,22 @@ async def get_signals(
                 pass
         background_tasks.add_task(_bg_refresh)
 
+    # Non-premium users only see top 5 signals
+    all_signals = signals_data["signals"][:limit]
+    if not user.is_premium:
+        visible_signals = all_signals[:5]
+        total_available = len(all_signals)
+    else:
+        visible_signals = all_signals
+        total_available = len(all_signals)
+
     payload = {
-        "signals": signals_data["signals"][:limit],
+        "signals": visible_signals,
         "scanned": signals_data["scanned"],
         "updated": signals_data["updated"],
         "market_state": _get_market_state(),
+        "total_signals": total_available,
+        "is_truncated": not user.is_premium and total_available > 5,
     }
 
     if include_calendar:

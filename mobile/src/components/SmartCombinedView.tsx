@@ -13,6 +13,8 @@ import api from '../api/client';
 import type { SmartProbabilityResult } from '../types/analysis';
 import ProbabilityCard from './ProbabilityCard';
 import { useTheme } from '../contexts/ThemeContext';
+import { usePremium } from '../contexts/PremiumContext';
+import UpgradeOverlay from './UpgradeOverlay';
 import { spacing, radius, typography, type ThemeColors } from '../theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -70,6 +72,7 @@ export function getRangeText(key: string, val: any, tier: string): string | null
 
 export default function SmartCombinedView({ ticker, selectedIndicators }: Props) {
   const { colors } = useTheme();
+  const { isPro } = usePremium();
   const s = useMemo(() => makeStyles(colors), [colors]);
 
   const [result, setResult] = useState<SmartProbabilityResult | null>(null);
@@ -144,6 +147,9 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
   const tierData = result.tiers[activeTier];
   const availableTiers = Object.keys(result.tiers);
 
+  // Free users: show first tier as preview, gate the rest
+  const showGate = !isPro;
+
   return (
     <View style={s.container}>
       {/* Summary line */}
@@ -151,7 +157,7 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
         Analyzing {selectedIndicators.length} indicators
       </Text>
 
-      {/* Tier selector */}
+      {/* Tier selector - always visible */}
       {availableTiers.length > 1 && (
         <View style={s.tierSelector}>
           {availableTiers.map(tier => {
@@ -176,11 +182,20 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
         </View>
       )}
 
+      {/* Show probability card — free users see it but gated details below */}
       {tierData && <ProbabilityCard data={tierData} compact />}
 
       {!tierData && <Text style={s.noDataText}>No matching historical cases found for this tier.</Text>}
 
-      {/* Conditions & Cases - expandable section */}
+      {/* Gate the expandable details for free users */}
+      {showGate && (
+        <View style={{ position: 'relative', marginTop: 12, minHeight: 80 }}>
+          <UpgradeOverlay message="Unlock full combined analysis" compact />
+        </View>
+      )}
+
+      {/* Conditions & Cases - expandable section (pro only) */}
+      {!showGate && (
       <Pressable style={s.section}
         onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowImpact(!showImpact); }}
         accessibilityRole="button"
@@ -252,6 +267,7 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
           </>
         )}
       </Pressable>
+      )}
 
     </View>
   );

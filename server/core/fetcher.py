@@ -1,4 +1,14 @@
-"""Smart data fetcher with yfinance + SQLite caching + Yahoo direct fallback."""
+"""Smart data fetcher with pluggable provider + SQLite caching.
+
+All public functions maintain their original signatures so that existing
+callers (routes.py, og.py, cli.py, etc.) continue to work unchanged.
+
+The actual data source is determined by the ``DATA_PROVIDER`` environment
+variable (default: ``yfinance``).  See :mod:`provider_factory` for details.
+
+Earnings-related helpers remain on yfinance directly because earnings data
+is supplementary and not available from all providers.
+"""
 
 import os
 import time
@@ -9,15 +19,12 @@ import requests
 import yfinance as yf
 
 from .cache import get_cached_prices, save_prices
+from .provider_factory import get_provider
 
 
-_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
-
-_IS_VERCEL = os.environ.get("VERCEL") is not None
+# ---------------------------------------------------------------------------
+# Ticker databases (kept here -- used by routes, earnings helpers, etc.)
+# ---------------------------------------------------------------------------
 
 TICKER_DB = {
     # ── Technology: Mega-cap ──
@@ -128,6 +135,19 @@ _NASDAQ_TICKERS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Helpers still needed for earnings functions (stay on yfinance directly)
+# ---------------------------------------------------------------------------
+
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+
+_IS_VERCEL = os.environ.get("VERCEL") is not None
+
+
 def _make_session() -> requests.Session:
     """Create a requests session with browser-like headers."""
     s = requests.Session()
@@ -139,204 +159,70 @@ def _make_session() -> requests.Session:
     return s
 
 
-# On Vercel, use requests session for yfinance
+# On Vercel, use requests session for yfinance (earnings helpers)
 _session = _make_session() if _IS_VERCEL else None
 
-# Cache crumb for direct Yahoo API
-_crumb_cache: dict = {"crumb": None, "cookies": None, "ts": 0}
 
-
-def _get_yahoo_crumb(session: requests.Session) -> tuple[str, dict]:
-    """Get Yahoo Finance crumb + cookies for authenticated API calls."""
-    now = time.time()
-    if _crumb_cache["crumb"] and now - _crumb_cache["ts"] < 3600:
-        return _crumb_cache["crumb"], _crumb_cache["cookies"]
-
-    # Step 1: Get consent cookies from fc.yahoo.com
-    session.get("https://fc.yahoo.com", timeout=10)
-
-    # Step 2: Get crumb
-    resp = session.get(
-        "https://query2.finance.yahoo.com/v1/test/getcrumb",
-        timeout=10,
-    )
-    crumb = resp.text.strip()
-    cookies = dict(session.cookies)
-
-    _crumb_cache.update({"crumb": crumb, "cookies": cookies, "ts": now})
-    return crumb, cookies
-
-
-def _yahoo_direct_history(ticker: str, period: str = "10y") -> pd.DataFrame:
-    """Fetch price history directly from Yahoo Finance v8 chart API (fallback)."""
-    session = _make_session()
-
-    try:
-        crumb, cookies = _get_yahoo_crumb(session)
-    except Exception:
-        crumb, cookies = "", {}
-
-    # Map period string to Yahoo range
-    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}"
-    params = {
-        "range": period,
-        "interval": "1d",
-        "includePrePost": "false",
-        "events": "",
-    }
-    if crumb:
-        params["crumb"] = crumb
-
-    resp = session.get(url, params=params, cookies=cookies, timeout=30)
-    data = resp.json()
-
-    result = data.get("chart", {}).get("result")
-    if not result:
-        return pd.DataFrame()
-
-    chart = result[0]
-    timestamps = chart.get("timestamp", [])
-    quote = chart.get("indicators", {}).get("quote", [{}])[0]
-
-    if not timestamps:
-        return pd.DataFrame()
-
-    df = pd.DataFrame({
-        "Open": quote.get("open", []),
-        "High": quote.get("high", []),
-        "Low": quote.get("low", []),
-        "Close": quote.get("close", []),
-        "Volume": quote.get("volume", []),
-    }, index=pd.to_datetime(timestamps, unit="s"))
-
-    df.index.name = "Date"
-    df = df.dropna(subset=["Close"])
-    return df
-
-
-def _yahoo_direct_quote(ticker: str) -> dict | None:
-    """Fetch quote info directly from Yahoo Finance v8 API."""
-    session = _make_session()
-
-    try:
-        crumb, cookies = _get_yahoo_crumb(session)
-    except Exception:
-        crumb, cookies = "", {}
-
-    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}"
-    params = {"range": "1mo", "interval": "1d"}
-    if crumb:
-        params["crumb"] = crumb
-
-    resp = session.get(url, params=params, cookies=cookies, timeout=15)
-    data = resp.json()
-
-    result = data.get("chart", {}).get("result")
-    if not result:
-        return None
-
-    chart = result[0]
-    meta = chart.get("meta", {})
-    quote = chart.get("indicators", {}).get("quote", [{}])[0]
-    closes = [c for c in (quote.get("close") or []) if c is not None]
-    volumes = [v for v in (quote.get("volume") or []) if v is not None]
-
-    if not closes:
-        return None
-
-    reg_close = closes[-1]
-    prev_close = closes[-2] if len(closes) > 1 else reg_close
-
-    # Use pre/post market price when available
-    market_state = meta.get("marketState", "REGULAR")
-    if market_state == "PRE" and meta.get("preMarketPrice"):
-        close = meta["preMarketPrice"]
-    elif market_state in ("POST", "POSTPOST") and meta.get("postMarketPrice"):
-        close = meta["postMarketPrice"]
-    else:
-        close = meta.get("regularMarketPrice") or reg_close
-
-    change = close - prev_close
-    change_pct = (change / prev_close * 100) if prev_close else 0
-
-    week_start = closes[-5] if len(closes) >= 5 else closes[0]
-    week_return = ((close - week_start) / week_start * 100) if week_start else 0
-
-    month_start = closes[0]
-    month_return = ((close - month_start) / month_start * 100) if month_start else 0
-
-    vol = volumes[-1] if volumes else 0
-
-    return {
-        "ticker": ticker.upper(),
-        "name": meta.get("longName") or meta.get("shortName") or ticker.upper(),
-        "price": round(close, 2),
-        "change": round(change, 2),
-        "change_pct": round(change_pct, 2),
-        "volume": int(vol),
-        "market_cap": meta.get("marketCap", 0),
-        "week_return": round(week_return, 2),
-        "month_return": round(month_return, 2),
-        "sector": "",
-        "market_state": market_state,
-    }
-
+# ---------------------------------------------------------------------------
+# Period mapping
+# ---------------------------------------------------------------------------
 
 _PERIOD_TRADING_DAYS = {"1y": 252, "2y": 504, "3y": 756, "5y": 1260, "10y": 2520}
 
+_PERIOD_TO_YEARS = {"1y": 1, "2y": 2, "3y": 3, "5y": 5, "10y": 10}
+
+
+# ===================================================================
+# CRITICAL PATH — delegated to the configured DataProvider
+# ===================================================================
+
+
 def fetch_price_history(ticker: str, period: str = "10y") -> pd.DataFrame:
-    """
-    Fetch daily OHLCV data. Uses cache if fresh, otherwise fetches from yfinance.
-    Falls back to direct Yahoo API on cloud environments.
-    Always trims to requested period so backtest results differ by period.
+    """Fetch daily OHLCV data with cache-first strategy.
+
+    1. Check SQLite cache (existing logic).
+    2. On cache miss, call the configured provider.
+    3. Save full result to cache.
+    4. Trim to the requested period.
     """
     ticker = ticker.upper()
     max_days = _PERIOD_TRADING_DAYS.get(period, 2520)
 
-    # Try cache first — but always trim to requested period
+    # Try cache first -- always trim to requested period
     cached = get_cached_prices(ticker)
     if cached is not None and len(cached) > 100:
-        # Trim to requested period
         trimmed = cached.iloc[-max_days:] if len(cached) > max_days else cached
         if len(trimmed) >= 60:
             return trimmed
 
-    # Try yfinance first
+    # Fetch from provider (always request max for cache efficiency)
+    provider = get_provider()
+    years = _PERIOD_TO_YEARS.get(period, 10)
+
+    # Try full range first, then progressively shorter
     df = pd.DataFrame()
-    try:
-        kwargs = {"session": _session} if _session else {}
-        stock = yf.Ticker(ticker, **kwargs)
-        # Always fetch max data for cache, trim later
-        df = stock.history(period="10y", interval="1d")
-
-        if df.empty:
-            for fallback in ["5y", "2y", "1y"]:
-                df = stock.history(period=fallback, interval="1d")
-                if not df.empty:
-                    break
-    except Exception:
-        pass
-
-    # Fallback: direct Yahoo API (useful on Vercel/cloud)
-    if df.empty:
-        df = _yahoo_direct_history(ticker, "10y")
-        if df.empty:
-            for fallback in ["5y", "2y", "1y"]:
-                df = _yahoo_direct_history(ticker, fallback)
-                if not df.empty:
-                    break
+    for attempt_years in [10, 5, 2, 1]:
+        if attempt_years > years and years < 10:
+            # Still fetch max when possible for caching
+            pass
+        try:
+            df = provider.fetch_daily_history(ticker, years=attempt_years)
+            if not df.empty:
+                break
+        except Exception:
+            continue
 
     if df.empty:
         raise ValueError(f"No data found for ticker '{ticker}'")
 
-    # Keep only needed columns
+    # Normalise columns
     cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in df.columns]
     df = df[cols].copy()
 
     if df.index.tz is not None:
         df.index = df.index.tz_localize(None)
 
-    # Save full data to cache (always keep maximum for future requests)
+    # Save full data to cache
     save_prices(ticker, df)
 
     # Trim to requested period
@@ -347,7 +233,11 @@ def fetch_price_history(ticker: str, period: str = "10y") -> pd.DataFrame:
 
 
 def get_ticker_info(ticker: str) -> dict:
-    """Get basic info about a ticker."""
+    """Get basic info about a ticker.
+
+    Uses yfinance directly (supplementary data, not on the critical commercial
+    path). A future iteration may move this to the provider as well.
+    """
     try:
         kwargs = {"session": _session} if _session else {}
         stock = yf.Ticker(ticker.upper(), **kwargs)
@@ -364,7 +254,6 @@ def get_ticker_info(ticker: str) -> dict:
     except Exception:
         pass
 
-    # Fallback: basic info from direct API
     return {
         "ticker": ticker.upper(),
         "name": ticker.upper(),
@@ -376,129 +265,54 @@ def get_ticker_info(ticker: str) -> dict:
 
 
 def fetch_quick_quote(ticker: str) -> dict | None:
-    """Fetch quick quote data for a ticker (price, change, volume, market cap)."""
-    try:
-        kwargs = {"session": _session} if _session else {}
-        stock = yf.Ticker(ticker.upper(), **kwargs)
-        info = stock.info
-        hist = stock.history(period="1mo", interval="1d")
-
-        if not hist.empty:
-            reg_close = float(hist["Close"].iloc[-1])
-            prev_close = float(hist["Close"].iloc[-2]) if len(hist) > 1 else reg_close
-
-            # Use pre/post market price when available
-            market_state = info.get("marketState", "REGULAR")
-            if market_state == "PRE" and info.get("preMarketPrice"):
-                close = float(info["preMarketPrice"])
-            elif market_state in ("POST", "POSTPOST") and info.get("postMarketPrice"):
-                close = float(info["postMarketPrice"])
-            else:
-                close = float(info.get("regularMarketPrice") or reg_close)
-
-            change = close - prev_close
-            change_pct = (change / prev_close * 100) if prev_close else 0
-
-            week_start = float(hist["Close"].iloc[-5]) if len(hist) >= 5 else float(hist["Close"].iloc[0])
-            week_return = ((close - week_start) / week_start * 100) if week_start else 0
-
-            month_start = float(hist["Close"].iloc[0])
-            month_return = ((close - month_start) / month_start * 100) if month_start else 0
-
-            vol = float(hist["Volume"].iloc[-1]) if "Volume" in hist.columns else 0
-
-            return {
-                "ticker": ticker.upper(),
-                "name": info.get("longName") or info.get("shortName", ticker.upper()),
-                "price": round(close, 2),
-                "change": round(change, 2),
-                "change_pct": round(change_pct, 2),
-                "volume": int(vol),
-                "market_cap": info.get("marketCap", 0),
-                "week_return": round(week_return, 2),
-                "month_return": round(month_return, 2),
-                "sector": info.get("sector", ""),
-                "market_state": market_state,
-            }
-    except Exception:
-        pass
-
-    # Fallback: direct Yahoo API
-    return _yahoo_direct_quote(ticker)
+    """Fetch quick quote data for a ticker -- delegated to provider."""
+    provider = get_provider()
+    return provider.fetch_quote(ticker)
 
 
 def fetch_batch_quotes(tickers: list[str]) -> list[dict]:
-    """Fetch quick quotes for multiple tickers concurrently."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    results = []
-    with ThreadPoolExecutor(max_workers=min(len(tickers), 8)) as executor:
-        futures = {executor.submit(fetch_quick_quote, t): t for t in tickers}
-        for future in as_completed(futures):
-            try:
-                q = future.result()
-                if q:
-                    results.append(q)
-            except Exception:
-                pass
-    return results
+    """Fetch quotes for multiple tickers -- delegated to provider."""
+    provider = get_provider()
+    return provider.fetch_batch_quotes(tickers)
 
 
 def fetch_live_prices(tickers: list[str]) -> dict[str, dict]:
-    """Fetch current prices for multiple tickers via Yahoo v7 quote API.
-    Returns pre-market or post-market prices when available.
-    Single HTTP call for all tickers - very efficient.
-    """
-    if not tickers:
-        return {}
+    """Fetch current prices for multiple tickers -- delegated to provider."""
+    provider = get_provider()
+    return provider.fetch_live_prices(tickers)
 
-    session = _make_session()
-    try:
-        crumb, cookies = _get_yahoo_crumb(session)
-    except Exception:
-        crumb, cookies = "", {}
 
-    symbols = ",".join(t.upper() for t in tickers)
-    url = "https://query2.finance.yahoo.com/v7/finance/quote"
-    params = {"symbols": symbols}
-    if crumb:
-        params["crumb"] = crumb
+def search_tickers(query: str, limit: int = 10) -> list[dict]:
+    """Search for tickers. Local DB first, then provider fallback."""
+    q = query.upper().strip()
+    if not q:
+        return []
 
-    try:
-        resp = session.get(url, params=params, cookies=cookies, timeout=15)
-        data = resp.json()
-    except Exception:
-        return {}
+    # Local search: match ticker prefix OR company name substring
+    local_results = []
+    for ticker, name in TICKER_DB.items():
+        if ticker.startswith(q) or q.lower() in name.lower():
+            local_results.append({
+                "ticker": ticker,
+                "name": name,
+                "exchange": "NASDAQ" if ticker in _NASDAQ_TICKERS else "NYSE",
+                "type": "EQUITY",
+            })
 
-    results = {}
-    for q in data.get("quoteResponse", {}).get("result", []):
-        sym = q.get("symbol", "")
-        market_state = q.get("marketState", "REGULAR")
-        reg_price = q.get("regularMarketPrice", 0)
-        reg_change = q.get("regularMarketChange", 0)
-        reg_change_pct = q.get("regularMarketChangePercent", 0)
+    # Sort: exact ticker prefix first, then alphabetical
+    local_results.sort(key=lambda x: (0 if x["ticker"].startswith(q) else 1, x["ticker"]))
 
-        if market_state == "PRE" and q.get("preMarketPrice"):
-            price = q["preMarketPrice"]
-            change = q.get("preMarketChange", 0)
-            change_pct = q.get("preMarketChangePercent", 0)
-        elif market_state in ("POST", "POSTPOST") and q.get("postMarketPrice"):
-            price = q["postMarketPrice"]
-            change = q.get("postMarketChange", 0)
-            change_pct = q.get("postMarketChangePercent", 0)
-        else:
-            price = reg_price
-            change = reg_change
-            change_pct = reg_change_pct
+    if local_results:
+        return local_results[:limit]
 
-        results[sym] = {
-            "price": round(price, 2),
-            "change": round(change, 2),
-            "change_pct": round(change_pct, 2),
-            "market_state": market_state,
-        }
+    # Fallback to provider search
+    provider = get_provider()
+    return provider.search_tickers(query, limit=limit)
 
-    return results
+
+# ===================================================================
+# EARNINGS — stay on yfinance (supplementary, not commercially critical)
+# ===================================================================
 
 
 def fetch_earnings_dates(tickers: list[str]) -> list[dict]:
@@ -514,7 +328,6 @@ def fetch_earnings_dates(tickers: list[str]) -> list[dict]:
             if cal is None or (isinstance(cal, pd.DataFrame) and cal.empty):
                 return None
 
-            # calendar can be a dict or DataFrame depending on yfinance version
             if isinstance(cal, pd.DataFrame):
                 if "Earnings Date" in cal.index:
                     raw_date = cal.loc["Earnings Date"].iloc[0]
@@ -528,7 +341,6 @@ def fetch_earnings_dates(tickers: list[str]) -> list[dict]:
             else:
                 return None
 
-            # Parse earnings date
             if isinstance(raw_date, str):
                 earnings_dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00")).replace(tzinfo=None)
             elif hasattr(raw_date, 'to_pydatetime'):
@@ -539,7 +351,6 @@ def fetch_earnings_dates(tickers: list[str]) -> list[dict]:
             now = datetime.now()
             days_until = (earnings_dt.date() - now.date()).days
 
-            # Determine time of day (BMO = before market open, AMC = after market close)
             hour = earnings_dt.hour if hasattr(earnings_dt, 'hour') else 0
             if hour < 12:
                 time_of_day = "BMO"
@@ -584,11 +395,9 @@ def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
         t = ticker.upper()
         stock = yf.Ticker(t)
 
-        # Use yfinance's internal authenticated fetcher (handles crumb/cookies)
         try:
             eh_df = stock.earnings_history
             if eh_df is not None and not eh_df.empty:
-                # Convert DataFrame to list of dicts compatible with our format
                 entries = []
                 for quarter_end in eh_df.index:
                     row = eh_df.loc[quarter_end]
@@ -601,7 +410,6 @@ def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
             else:
                 entries = []
         except Exception:
-            # Fallback: direct quoteSummary API call
             try:
                 qs_url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{t}"
                 params = {"modules": "earningsHistory", "corsDomain": "finance.yahoo.com", "formatted": "false", "symbol": t}
@@ -638,7 +446,6 @@ def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
                     continue
                 qe = qts.to_pydatetime().replace(tzinfo=None) if hasattr(qts, "to_pydatetime") else qts
 
-                # Earnings announced ~20-65 days after quarter end
                 search_start = pd.Timestamp(qe + timedelta(days=20))
                 search_end = pd.Timestamp(qe + timedelta(days=65))
                 if search_start > pd.Timestamp(now):
@@ -659,7 +466,6 @@ def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
                 reported_eps = round(float(eps_act), 2) if eps_act is not None else None
                 surprise_pct = round(float(surp) * 100, 2) if surp is not None else None
 
-                # Post-earnings returns (1W=5 trading days, 1M=20 trading days)
                 post_df = df.loc[df.index >= announce_idx]
                 if len(post_df) < 2:
                     continue
@@ -688,47 +494,5 @@ def fetch_earnings_history(ticker: str, limit: int = 8) -> list[dict]:
                 continue
 
         return results
-    except Exception:
-        return []
-
-
-def search_tickers(query: str, limit: int = 10) -> list[dict]:
-    """Search for tickers matching a query. Uses local DB first, yfinance as fallback."""
-    q = query.upper().strip()
-    if not q:
-        return []
-
-    # Local search: match ticker prefix OR company name substring
-    local_results = []
-    for ticker, name in TICKER_DB.items():
-        if ticker.startswith(q) or q.lower() in name.lower():
-            local_results.append({
-                "ticker": ticker,
-                "name": name,
-                "exchange": "NASDAQ" if ticker in _NASDAQ_TICKERS else "NYSE",
-                "type": "EQUITY",
-            })
-
-    # Sort: exact ticker prefix first, then alphabetical
-    local_results.sort(key=lambda x: (0 if x["ticker"].startswith(q) else 1, x["ticker"]))
-
-    if local_results:
-        return local_results[:limit]
-
-    # Fallback to yfinance for tickers not in local DB
-    try:
-        results = yf.search(query, max_results=limit)
-        if not results or "quotes" not in results:
-            return []
-        return [
-            {
-                "ticker": q_item.get("symbol", ""),
-                "name": q_item.get("longname") or q_item.get("shortname", ""),
-                "exchange": q_item.get("exchange", ""),
-                "type": q_item.get("quoteType", ""),
-            }
-            for q_item in results["quotes"]
-            if q_item.get("symbol")
-        ][:limit]
     except Exception:
         return []

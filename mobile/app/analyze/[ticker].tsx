@@ -27,6 +27,8 @@ import { SunIcon, MoonIcon, MonitorIcon, ChevronLeftIcon, StarIcon } from '../..
 import TopLoadingBar from '../../src/components/TopLoadingBar';
 import { PERIOD_LABELS } from '../../src/constants/ui';
 import { doShare } from '../../src/utils/share';
+import { usePremium } from '../../src/contexts/PremiumContext';
+import UpgradeOverlay from '../../src/components/UpgradeOverlay';
 
 const INDICATOR_META: Record<string, { label: string; labelKo: string }> = {
   RSI: { label: 'RSI', labelKo: '과매수/과매도' },
@@ -130,6 +132,7 @@ function getIndicatorHighlights(data: AnalysisResponse): IndicatorHighlight[] {
 
 export default function AnalyzeScreen() {
   const { colors, themeMode, cycleTheme } = useTheme();
+  const { isPro, showPaywall } = usePremium();
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
   const s = useMemo(() => makeStyles(colors, screenH), [colors, screenH]);
@@ -525,7 +528,7 @@ export default function AnalyzeScreen() {
 
         {/* COMBINED ANALYSIS */}
         <View style={s.headerBlock}>
-          <View style={s.combinedSection}>
+          <View style={[s.combinedSection, { position: 'relative' }]}>
             <Text style={s.sectionTitle}>종합 분석</Text>
 
             <View style={s.toggleRow}>
@@ -555,6 +558,11 @@ export default function AnalyzeScreen() {
               />
             ) : (
               <Text style={s.hintText}>종합 분석을 위해 2개 이상 지표를 선택하세요</Text>
+            )}
+
+            {/* Premium gate overlay for the combined section */}
+            {!isPro && activeForCombined.length >= 2 && (
+              <UpgradeOverlay message="Upgrade to Pro for Smart Combined Probability" />
             )}
           </View>
         </View>

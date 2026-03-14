@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router
 from .api.og import og_image_router, share_router
+from .api.billing import router as billing_router
 
 # Simple in-memory rate limiter (per IP, resets every minute)
 _rate_counts: dict[str, list[float]] = {}
@@ -30,6 +31,11 @@ if os.environ.get("VERCEL_URL"):
     _ALLOWED_ORIGINS.append(f"https://{os.environ['VERCEL_URL']}")
 if os.environ.get("VERCEL_PROJECT_PRODUCTION_URL"):
     _ALLOWED_ORIGINS.append(f"https://{os.environ['VERCEL_PROJECT_PRODUCTION_URL']}")
+# Allow APP_URL for Stripe checkout redirects
+if os.environ.get("APP_URL"):
+    _app_url = os.environ["APP_URL"].rstrip("/")
+    if _app_url not in _ALLOWED_ORIGINS:
+        _ALLOWED_ORIGINS.append(_app_url)
 # Allow all origins in development mode
 _IS_DEV = not (os.environ.get("VERCEL") or os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PRODUCTION"))
 
@@ -84,6 +90,7 @@ async def rate_limit_middleware(request: Request, call_next):
 app.include_router(router)
 app.include_router(og_image_router, prefix="/api")
 app.include_router(share_router)
+app.include_router(billing_router)
 
 
 @app.get("/health")

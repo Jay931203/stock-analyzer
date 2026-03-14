@@ -1,28 +1,48 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, ScrollView } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, Pressable, Modal, ScrollView, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePremium } from '../contexts/PremiumContext';
 import { useAuth } from '../contexts/AuthContext';
-import { spacing, radius, typography } from '../theme';
+import { spacing, radius, typography, type ThemeColors } from '../theme';
 
-const BENEFITS = [
-  { en: 'Unlimited Time Machine queries', ko: '무제한 타임머신 분석' },
-  { en: 'Custom indicator combinations', ko: '맞춤 인디케이터 조합' },
-  { en: 'Ad-free experience', ko: '광고 없는 환경' },
-  { en: 'Export analysis to CSV', ko: 'CSV 내보내기' },
-  { en: 'Email alerts for signal changes', ko: '시그널 변경 이메일 알림' },
+const PRO_FEATURES = [
+  'Unlimited analysis',
+  'Smart Combined Probability',
+  'Full signal scanner',
+  '5 custom alerts',
+  'All 150+ stocks',
+];
+
+const API_FEATURES = [
+  'Everything in Pro, plus:',
+  'REST API access',
+  'API key management',
+  'Unlimited alerts',
+  'Webhook notifications',
+  'Priority support',
 ];
 
 export default function Paywall() {
   const { colors } = useTheme();
-  const { paywallVisible, hidePaywall } = usePremium();
-  const { user } = useAuth();
-  const [notifyState, setNotifyState] = useState<'idle' | 'done'>('idle');
+  const { paywallVisible, hidePaywall, openCheckout, refreshSubscription } = usePremium();
+  const { user, signInWithGoogle } = useAuth();
 
-  const handleNotifyMe = () => {
-    // For now, mark as subscribed. In the future this will call an API to register interest.
-    setNotifyState('done');
+  const handlePlanSelect = async (plan: 'pro' | 'api') => {
+    if (!user) {
+      // Need to sign in first
+      if (Platform.OS === 'web') {
+        await signInWithGoogle();
+      }
+      return;
+    }
+    await openCheckout(plan);
   };
+
+  const handleRestore = async () => {
+    await refreshSubscription();
+  };
+
+  const s = makeStyles(colors);
 
   return (
     <Modal
@@ -31,87 +51,127 @@ export default function Paywall() {
       transparent
       onRequestClose={hidePaywall}
     >
-      <View style={[styles.overlay, { backgroundColor: colors.bgOverlay }]}>
-        <View style={[styles.sheet, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+      <View style={s.overlay}>
+        <View style={s.sheet}>
+          {/* Close button */}
+          <Pressable
+            style={s.closeBtn}
+            onPress={hidePaywall}
+            accessibilityRole="button"
+            accessibilityLabel="Close paywall"
+            hitSlop={12}
+          >
+            <Text style={s.closeBtnText}>{'\u2715'}</Text>
+          </Pressable>
+
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={s.content}
+            bounces={false}
           >
             {/* Header */}
-            <View style={styles.header}>
-              <View style={[styles.logoBadge, { backgroundColor: colors.accentDim }]}>
-                <Text style={[styles.logoText, { color: colors.accent }]}>S</Text>
+            <View style={s.header}>
+              <View style={s.logoBadge}>
+                <Text style={s.logoText}>S</Text>
               </View>
-              <Text style={[styles.appName, { color: colors.textPrimary }]}>Stock Scanner</Text>
+              <Text style={s.headline}>Unlock Full Analysis Power</Text>
+              <Text style={s.subheadline}>
+                Get deeper insights with advanced probability analysis
+              </Text>
             </View>
 
-            {/* Title */}
-            <Text style={[styles.title, { color: colors.textPrimary }]}>
-              Premium Features
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              We are building advanced tools for serious investors
-            </Text>
-
-            {/* Benefits */}
-            <View style={styles.benefitsList}>
-              {BENEFITS.map((benefit, idx) => (
-                <View key={idx} style={styles.benefitRow}>
-                  <View style={[styles.checkCircle, { backgroundColor: `${colors.bullish}20` }]}>
-                    <Text style={[styles.checkMark, { color: colors.bullish }]}>{'\u2713'}</Text>
-                  </View>
-                  <View style={styles.benefitText}>
-                    <Text style={[styles.benefitEn, { color: colors.textPrimary }]}>
-                      {benefit.en}
-                    </Text>
-                    <Text style={[styles.benefitKo, { color: colors.textTertiary }]}>
-                      {benefit.ko}
-                    </Text>
+            {/* Plan Cards */}
+            <View style={s.plansRow}>
+              {/* Pro Plan */}
+              <View style={s.planCard}>
+                <View style={s.planHeader}>
+                  <Text style={s.planName}>Pro</Text>
+                  <View style={s.priceRow}>
+                    <Text style={s.priceAmount}>$9.99</Text>
+                    <Text style={s.pricePeriod}>/mo</Text>
                   </View>
                 </View>
-              ))}
-            </View>
 
-            {/* Launch info */}
-            <View style={[styles.launchCard, { backgroundColor: colors.bgElevated, borderColor: colors.borderLight }]}>
-              <Text style={[styles.launchTitle, { color: colors.textPrimary }]}>
-                Launching Soon
-              </Text>
-              <Text style={[styles.launchDesc, { color: colors.textSecondary }]}>
-                Premium features are in development. Get notified when they launch.
-              </Text>
-            </View>
+                <View style={s.featureList}>
+                  {PRO_FEATURES.map((feature, idx) => (
+                    <View key={idx} style={s.featureRow}>
+                      <View style={s.checkCircle}>
+                        <Text style={s.checkMark}>{'\u2713'}</Text>
+                      </View>
+                      <Text style={s.featureText}>{feature}</Text>
+                    </View>
+                  ))}
+                </View>
 
-            {/* CTA */}
-            {notifyState === 'done' ? (
-              <View style={[styles.ctaBtn, { backgroundColor: `${colors.bullish}15` }]}>
-                <Text style={[styles.ctaDoneText, { color: colors.bullish }]}>
-                  {user ? 'You will be notified at launch' : 'Subscribed for updates'}
-                </Text>
+                <Pressable
+                  style={({ pressed }) => [s.planBtn, s.planBtnPro, pressed && { opacity: 0.85 }]}
+                  onPress={() => handlePlanSelect('pro')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Start Pro plan at $9.99 per month"
+                >
+                  <Text style={s.planBtnText}>
+                    {!user ? 'Sign in to Start' : 'Start Pro'}
+                  </Text>
+                </Pressable>
               </View>
-            ) : (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.ctaBtn,
-                  { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1 },
-                ]}
-                onPress={handleNotifyMe}
-                accessibilityRole="button"
-                accessibilityLabel="Get notified when premium launches"
-              >
-                <Text style={styles.ctaText}>Notify Me</Text>
-                <Text style={styles.ctaSubText}>Get notified at launch</Text>
-              </Pressable>
-            )}
 
-            {/* Dismiss */}
+              {/* API Plan */}
+              <View style={[s.planCard, s.planCardApi]}>
+                <View style={s.popularBadge}>
+                  <Text style={s.popularBadgeText}>POWER USER</Text>
+                </View>
+
+                <View style={s.planHeader}>
+                  <Text style={s.planName}>API</Text>
+                  <View style={s.priceRow}>
+                    <Text style={s.priceAmount}>$49</Text>
+                    <Text style={s.pricePeriod}>/mo</Text>
+                  </View>
+                </View>
+
+                <View style={s.featureList}>
+                  {API_FEATURES.map((feature, idx) => (
+                    <View key={idx} style={s.featureRow}>
+                      <View style={[s.checkCircle, idx === 0 ? s.checkCircleHighlight : null]}>
+                        <Text style={[s.checkMark, idx === 0 ? s.checkMarkHighlight : null]}>
+                          {idx === 0 ? '\u2b50' : '\u2713'}
+                        </Text>
+                      </View>
+                      <Text style={[s.featureText, idx === 0 && s.featureTextHighlight]}>
+                        {feature}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [s.planBtn, s.planBtnApi, pressed && { opacity: 0.85 }]}
+                  onPress={() => handlePlanSelect('api')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Start API plan at $49 per month"
+                >
+                  <Text style={s.planBtnText}>
+                    {!user ? 'Sign in to Start' : 'Start API'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Free plan info */}
+            <View style={s.freeInfo}>
+              <Text style={s.freeInfoText}>
+                Free plan: 3 analyses/day, top 5 signals
+              </Text>
+            </View>
+
+            {/* Restore Purchase */}
             <Pressable
-              style={({ pressed }) => [styles.dismissBtn, pressed && { opacity: 0.6 }]}
-              onPress={hidePaywall}
+              style={({ pressed }) => [s.restoreBtn, pressed && { opacity: 0.6 }]}
+              onPress={handleRestore}
               accessibilityRole="button"
-              accessibilityLabel="Close premium info"
+              accessibilityLabel="Restore purchase"
             >
-              <Text style={[styles.dismissText, { color: colors.textMuted }]}>Close</Text>
+              <Text style={s.restoreBtnText}>Restore Purchase</Text>
             </Pressable>
           </ScrollView>
         </View>
@@ -120,23 +180,45 @@ export default function Paywall() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
+    backgroundColor: c.bgOverlay,
   },
   sheet: {
+    backgroundColor: c.bgCard,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     borderWidth: 1,
     borderBottomWidth: 0,
-    maxHeight: '85%',
+    borderColor: c.border,
+    maxHeight: '92%',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: spacing.lg,
+    right: spacing.lg,
+    zIndex: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: c.bgElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtnText: {
+    color: c.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
   },
   content: {
     padding: spacing.xl,
     paddingTop: spacing.xxl,
     alignItems: 'center',
   },
+
+  // Header
   header: {
     alignItems: 'center',
     marginBottom: spacing.xl,
@@ -145,111 +227,169 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
+    backgroundColor: c.accentDim,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   logoText: {
     fontSize: 28,
     fontWeight: '800',
+    color: c.accent,
   },
-  appName: {
-    ...typography.bodySm,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  title: {
+  headline: {
     ...typography.h2,
+    color: c.textPrimary,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
-  subtitle: {
+  subheadline: {
     ...typography.bodySm,
+    color: c.textSecondary,
     textAlign: 'center',
-    marginBottom: spacing.xl,
     lineHeight: 20,
   },
-  benefitsList: {
+
+  // Plans
+  plansRow: {
     width: '100%',
-    marginBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  benefitRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  planCard: {
+    flex: 1,
+    backgroundColor: c.bg,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  planCardApi: {
+    borderColor: `${c.accent}60`,
+    backgroundColor: `${c.accent}08`,
+  },
+  popularBadge: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    backgroundColor: c.accent,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderTopRightRadius: radius.md,
+    borderBottomLeftRadius: radius.sm,
+  },
+  popularBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  planHeader: {
+    marginBottom: spacing.md,
+  },
+  planName: {
+    ...typography.h3,
+    color: c.textPrimary,
+    marginBottom: 2,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  priceAmount: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: c.textPrimary,
+    letterSpacing: -0.5,
+  },
+  pricePeriod: {
+    ...typography.bodySm,
+    color: c.textMuted,
+    marginLeft: 2,
+  },
+
+  // Features
+  featureList: {
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   checkCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: `${c.bullish}20`,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+  },
+  checkCircleHighlight: {
+    backgroundColor: `${c.accent}20`,
   },
   checkMark: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: c.bullish,
+  },
+  checkMarkHighlight: {
+    fontSize: 9,
+    color: c.accent,
+  },
+  featureText: {
+    ...typography.bodySm,
+    color: c.textSecondary,
+    flex: 1,
+  },
+  featureTextHighlight: {
+    color: c.accent,
+    fontWeight: '600',
+  },
+
+  // Buttons
+  planBtn: {
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+  },
+  planBtnPro: {
+    backgroundColor: c.accent,
+  },
+  planBtnApi: {
+    backgroundColor: c.accent,
+  },
+  planBtnText: {
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
   },
-  benefitText: {
-    flex: 1,
-  },
-  benefitEn: {
-    ...typography.body,
-    fontWeight: '600',
-  },
-  benefitKo: {
-    ...typography.bodySm,
-    marginTop: 2,
-  },
-  launchCard: {
-    width: '100%',
-    paddingHorizontal: spacing.lg,
+
+  // Free info
+  freeInfo: {
     paddingVertical: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    marginBottom: spacing.xl,
-    alignItems: 'center',
-  },
-  launchTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  launchDesc: {
-    ...typography.bodySm,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  ctaBtn: {
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
+    backgroundColor: c.bgElevated,
     width: '100%',
-    paddingVertical: spacing.lg,
-    borderRadius: radius.lg,
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-  ctaText: {
-    color: '#ffffff',
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+  freeInfoText: {
+    ...typography.bodySm,
+    color: c.textMuted,
   },
-  ctaSubText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 3,
-  },
-  ctaDoneText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  dismissBtn: {
+
+  // Restore
+  restoreBtn: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
   },
-  dismissText: {
-    ...typography.body,
-    fontWeight: '500',
+  restoreBtnText: {
+    ...typography.bodySm,
+    color: c.textMuted,
+    textDecorationLine: 'underline',
   },
 });
