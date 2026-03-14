@@ -54,13 +54,13 @@ function isMarketOpen(): boolean {
   return mins >= openUTC && mins <= closeUTC;
 }
 
-async function getPersisted<T>(key: string): Promise<T | null> {
+async function getPersisted<T>(key: string, maxAgeMs?: number): Promise<T | null> {
   try {
     const raw = await AsyncStorage.getItem(PERSIST_PREFIX + key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed.ts !== 'number' || !parsed.data) return null;
-    const maxAge = isMarketOpen() ? 10 * 60 * 1000 : 6 * 60 * 60 * 1000;
+    const maxAge = maxAgeMs ?? (isMarketOpen() ? 10 * 60 * 1000 : 6 * 60 * 60 * 1000);
     if (Date.now() - parsed.ts > maxAge) return null;
     return parsed.data as T;
   } catch { return null; }
@@ -170,8 +170,21 @@ const api = {
     return res.data;
   },
 
-  async signals(limit = 20, dataPeriod = '3y', forceRefresh = false): Promise<SignalsResponse> {
-    const cacheKey = `signals:${dataPeriod}`;
+  async signals(
+    limit = 20,
+    dataPeriod = '3y',
+    forceRefresh = false,
+    options: { includeCalendar?: boolean; includeFlips?: boolean } = {},
+  ): Promise<SignalsResponse> {
+    const includeCalendar = options.includeCalendar ?? true;
+    const includeFlips = options.includeFlips ?? true;
+    const cacheKey = `signals:${dataPeriod}:cal${includeCalendar ? 1 : 0}:flip${includeFlips ? 1 : 0}`;
+    const params = {
+      limit,
+      data_period: dataPeriod,
+      include_calendar: includeCalendar ? '1' : '0',
+      include_flips: includeFlips ? '1' : '0',
+    };
 
     // On explicit period change (forceRefresh), always fetch from server
     // On initial load, use persistent cache for instant display
@@ -179,7 +192,7 @@ const api = {
       const persisted = await getPersisted<SignalsResponse>(cacheKey);
       if (persisted) {
         // Return cached data, refresh in background
-        axios.get(`${BASE_URL}/api/signals`, { params: { limit, data_period: dataPeriod }, timeout: 120000 })
+        axios.get(`${BASE_URL}/api/signals`, { params, timeout: 120000 })
           .then(res => setPersisted(cacheKey, res.data))
           .catch(() => {});
         return persisted;
@@ -187,7 +200,7 @@ const api = {
     }
 
     const res = await axios.get(`${BASE_URL}/api/signals`, {
-      params: { limit, data_period: dataPeriod },
+      params,
       timeout: 120000,
     });
     setPersisted(cacheKey, res.data);
@@ -221,43 +234,99 @@ const api = {
     return res.data;
   },
 
-  async signalFlips(): Promise<{ flips: FlipItem[]; updated: string; count: number }> {
+  async signalFlips(forceRefresh = false): Promise<{ flips: FlipItem[]; updated: string; count: number }> {
+    const cacheKey = 'signal-flips';
+    if (!forceRefresh) {
+      const persisted = await getPersisted<{ flips: FlipItem[]; updated: string; count: number }>(cacheKey, 15 * 60 * 1000);
+      if (persisted) {
+        axios.get(`${BASE_URL}/api/signals/flips`, { timeout: 10000 })
+          .then(res => setPersisted(cacheKey, res.data))
+          .catch(() => {});
+        return persisted;
+      }
+    }
+
     const res = await axios.get(`${BASE_URL}/api/signals/flips`, {
       timeout: 10000,
     });
+    setPersisted(cacheKey, res.data);
     return res.data;
   },
 
-  async marketCalendar(days = 30): Promise<{ events: CalendarEvent[]; updated: string }> {
+  async marketCalendar(days = 30, forceRefresh = false): Promise<{ events: CalendarEvent[]; updated: string }> {
     const cacheKey = `calendar:${days}`;
-    const cached = getCached(cacheKey);
+    const cached = forceRefresh ? null : getCached(cacheKey);
     if (cached) return cached;
+    if (!forceRefresh) {
+      const persisted = await getPersisted<{ events: CalendarEvent[]; updated: string }>(cacheKey, 6 * 60 * 60 * 1000);
+      if (persisted) {
+        setCache(cacheKey, persisted);
+        axios.get(`${BASE_URL}/api/calendar`, {
+          params: { days },
+          timeout: 15000,
+        }).then(res => {
+          setCache(cacheKey, res.data);
+          setPersisted(cacheKey, res.data);
+        }).catch(() => {});
+        return persisted;
+      }
+    }
 
     const res = await axios.get(`${BASE_URL}/api/calendar`, {
       params: { days },
       timeout: 15000,
     });
     setCache(cacheKey, res.data);
+    setPersisted(cacheKey, res.data);
     return res.data;
   },
 
-  async earningsCalendar(): Promise<{ earnings: EarningsItem[]; updated: string }> {
+  async earningsCalendar(forceRefresh = false): Promise<{ earnings: EarningsItem[]; updated: string }> {
     const cacheKey = 'earnings-calendar';
-    const cached = getCached(cacheKey);
+    const cached = forceRefresh ? null : getCached(cacheKey);
     if (cached) return cached;
+    if (!forceRefresh) {
+      const persisted = await getPersisted<{ earnings: EarningsItem[]; updated: string }>(cacheKey, 6 * 60 * 60 * 1000);
+      if (persisted) {
+        setCache(cacheKey, persisted);
+        axios.get(`${BASE_URL}/api/earnings-calendar`, {
+          timeout: 15000,
+        }).then(res => {
+          setCache(cacheKey, res.data);
+          setPersisted(cacheKey, res.data);
+        }).catch(() => {});
+        return persisted;
+      }
+    }
 
     const res = await axios.get(`${BASE_URL}/api/earnings-calendar`, {
       timeout: 15000,
     });
     setCache(cacheKey, res.data);
+    setPersisted(cacheKey, res.data);
     return res.data;
   },
 
-  async recentSearches(limit = 15): Promise<string[]> {
+  async recentSearches(limit = 15, forceRefresh = false): Promise<string[]> {
+    const cacheKey = `recent-searches:${limit}`;
+    if (!forceRefresh) {
+      const persisted = await getPersisted<string[]>(cacheKey, 30 * 60 * 1000);
+      if (persisted) {
+        axios.get(`${BASE_URL}/api/recent-searches`, {
+          params: { limit },
+          timeout: 5000,
+        }).then(res => {
+          setPersisted(cacheKey, res.data.tickers);
+        }).catch(() => {});
+        return persisted;
+      }
+    }
+
     const res = await axios.get(`${BASE_URL}/api/recent-searches`, {
       params: { limit },
       timeout: 5000,
     });
+    setPersisted(cacheKey, res.data.tickers);
     return res.data.tickers;
   },
 

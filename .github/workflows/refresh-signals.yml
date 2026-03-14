@@ -20,9 +20,21 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    env:
+      REFRESH_URL: https://stock-analyzer-phi-ten.vercel.app/api/signals/refresh
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
 
     steps:
+      - name: Validate cron secret
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing GitHub Actions secret: CRON_SECRET"
+            exit 1
+          fi
+
       - name: Refresh signals
         run: |
-          curl -sf --max-time 90 \
-            https://stock-analyzer-phi-ten.vercel.app/api/signals/refresh
+          curl --fail-with-body --show-error --silent \
+            --retry 2 --retry-delay 5 --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$REFRESH_URL"

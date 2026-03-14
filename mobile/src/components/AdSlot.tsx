@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Platform, type ViewStyle } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePremium } from '../contexts/PremiumContext';
@@ -23,25 +23,124 @@ const AD_FORMATS: Record<AdSize, string> = {
   inline: 'fluid',
 };
 
+const ADSENSE_CLIENT_ID = 'ca-pub-5053429721285857';
+const WEB_AD_SLOT_IDS: Record<AdSize, string | undefined> = {
+  banner: process.env.EXPO_PUBLIC_ADSENSE_BANNER_SLOT,
+  'medium-rect': process.env.EXPO_PUBLIC_ADSENSE_MEDIUM_RECT_SLOT,
+  inline: process.env.EXPO_PUBLIC_ADSENSE_INLINE_SLOT,
+};
+const ADSENSE_SCRIPT_ID = 'stock-analyzer-adsense-script';
+let adsenseScriptPromise: Promise<void> | null = null;
+
+function loadAdSenseScript() {
+  if (typeof document === 'undefined') return Promise.resolve();
+  if ((window as any).adsbygoogle) return Promise.resolve();
+  if (adsenseScriptPromise) return adsenseScriptPromise;
+
+  adsenseScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.getElementById(ADSENSE_SCRIPT_ID) as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('AdSense failed to load')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = ADSENSE_SCRIPT_ID;
+    script.async = true;
+    script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5053429721285857';
+    script.crossOrigin = 'anonymous';
+    script.addEventListener('load', () => resolve(), { once: true });
+    script.addEventListener('error', () => reject(new Error('AdSense failed to load')), { once: true });
+    document.head.appendChild(script);
+  });
+
+  return adsenseScriptPromise;
+}
+
 function WebAdSlot({ size }: { size: AdSize }) {
+  const slotId = WEB_AD_SLOT_IDS[size];
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isNearViewport, setIsNearViewport] = useState(false);
+  const [scriptReady, setScriptReady] = useState(false);
+  const adRequested = useRef(false);
+  const isLocalhost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const canServeAds = Boolean(slotId) && !isLocalhost;
 
   useEffect(() => {
-    if (containerRef.current) {
-      try {
-        const adsbygoogle = (window as any).adsbygoogle || [];
-        adsbygoogle.push({});
-      } catch {}
+    if (!canServeAds) return undefined;
+    const node = containerRef.current;
+    if (!node) return;
+
+    const observer = typeof IntersectionObserver !== 'undefined'
+      ? new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            setIsNearViewport(true);
+            observer.disconnect();
+          }
+        }, { rootMargin: '320px 0px' })
+      : null;
+
+    if (observer) {
+      observer.observe(node);
+      return () => observer.disconnect();
     }
-  }, []);
+
+    setIsNearViewport(true);
+    return undefined;
+  }, [canServeAds]);
+
+  useEffect(() => {
+    if (!canServeAds) return undefined;
+    if (!isNearViewport) return undefined;
+
+    let cancelled = false;
+    const requestIdle = (globalThis as any).requestIdleCallback;
+    const scheduled = typeof requestIdle === 'function'
+      ? requestIdle(() => {
+          loadAdSenseScript().then(() => {
+            if (!cancelled) setScriptReady(true);
+          }).catch(() => {});
+        }, { timeout: 2500 })
+      : globalThis.setTimeout(() => {
+          loadAdSenseScript().then(() => {
+            if (!cancelled) setScriptReady(true);
+          }).catch(() => {});
+        }, 800);
+
+    return () => {
+      cancelled = true;
+      if (typeof requestIdle === 'function') {
+        const cancelIdle = (globalThis as any).cancelIdleCallback;
+        if (typeof cancelIdle === 'function') cancelIdle(scheduled);
+      } else {
+        clearTimeout(scheduled);
+      }
+    };
+  }, [canServeAds, isNearViewport]);
+
+  useEffect(() => {
+    if (!canServeAds) return;
+    if (!scriptReady || !containerRef.current || adRequested.current) return;
+
+    try {
+      const adsbygoogle = (window as any).adsbygoogle || [];
+      adsbygoogle.push({});
+      adRequested.current = true;
+    } catch {}
+  }, [canServeAds, scriptReady]);
+
+  if (!canServeAds) {
+    return null;
+  }
 
   return (
     <div ref={containerRef} style={{ textAlign: 'center', margin: '8px 16px' }}>
       <ins
         className="adsbygoogle"
-        style={{ display: 'block' }}
-        data-ad-client="ca-pub-5053429721285857"
-        data-ad-slot="REPLACE_WITH_ACTUAL_SLOT_ID" // TODO: Get actual slot ID from AdSense dashboard
+        style={{ display: 'block', minHeight: AD_HEIGHTS[size] }}
+        data-ad-client={ADSENSE_CLIENT_ID}
+        data-ad-slot={slotId}
         data-ad-format={AD_FORMATS[size]}
         data-full-width-responsive="true"
       />

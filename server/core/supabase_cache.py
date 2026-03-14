@@ -43,6 +43,66 @@ def _rest_url(path: str) -> str:
     return f"{SUPABASE_URL}/rest/v1/{path}"
 
 
+def read_cached_blob(key: str, max_age_seconds: int | None = None) -> dict | None:
+    """Read an arbitrary JSON blob from analysis_cache by key."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None
+
+    try:
+        safe_key = _url_quote(key, safe="")
+        url = _rest_url(f"analysis_cache?ticker=eq.{safe_key}&select=data,updated_at")
+        req = urllib.request.Request(url, headers=_headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            rows = json.loads(resp.read().decode())
+
+        if not rows:
+            return None
+
+        row = rows[0]
+        data = row.get("data")
+        updated_at = row.get("updated_at", "")
+        if not data:
+            return None
+
+        if max_age_seconds and updated_at:
+            try:
+                ts = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+                age = (datetime.now(timezone.utc) - ts).total_seconds()
+                if age > max_age_seconds:
+                    return None
+            except Exception:
+                pass
+
+        return {
+            "data": data,
+            "updated_at": updated_at,
+        }
+    except Exception:
+        return None
+
+
+def write_cached_blob(key: str, data: dict) -> bool:
+    """Write an arbitrary JSON blob to analysis_cache by key."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return False
+
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        row = {"ticker": key, "data": data, "updated_at": now}
+        url = _rest_url("analysis_cache")
+        body = json.dumps(row).encode()
+        req = urllib.request.Request(
+            url,
+            data=body,
+            method="POST",
+            headers=_headers(prefer="resolution=merge-duplicates,return=minimal"),
+        )
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except Exception:
+        return False
+
+
 def read_cached_signals() -> dict | None:
     """Read signals from Supabase cache via REST API."""
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -162,30 +222,8 @@ def write_cached_signals(signals: list[dict]) -> bool:
 
 def read_cached_analysis(ticker: str) -> dict | None:
     """Read cached analysis for a single ticker from Supabase."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        return None
-
     try:
-        safe_ticker = _url_quote(ticker.upper(), safe='')
-        url = _rest_url(f"analysis_cache?ticker=eq.{safe_ticker}&select=data,updated_at")
-        req = urllib.request.Request(url, headers=_headers())
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            rows = json.loads(resp.read().decode())
-
-        if not rows:
-            return None
-
-        row = rows[0]
-        updated_at = row.get("updated_at", "")
-        data = row.get("data")
-
-        if not data:
-            return None
-
-        return {
-            "data": data,
-            "updated_at": updated_at,
-        }
+        return read_cached_blob(ticker.upper())
     except Exception as e:
         print(f"Supabase analysis read error: {e}")
         return None
@@ -239,73 +277,22 @@ def read_recent_searches(limit: int = 20) -> list[str]:
 
 def read_cached_earnings(ticker: str) -> dict | None:
     """Read cached earnings history for a ticker from Supabase (stored in analysis_cache with EARN: prefix)."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        return None
     try:
-        key = _url_quote(f"EARN:{ticker.upper()}", safe='')
-        url = _rest_url(f"analysis_cache?ticker=eq.{key}&select=data,updated_at")
-        req = urllib.request.Request(url, headers=_headers())
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            rows = json.loads(resp.read().decode())
-        if not rows:
-            return None
-        # Check freshness (7 days for earnings - they don't change often)
-        updated = rows[0].get("updated_at", "")
-        if updated:
-            try:
-                ts = datetime.fromisoformat(updated.replace("Z", "+00:00"))
-                age = (datetime.now(timezone.utc) - ts).total_seconds()
-                if age > 7 * 86400:
-                    return None  # Stale
-            except Exception:
-                pass
-        return rows[0].get("data")
+        cached = read_cached_blob(f"EARN:{ticker.upper()}", max_age_seconds=7 * 86400)
+        return cached["data"] if cached else None
     except Exception:
         return None
 
 
 def write_cached_earnings(ticker: str, data: dict) -> bool:
     """Upsert cached earnings history for a ticker to Supabase (uses analysis_cache with EARN: prefix)."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        return False
-    try:
-        now = datetime.now(timezone.utc).isoformat()
-        row = {"ticker": f"EARN:{ticker.upper()}", "data": data, "updated_at": now}
-        url = _rest_url("analysis_cache")
-        body = json.dumps(row).encode()
-        req = urllib.request.Request(
-            url, data=body, method="POST",
-            headers=_headers(prefer="resolution=merge-duplicates,return=minimal"),
-        )
-        urllib.request.urlopen(req, timeout=10)
-        return True
-    except Exception:
-        return False
+    return write_cached_blob(f"EARN:{ticker.upper()}", data)
 
 
 def write_cached_analysis(ticker: str, data: dict) -> bool:
     """Write (upsert) cached analysis for a single ticker to Supabase."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        return False
-
     try:
-        now = datetime.now(timezone.utc).isoformat()
-        safe_ticker = ticker.upper()
-
-        row = {
-            "ticker": safe_ticker,
-            "data": data,
-            "updated_at": now,
-        }
-
-        url = _rest_url("analysis_cache")
-        body = json.dumps(row).encode()
-        req = urllib.request.Request(
-            url, data=body, method="POST",
-            headers=_headers(prefer="resolution=merge-duplicates,return=minimal"),
-        )
-        urllib.request.urlopen(req, timeout=10)
-        return True
+        return write_cached_blob(ticker.upper(), data)
     except Exception as e:
         print(f"Supabase analysis write error: {e}")
         return False

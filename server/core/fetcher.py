@@ -551,7 +551,7 @@ def fetch_earnings_dates(tickers: list[str]) -> list[dict]:
             return {
                 "ticker": ticker.upper(),
                 "name": TICKER_DB.get(ticker.upper(), ticker.upper()),
-                "earnings_date": earnings_dt.strftime("%m/%d"),
+                "earnings_date": earnings_dt.strftime("%Y-%m-%d"),
                 "days_until": days_until,
                 "time_of_day": time_of_day,
             }

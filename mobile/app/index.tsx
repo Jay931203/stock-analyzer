@@ -160,6 +160,20 @@ function _makeCardStyles(c: ThemeColors) {
 
 const LEVERAGED_TICKERS = new Set(['TQQQ', 'SOXL', 'UPRO', 'TECL', 'SQQQ', 'LABU', 'TNA', 'FNGU']);
 
+function scheduleNonCriticalTask(task: () => void, delayMs = 500): () => void {
+  const requestIdle = (globalThis as any).requestIdleCallback;
+  if (typeof requestIdle === 'function') {
+    const id = requestIdle(task, { timeout: Math.max(delayMs * 2, 1200) });
+    return () => {
+      const cancelIdle = (globalThis as any).cancelIdleCallback;
+      if (typeof cancelIdle === 'function') cancelIdle(id);
+    };
+  }
+
+  const timeoutId = setTimeout(task, delayMs);
+  return () => clearTimeout(timeoutId);
+}
+
 export default function HomeScreen() {
   const { colors, isDark, themeMode, cycleTheme } = useTheme();
   const { user, signInWithGoogle, signOut } = useAuth();
@@ -212,103 +226,134 @@ export default function HomeScreen() {
     return () => clearInterval(id);
   }, []);
 
-  const loadSignals = useCallback(async (dp?: string, forceRefresh = false) => {
+  const syncCalendarState = useCallback((events: CalendarEvent[]) => {
+    setCalendarEvents(events);
+    const today = new Date();
+    const todayDate = today.getDate();
+    const todayMonth = today.getMonth();
+    const todayYear = today.getFullYear();
+
+    const eventDays = events
+      .filter((ev) => {
+        const d = new Date(ev.date + 'T12:00:00');
+        return d.getFullYear() === todayYear && d.getMonth() === todayMonth && d.getDate() >= todayDate;
+      })
+      .map((ev) => new Date(ev.date + 'T12:00:00').getDate())
+      .sort((a, b) => a - b);
+
+    setSelectedCalDay(eventDays.length > 0 ? eventDays[0] : null);
+  }, []);
+
+  const loadSignals = useCallback(async (
+    dp?: string,
+    forceRefresh = false,
+    options: { includeCalendar?: boolean; includeFlips?: boolean } = {},
+  ) => {
     const usePeriod = dp ?? dataPeriod;
     setSignalsLoading(true);
     setSignalsError(null);
     try {
-      const res = await api.signals(50, usePeriod, forceRefresh);
-      let sigs = res.signals;
+      const res = await api.signals(50, usePeriod, forceRefresh, options);
+      const sigs = res.signals;
       const mState = res.market_state ?? '';
       setMarketState(mState);
-
-      if ((mState === 'PRE' || mState === 'AFTER') && sigs.length > 0) {
-        try {
-          const tickers = sigs.map(s => s.ticker);
-          const live = await api.livePrices(tickers);
-          if (live.prices) {
-            sigs = sigs.map(s => {
-              const lp = live.prices[s.ticker];
-              return lp ? { ...s, price: lp.price, change_pct: lp.change_pct } : s;
-            });
-          }
-        } catch {}
-      }
-
       setSignals(sigs);
       setScannedCount(res.scanned);
       setSignalsUpdated(res.updated);
-      setServerOk(true); // signals loaded = server is alive
-      if (res.calendar) {
-        setCalendarEvents(res.calendar);
-        const today = new Date();
-        const todayDate = today.getDate();
-        const todayMonth = today.getMonth();
-        const todayYear = today.getFullYear();
+      setServerOk(true);
 
-        // Find next upcoming event day in this month
-        const eventDays = res.calendar
-          .filter((ev: any) => {
-            const d = new Date(ev.date + 'T12:00:00');
-            return d.getFullYear() === todayYear && d.getMonth() === todayMonth && d.getDate() >= todayDate;
-          })
-          .map((ev: any) => new Date(ev.date + 'T12:00:00').getDate())
-          .sort((a: number, b: number) => a - b);
-
-        if (eventDays.length > 0) {
-          setSelectedCalDay(eventDays[0]); // Select next upcoming event day
-        }
+      if ((mState === 'PRE' || mState === 'AFTER') && sigs.length > 0) {
+        const tickers = sigs.map((s) => s.ticker);
+        api.livePrices(tickers).then((live) => {
+          if (!live.prices) return;
+          setSignals((current) => current.map((signal) => {
+            const livePrice = live.prices[signal.ticker];
+            return livePrice ? { ...signal, price: livePrice.price, change_pct: livePrice.change_pct } : signal;
+          }));
+        }).catch(() => {});
       }
+
+      if (res.calendar) syncCalendarState(res.calendar);
       if (res.flips?.flips) setFlips(res.flips.flips);
+      return true;
     } catch (e: any) {
+      setServerOk(false);
       if (signals.length === 0) {
         setSignalsError(e.response?.data?.detail ?? e.message ?? 'Failed to load signals');
       }
+      return false;
+    } finally {
+      setSignalsLoading(false);
     }
-    setSignalsLoading(false);
-  }, [dataPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dataPeriod, signals.length, syncCalendarState]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadMarketIndices = useCallback(async () => {
+    try {
+      const res = await api.livePrices(['QQQ', 'SPY']);
+      if (res.prices) setMarketIndices(res.prices);
+    } catch {}
+  }, []);
+
+  const loadRecentSearches = useCallback(async (forceRefresh = false) => {
+    try {
+      const tickers = await api.recentSearches(15, forceRefresh);
+      setRecentSearches(tickers);
+    } catch {}
+  }, []);
+
+  const loadEarnings = useCallback(async (forceRefresh = false) => {
+    try {
+      const res = await api.earningsCalendar(forceRefresh);
+      setEarnings(res.earnings);
+    } catch {}
+  }, []);
+
+  const loadCalendar = useCallback(async (forceRefresh = false) => {
+    try {
+      const res = await api.marketCalendar(30, forceRefresh);
+      syncCalendarState(res.events);
+    } catch {}
+  }, [syncCalendarState]);
+
+  const loadSignalFlips = useCallback(async (forceRefresh = false) => {
+    try {
+      const res = await api.signalFlips(forceRefresh);
+      setFlips(res.flips);
+    } catch {}
+  }, []);
 
   useEffect(() => {
+    let cancelDeferred = () => {};
+
     async function init() {
       await initServerUrl();
       await initWatchlist();
       setWatchlist(getWatchlist());
 
-      // Load saved settings
+      let initialDataPeriod = dataPeriod;
       try {
         const [savedDp, savedWp] = await Promise.all([
           AsyncStorage.getItem('data_period'),
           AsyncStorage.getItem('window_period'),
         ]);
-        if (savedDp && ['1y', '3y', '5y', '10y'].includes(savedDp)) setDataPeriod(savedDp);
+        if (savedDp && ['1y', '3y', '5y', '10y'].includes(savedDp)) {
+          initialDataPeriod = savedDp;
+          setDataPeriod(savedDp);
+        }
         if (savedWp && ['5d', '20d', '60d', '120d', '252d'].includes(savedWp)) setPeriod(savedWp);
       } catch {}
 
-      // Load data immediately, health check in parallel
-      loadSignals();
-      loadMarketIndices();
-      loadRecentSearches();
-      loadEarnings();
-
-      // Health check with aggressive retry
-      const tryHealth = async () => {
-        try { return await api.health(); } catch { return false; }
-      };
-      let ok = await tryHealth();
-      setServerOk(ok);
-      if (!ok) {
-        // Retry at 2s and 5s
-        for (const delay of [2000, 5000]) {
-          await new Promise(r => setTimeout(r, delay));
-          ok = await tryHealth();
-          setServerOk(ok);
-          if (ok) break;
-        }
-      }
+      await loadSignals(initialDataPeriod, false, { includeCalendar: false, includeFlips: false });
+      cancelDeferred = scheduleNonCriticalTask(() => {
+        loadMarketIndices();
+        loadRecentSearches();
+        loadEarnings();
+        loadCalendar();
+        loadSignalFlips();
+      }, 700);
     }
     init();
 
-    // Show app install banner on web (check if not already dismissed)
     if (Platform.OS === 'web') {
       AsyncStorage.getItem('dismiss_install_banner').then(v => {
         if (!v) setShowInstallBanner(true);
@@ -316,8 +361,11 @@ export default function HomeScreen() {
     }
 
     const unsub = subscribe(() => setWatchlist(getWatchlist()));
-    return unsub;
-  }, []);
+    return () => {
+      cancelDeferred();
+      unsub();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useFocusEffect(
     useCallback(() => {
@@ -327,7 +375,7 @@ export default function HomeScreen() {
       ]).then(([savedDp, savedWp]) => {
         if (savedDp && ['1y', '3y', '5y', '10y'].includes(savedDp) && savedDp !== dataPeriod) {
           setDataPeriod(savedDp);
-          loadSignals(savedDp, true);
+          loadSignals(savedDp, true, { includeCalendar: false, includeFlips: false });
         }
         if (savedWp && ['5d', '20d', '60d', '120d', '252d'].includes(savedWp) && savedWp !== period) {
           setPeriod(savedWp);
@@ -377,40 +425,20 @@ export default function HomeScreen() {
     AsyncStorage.setItem('data_period', dp).catch(() => {});
     // Clear existing signals so full loading screen shows
     setSignals([]);
-    loadSignals(dp, true);
-  };
-
-  const loadMarketIndices = async () => {
-    try {
-      const res = await api.livePrices(['QQQ', 'SPY']);
-      if (res.prices) setMarketIndices(res.prices);
-    } catch {}
-  };
-
-  const loadRecentSearches = async () => {
-    try {
-      const tickers = await api.recentSearches(15);
-      setRecentSearches(tickers);
-    } catch {}
-  };
-
-  const loadEarnings = async () => {
-    try {
-      const res = await api.earningsCalendar();
-      setEarnings(res.earnings);
-    } catch {}
+    loadSignals(dp, true, { includeCalendar: false, includeFlips: false });
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    const [, , , , healthOk] = await Promise.all([
-      loadSignals(undefined, true),
+    const [signalsOk] = await Promise.all([
+      loadSignals(undefined, true, { includeCalendar: false, includeFlips: false }),
       loadMarketIndices(),
-      loadRecentSearches(),
-      loadEarnings(),
-      api.health().catch(() => false),
+      loadRecentSearches(true),
+      loadEarnings(true),
+      loadCalendar(true),
+      loadSignalFlips(true),
     ]);
-    setServerOk(healthOk);
+    setServerOk(signalsOk);
     setRefreshing(false);
   };
 
@@ -1012,7 +1040,7 @@ export default function HomeScreen() {
             <Text style={s.errorStateText}>{signalsError}</Text>
             <Pressable
               style={s.errorStateRetryBtn}
-              onPress={() => loadSignals()}
+              onPress={() => loadSignals(undefined, true, { includeCalendar: false, includeFlips: false })}
               accessibilityRole="button"
               accessibilityLabel="Retry loading signals"
             >

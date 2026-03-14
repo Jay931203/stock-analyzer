@@ -17,14 +17,6 @@ export default function Root({ children }: PropsWithChildren) {
         <meta property="og:title" content="Stock Scanner - Probability Analysis" />
         <meta property="og:description" content="Data-driven stock probability analysis with 10+ technical indicators" />
         <meta property="og:type" content="website" />
-
-        {/* Google AdSense */}
-        <script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5053429721285857"
-          crossOrigin="anonymous"
-        />
-
         <ScrollViewStyleReset />
       </head>
       <body>{children}</body>

@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timezone, timedelta
 
 import pandas as pd
-from fastapi import APIRouter, Header, HTTPException, Path, Query, BackgroundTasks
+from fastapi import APIRouter, Header, HTTPException, Path, Query, BackgroundTasks, Response
 from pydantic import BaseModel, Field
 
 _IS_VERCEL = os.environ.get("VERCEL") is not None
@@ -18,7 +18,18 @@ from ..core.signal_flip import snapshot_and_detect, get_flips
 from ..core.economic_calendar import get_economic_events
 from ..core.presets import get_preset, list_presets, PRESETS
 from ..core.smart_matcher import calc_adaptive_combined
-from ..core.supabase_cache import read_cached_signals, write_cached_signals, read_cached_analysis, write_cached_analysis, read_cached_earnings, write_cached_earnings, log_recent_search, read_recent_searches
+from ..core.supabase_cache import (
+    read_cached_signals,
+    write_cached_signals,
+    read_cached_analysis,
+    write_cached_analysis,
+    read_cached_earnings,
+    write_cached_earnings,
+    read_cached_blob,
+    write_cached_blob,
+    log_recent_search,
+    read_recent_searches,
+)
 from .constants import POPULAR_TICKERS, LEVERAGED_ETFS, SECTOR_MAP, TICKER_NAMES, MARKET_CAP_B, NASDAQ_100
 from .schemas import (
     ADXData,
@@ -445,6 +456,9 @@ _TRENDING_TTL = 300  # 5 minutes
 _signals_cache: dict = {"data": None, "ts": 0}
 _signals_period_cache: dict = {}  # keyed by "signals_{period}", max 4 entries (1y/3y/5y/10y)
 _SIGNALS_TTL = 600  # 10 minutes
+_EDGE_CACHE_SHORT = "public, s-maxage=60, stale-while-revalidate=600"
+_EDGE_CACHE_MEDIUM = "public, s-maxage=300, stale-while-revalidate=21600"
+_EARNINGS_CALENDAR_CACHE_KEY = "CACHE:EARNINGS_CALENDAR"
 
 # In-memory cache for computed indicators (survives within Vercel warm instance)
 _indicator_mem_cache: dict = {}  # {ticker:period -> {indicators, states, current_values, ts}}
@@ -473,6 +487,11 @@ def _evict_cache(cache: dict, max_size: int) -> None:
         cache.pop(k, None)
 
 
+def _set_cache_control(response: Response | None, value: str) -> None:
+    if response is not None:
+        response.headers["Cache-Control"] = value
+
+
 @router.get("/similar/{ticker}")
 async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
     """Get similar tickers from the same sector."""
@@ -498,11 +517,12 @@ async def get_similar(ticker: str, limit: int = Query(6, ge=1, le=12)):
 
 
 @router.get("/signals/refresh")
-async def refresh_signals(authorization: str = Header(None)):
+async def refresh_signals(authorization: str = Header(None), response: Response = None):
     """
     Force recompute signals and update Supabase cache.
     Called by Vercel Cron every 15 minutes.
     """
+    _set_cache_control(response, "no-store")
     cron_secret = os.environ.get("CRON_SECRET", "")
     if not cron_secret:
         raise HTTPException(status_code=503, detail="CRON_SECRET not configured")
@@ -520,18 +540,21 @@ async def refresh_signals(authorization: str = Header(None)):
     _signals_cache["data"] = result
     _signals_cache["ts"] = time.time()
     write_cached_signals(result["signals"])
+    earnings_snapshot = _build_earnings_calendar_snapshot(result)
 
     return {
         "status": "ok",
         "signals_count": len(result["signals"]),
         "scanned": len(POPULAR_TICKERS),
         "updated": result["updated"],
+        "earnings_count": len(earnings_snapshot.get("earnings", [])),
     }
 
 
 @router.get("/signals/flips")
-async def signal_flips():
+async def signal_flips(response: Response = None):
     """Get stocks that recently flipped between bullish and bearish."""
+    _set_cache_control(response, _EDGE_CACHE_SHORT)
     return get_flips()
 
 
@@ -539,12 +562,16 @@ async def signal_flips():
 async def get_signals(
     limit: int = Query(101, ge=1, le=150),
     data_period: str = Query("3y", pattern="^(1y|2y|3y|5y|10y)$"),
+    include_calendar: bool = Query(False),
+    include_flips: bool = Query(False),
     background_tasks: BackgroundTasks = None,
+    response: Response = None,
 ):
     """
     Combined probability for popular stocks.
     Always returns cached data instantly. Refreshes in background if stale.
     """
+    _set_cache_control(response, _EDGE_CACHE_SHORT)
     is_default = data_period == "3y"
     now = time.time()
     signals_data = None
@@ -599,37 +626,39 @@ async def get_signals(
                 pass
         background_tasks.add_task(_bg_refresh)
 
-    # Bundle calendar + flips
-    calendar_events = get_economic_events(days_ahead=30)
-    # Upcoming earnings from earnings-calendar cache
-    if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
-        for e in _earnings_cache["data"].get("earnings", []):
-            if 0 <= e["days_until"] <= 30:
-                calendar_events.append({
-                    "date": e["earnings_date"], "type": "EARNINGS",
-                    "label": f"{e['ticker']} Earnings", "ticker": e["ticker"],
-                    "name": e.get("name", e["ticker"]),
-                    "time_of_day": e.get("time_of_day", ""),
-                    "impact": "medium", "days_until": e["days_until"],
-                })
-    # Past earnings from Supabase cache (last 60 days)
-    try:
-        past_earnings = _fetch_past_earnings_for_calendar()
-        calendar_events.extend(past_earnings)
-    except Exception:
-        pass
-    calendar_events.sort(key=lambda x: x["date"])
-
-    flips_data = get_flips()
-
-    return {
+    payload = {
         "signals": signals_data["signals"][:limit],
         "scanned": signals_data["scanned"],
         "updated": signals_data["updated"],
         "market_state": _get_market_state(),
-        "calendar": calendar_events,
-        "flips": flips_data,
     }
+
+    if include_calendar:
+        calendar_events = get_economic_events(days_ahead=30)
+        earnings_snapshot = _build_earnings_calendar_snapshot(signals_data)
+        for e in earnings_snapshot.get("earnings", []):
+            if 0 <= e["days_until"] <= 30:
+                calendar_events.append({
+                    "date": e["earnings_date"],
+                    "type": "EARNINGS",
+                    "label": f"{e['ticker']} Earnings",
+                    "ticker": e["ticker"],
+                    "name": e.get("name", e["ticker"]),
+                    "time_of_day": e.get("time_of_day", ""),
+                    "impact": "medium",
+                    "days_until": e["days_until"],
+                })
+        try:
+            calendar_events.extend(_fetch_past_earnings_for_calendar())
+        except Exception:
+            pass
+        calendar_events.sort(key=lambda x: x["date"])
+        payload["calendar"] = calendar_events
+
+    if include_flips:
+        payload["flips"] = get_flips()
+
+    return payload
 
 
 def _compute_signals(data_period: str) -> dict:
@@ -652,8 +681,12 @@ def _compute_signals(data_period: str) -> dict:
 
 
 @router.get("/live-prices")
-async def live_prices(tickers: str = Query(..., description="Comma-separated tickers")):
+async def live_prices(
+    tickers: str = Query(..., description="Comma-separated tickers"),
+    response: Response = None,
+):
     """Fetch current prices including pre/post market via Yahoo v7 quote API."""
+    _set_cache_control(response, "public, s-maxage=30, stale-while-revalidate=60")
     ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
     if not ticker_list:
         return {"prices": {}}
@@ -662,8 +695,9 @@ async def live_prices(tickers: str = Query(..., description="Comma-separated tic
 
 
 @router.get("/recent-searches")
-async def recent_searches(limit: int = Query(15, ge=1, le=30)):
+async def recent_searches(limit: int = Query(15, ge=1, le=30), response: Response = None):
     """Get recently searched tickers (global across all visitors)."""
+    _set_cache_control(response, _EDGE_CACHE_SHORT)
     tickers = read_recent_searches(limit=limit)
     return {"tickers": tickers}
 
@@ -672,22 +706,31 @@ _earnings_cache: dict = {"data": None, "ts": 0}
 _EARNINGS_TTL = 21600  # 6 hours
 
 
-@router.get("/earnings-calendar")
-async def earnings_calendar():
-    """Get stocks with earnings within the next 14 days."""
+def _build_earnings_calendar_snapshot(
+    signals_data: dict | None = None,
+    *,
+    force_refresh: bool = False,
+) -> dict:
+    """Build upcoming earnings data, preferring warm memory or persisted cache."""
     now = time.time()
 
-    if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
+    if not force_refresh and _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
         return _earnings_cache["data"]
 
+    if not force_refresh:
+        cached = read_cached_blob(_EARNINGS_CALENDAR_CACHE_KEY, max_age_seconds=_EARNINGS_TTL)
+        if cached and cached.get("data"):
+            _earnings_cache["data"] = cached["data"]
+            _earnings_cache["ts"] = now
+            return cached["data"]
+
     earnings = fetch_earnings_dates(POPULAR_TICKERS)
-    # Filter to 14 days ahead only
     upcoming = [e for e in earnings if 0 <= e["days_until"] <= 14]
     upcoming.sort(key=lambda x: x["days_until"])
 
-    # Enrich with price/change from signals cache if available
-    if _signals_cache["data"]:
-        sig_map = {s["ticker"]: s for s in _signals_cache["data"].get("signals", [])}
+    active_signals = signals_data or _signals_cache["data"]
+    if active_signals:
+        sig_map = {s["ticker"]: s for s in active_signals.get("signals", [])}
         for e in upcoming:
             sig = sig_map.get(e["ticker"])
             if sig:
@@ -698,11 +741,17 @@ async def earnings_calendar():
         "earnings": upcoming,
         "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
-
     _earnings_cache["data"] = result
     _earnings_cache["ts"] = now
-
+    write_cached_blob(_EARNINGS_CALENDAR_CACHE_KEY, result)
     return result
+
+
+@router.get("/earnings-calendar")
+async def earnings_calendar(response: Response = None):
+    """Get stocks with earnings within the next 14 days."""
+    _set_cache_control(response, _EDGE_CACHE_MEDIUM)
+    return _build_earnings_calendar_snapshot()
 
 
 @router.get("/earnings-history/{ticker}")
@@ -832,25 +881,26 @@ def _fetch_past_earnings_for_calendar() -> list[dict]:
 
 
 @router.get("/calendar")
-async def market_calendar(days: int = Query(30, ge=7, le=60)):
+async def market_calendar(days: int = Query(30, ge=7, le=60), response: Response = None):
     """Combined calendar: economic events + upcoming earnings + recent past earnings."""
+    _set_cache_control(response, _EDGE_CACHE_MEDIUM)
     now = time.time()
 
     # Upcoming earnings: only use if already cached (never block on fetch_earnings_dates here)
     earning_events = []
-    if _earnings_cache["data"] and now - _earnings_cache["ts"] < _EARNINGS_TTL:
-        for e in _earnings_cache["data"].get("earnings", []):
-            if 0 <= e["days_until"] <= days:
-                earning_events.append({
-                    "date": e["earnings_date"],
-                    "type": "EARNINGS",
-                    "label": f"{e['ticker']} Earnings",
-                    "ticker": e["ticker"],
-                    "name": e.get("name", e["ticker"]),
-                    "time_of_day": e.get("time_of_day", ""),
-                    "impact": "medium",
-                    "days_until": e["days_until"],
-                })
+    earnings_snapshot = _build_earnings_calendar_snapshot()
+    for e in earnings_snapshot.get("earnings", []):
+        if 0 <= e["days_until"] <= days:
+            earning_events.append({
+                "date": e["earnings_date"],
+                "type": "EARNINGS",
+                "label": f"{e['ticker']} Earnings",
+                "ticker": e["ticker"],
+                "name": e.get("name", e["ticker"]),
+                "time_of_day": e.get("time_of_day", ""),
+                "impact": "medium",
+                "days_until": e["days_until"],
+            })
 
     # Past earnings (last 60 days) - uses in-memory cache inside _fetch_past_earnings_for_calendar
     past_earning_events = []
