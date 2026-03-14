@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useResponsiveLayout } from '../src/hooks/useResponsiveLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { initServerUrl } from '../src/api/client';
@@ -183,6 +184,7 @@ export default function HomeScreen() {
   const { user, session, loading: authLoading, signInWithGoogle, signOut } = useAuth();
   const { isPro, showPaywall } = usePremium();
   const isOnline = useNetworkStatus();
+  const { maxWidth, isDesktop, isTablet } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
@@ -284,7 +286,9 @@ export default function HomeScreen() {
     } catch (e: any) {
       setServerOk(false);
       if (signals.length === 0) {
-        setSignalsError(e.response?.data?.detail ?? e.message ?? 'Failed to load signals');
+        const detail = e.response?.data?.detail;
+        const msg = typeof detail === 'string' ? detail : detail?.message ?? e.message ?? 'Failed to load signals';
+        setSignalsError(msg);
       }
       return false;
     } finally {
@@ -635,7 +639,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { maxWidth }]}>
       {/* Top loading bar (thin, non-intrusive) */}
       {signalsLoading && <TopLoadingBar color={colors.accent} bgColor={`${colors.textMuted}15`} />}
 

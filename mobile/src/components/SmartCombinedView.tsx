@@ -100,7 +100,8 @@ export default function SmartCombinedView({ ticker, selectedIndicators }: Props)
       setResult(res);
       setActiveTier('normal');
     } catch (e: any) {
-      setError(e.response?.data?.detail ?? e.message ?? 'Failed');
+      const detail = e.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : detail?.message ?? e.message ?? 'Failed');
     }
     setLoading(false);
   };

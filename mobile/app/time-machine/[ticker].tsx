@@ -9,6 +9,7 @@ import type { TimeMachineRange, TimeMachineResponse } from '../../src/types/anal
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { spacing, radius, typography, getDirectionColor, type ThemeColors } from '../../src/theme';
 import { ChevronLeftIcon, ShareIcon } from '../../src/components/ThemeIcons';
+import { useResponsiveLayout } from '../../src/hooks/useResponsiveLayout';
 import { doShare } from '../../src/utils/share';
 
 /* ── Constants ── */
@@ -65,6 +66,7 @@ export default function TimeMachinePage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { maxWidth, isDesktop, isTablet } = useResponsiveLayout();
   const s = useMemo(() => makeStyles(colors), [colors]);
 
   const [range, setRange] = useState<TimeMachineRange | null>(null);
@@ -95,7 +97,8 @@ export default function TimeMachinePage() {
       const res = await api.timeMachine(ticker, date, backtestPeriod);
       setResult(res);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || 'Analysis failed');
+      const detail = e?.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : detail?.message ?? e?.message ?? 'Analysis failed');
     } finally {
       setLoading(false);
     }
@@ -126,7 +129,7 @@ export default function TimeMachinePage() {
   const acc = result?.accuracy;
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { maxWidth }]}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
         {/* ── Header ── */}
         <View style={[s.header, { paddingTop: insets.top + 8 }]}>

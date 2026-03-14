@@ -30,6 +30,7 @@ import { doShare } from '../../src/utils/share';
 import { usePremium } from '../../src/contexts/PremiumContext';
 import UpgradeOverlay from '../../src/components/UpgradeOverlay';
 import PriceChart from '../../src/components/PriceChart';
+import { useResponsiveLayout } from '../../src/hooks/useResponsiveLayout';
 
 const INDICATOR_META: Record<string, { label: string; labelKo: string }> = {
   RSI: { label: 'RSI', labelKo: '과매수/과매도' },
@@ -136,6 +137,7 @@ export default function AnalyzeScreen() {
   const { isPro, showPaywall } = usePremium();
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
+  const { maxWidth, isDesktop, isTablet } = useResponsiveLayout();
   const s = useMemo(() => makeStyles(colors, screenH), [colors, screenH]);
   const router = useRouter();
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
@@ -189,7 +191,8 @@ export default function AnalyzeScreen() {
       hasDataRef.current = true;
     } catch (e: any) {
       if (isInitial) {
-        setError(e.response?.data?.detail ?? e.message ?? '분석 실패');
+        const detail = e.response?.data?.detail;
+        setError(typeof detail === 'string' ? detail : detail?.message ?? e.message ?? 'Analysis failed');
       }
     }
     setLoading(false);
@@ -327,7 +330,7 @@ export default function AnalyzeScreen() {
   const highlights = getIndicatorHighlights(data);
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { maxWidth }]}>
       {periodLoading && <TopLoadingBar color={colors.accent} bgColor={`${colors.textMuted}15`} />}
       <ScrollView
         style={s.scroll}
