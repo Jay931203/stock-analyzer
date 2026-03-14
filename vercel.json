@@ -8,10 +8,6 @@
         "maxLambdaSize": "50mb",
         "maxDuration": 60
       }
-    },
-    {
-      "src": "web/package.json",
-      "use": "@vercel/next"
     }
   ],
   "routes": [
@@ -20,9 +16,6 @@
     { "src": "/share/(.*)", "dest": "/api/index.py" },
     { "src": "/s/(.*)", "dest": "/api/index.py" },
     { "src": "/sitemap\\.xml", "dest": "/api/index.py" },
-    { "src": "/robots\\.txt", "dest": "/api/index.py" },
-    { "handle": "filesystem" },
-    { "handle": "miss" },
-    { "src": "/(.*)", "dest": "/web/$1", "check": true }
+    { "src": "/robots\\.txt", "dest": "/api/index.py" }
   ]
 }
