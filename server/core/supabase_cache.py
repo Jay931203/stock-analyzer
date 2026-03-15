@@ -206,14 +206,17 @@ def write_cached_signals(signals: list[dict]) -> bool:
                 "updated_at": now,
             })
 
-        # Batch insert
+        # Batch insert in chunks (Supabase REST can timeout on large batches)
         ins_url = _rest_url("signal_cache")
-        body = json.dumps(rows).encode()
-        ins_req = urllib.request.Request(
-            ins_url, data=body, method="POST",
-            headers=_headers(prefer="return=minimal"),
-        )
-        urllib.request.urlopen(ins_req, timeout=10)
+        chunk_size = 30
+        for i in range(0, len(rows), chunk_size):
+            chunk = rows[i : i + chunk_size]
+            body = json.dumps(chunk).encode()
+            ins_req = urllib.request.Request(
+                ins_url, data=body, method="POST",
+                headers=_headers(prefer="return=minimal"),
+            )
+            urllib.request.urlopen(ins_req, timeout=15)
         return True
     except Exception as e:
         print(f"Supabase write error: {e}")
