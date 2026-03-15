@@ -1,7 +1,12 @@
+"use client";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2 } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export default function DashboardLoading() {
+  const { t } = useI18n();
+
   return (
     <div className="flex gap-0 h-full">
       {/* Main content */}
@@ -11,10 +16,10 @@ export default function DashboardLoading() {
           <Loader2 className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
           <div>
             <span className="text-sm font-medium text-indigo-300">
-              Loading signals...
+              {t("loading.signals")}
             </span>
             <p className="text-xs text-zinc-500 mt-0.5">
-              This may take up to 30 seconds on first visit while the scanner runs.
+              {t("loading.firstVisit")}
             </p>
           </div>
         </div>

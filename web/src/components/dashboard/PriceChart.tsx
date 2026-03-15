@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { api, type ChartResponse } from "@/lib/api";
 import { Loader2, AlertCircle } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 const CHART_PERIODS = ["1M", "3M", "6M", "1Y", "2Y", "5Y"] as const;
 type ChartPeriod = (typeof CHART_PERIODS)[number];
 
-// Fetch exact period — data = display range
+// Fetch MORE data than displayed so user can scroll left to reveal older candles
 const FETCH_PERIOD_MAP: Record<ChartPeriod, string> = {
   "1M": "3m",
   "3M": "6m",
@@ -46,6 +47,7 @@ interface PriceChartProps {
 }
 
 export function PriceChart({ ticker, className }: PriceChartProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<unknown>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
@@ -82,7 +84,7 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
         if (cancelled || !containerRef.current) return;
 
         if (!data.candles || data.candles.length === 0) {
-          setError("No chart data available");
+          setError(t("chart.noData"));
           setLoading(false);
           return;
         }
@@ -189,8 +191,19 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
           );
         }
 
-        // Fit all data into view
-        chart.timeScale().fitContent();
+        // Show only the display-period worth of bars; user can scroll left for more
+        const visibleBars = PERIOD_BARS[period];
+        const totalCandles = candleData.length;
+
+        if (totalCandles > visibleBars) {
+          const fromIndex = totalCandles - visibleBars;
+          chart.timeScale().setVisibleLogicalRange({
+            from: fromIndex,
+            to: totalCandles - 1,
+          });
+        } else {
+          chart.timeScale().fitContent();
+        }
 
         // Resize observer
         const obs = new ResizeObserver((entries) => {
@@ -232,13 +245,14 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
     <div className={cn("space-y-3", className)}>
       {/* Period selector + Legend */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 p-1 bg-zinc-800/50 rounded-lg">
+        <div className="flex items-center gap-1 p-1 bg-zinc-800/50 rounded-lg" role="group" aria-label="Chart time period">
           {CHART_PERIODS.map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
+              aria-pressed={period === p}
               className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
+                "px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none",
                 period === p
                   ? "bg-zinc-700 text-zinc-100 shadow-sm"
                   : "text-zinc-500 hover:text-zinc-300",
@@ -261,14 +275,14 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
       </div>
 
       {/* Chart container */}
-      <div className="relative w-full rounded-lg overflow-hidden" style={{ height: 400 }}>
+      <div className="relative w-full rounded-lg overflow-hidden" style={{ height: 400 }} aria-label={`Price chart for ${ticker}`} role="img">
         <div ref={containerRef} className="w-full h-full" />
 
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 z-10 rounded-lg">
             <div className="flex flex-col items-center gap-2">
-              <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
-              <span className="text-xs text-zinc-500">Loading chart...</span>
+              <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" aria-hidden="true" />
+              <span className="text-xs text-zinc-500">{t("chart.loadingChart")}</span>
             </div>
           </div>
         )}
@@ -276,13 +290,13 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
         {error && !loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/90 z-10 rounded-lg">
             <div className="flex flex-col items-center gap-3 text-center px-4">
-              <AlertCircle className="w-8 h-8 text-red-400" />
+              <AlertCircle className="w-8 h-8 text-red-400" aria-hidden="true" />
               <p className="text-sm text-zinc-400">{error}</p>
               <button
                 onClick={() => setPeriod(period)}
-                className="text-xs text-indigo-400 hover:text-indigo-300 underline"
+                className="text-xs text-indigo-400 hover:text-indigo-300 underline focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none rounded"
               >
-                Retry
+                {t("common.retry")}
               </button>
             </div>
           </div>

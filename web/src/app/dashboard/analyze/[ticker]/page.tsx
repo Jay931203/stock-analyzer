@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,7 @@ import {
   Check,
   History,
 } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -70,28 +71,25 @@ const DEFAULT_SELECTED = new Set([
 const TIER_ORDER = ["strict", "normal", "relaxed"] as const;
 type TierKey = (typeof TIER_ORDER)[number];
 
-const TIER_META: Record<TierKey, { label: string; description: string }> = {
-  strict: {
-    label: "Strict",
-    description: "Tightest conditions, fewest matches, most specific",
-  },
-  normal: {
-    label: "Normal",
-    description: "Balanced conditions (recommended)",
-  },
-  relaxed: {
-    label: "Relaxed",
-    description: "Widest conditions, most matches, less specific",
-  },
+const TIER_META_KEYS: Record<TierKey, { labelKey: string; descKey: string }> = {
+  strict: { labelKey: "analysis.strict", descKey: "analysis.strictDesc" },
+  normal: { labelKey: "analysis.normal", descKey: "analysis.normalDesc" },
+  relaxed: { labelKey: "analysis.relaxed", descKey: "analysis.relaxedDesc" },
+};
+
+const TIER_META: Record<TierKey, { label: string; desc: string }> = {
+  strict: { label: "Strict", desc: "Exact pattern matches only" },
+  normal: { label: "Normal", desc: "Standard similarity threshold" },
+  relaxed: { label: "Relaxed", desc: "Broader pattern matching" },
 };
 
 const FORWARD_PERIODS = ["5", "10", "20", "60", "120", "252"] as const;
 
 const PRESET_DATES = [
   { date: "2020-03-23", label: "COVID Bottom" },
-  { date: "2022-01-24", label: "Rate Shock" },
-  { date: "2023-10-27", label: "Oct 2023 Low" },
-  { date: "2024-11-06", label: "2024 Election" },
+  { date: "2024-08-05", label: "Yen Carry Unwind" },
+  { date: "2025-01-27", label: "DeepSeek Crash" },
+  { date: "2024-11-05", label: "2024 Election" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -108,9 +106,16 @@ interface IndicatorDisplayItem {
   occurrences: number;
 }
 
+interface SmartTierCase {
+  date: string;
+  entry_price: number;
+  returns: Record<string, number>;
+}
+
 interface SmartTierData {
   occurrences: number;
   periods: Record<string, PeriodStats>;
+  cases?: SmartTierCase[];
 }
 
 interface SmartResult {
@@ -465,7 +470,8 @@ function TierCard({
   isActive: boolean;
   onClick: () => void;
 }) {
-  const meta = TIER_META[tierKey];
+  const { t } = useI18n();
+  const metaKeys = TIER_META_KEYS[tierKey];
   const isEmpty = !tierData || tierData.occurrences === 0;
 
   return (
@@ -488,13 +494,13 @@ function TierCard({
             isActive ? "text-zinc-100" : "text-zinc-400",
           )}
         >
-          {meta.label}
+          {t(metaKeys.labelKey as any)}
         </span>
         {isBest && (
           <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
         )}
       </div>
-      <div className="text-xs text-zinc-500">{meta.description}</div>
+      <div className="text-xs text-zinc-500">{t(metaKeys.descKey as any)}</div>
       <div
         className={cn(
           "mt-2 text-lg font-mono font-bold tabular-nums",
@@ -502,13 +508,13 @@ function TierCard({
         )}
       >
         {isEmpty ? "0" : tierData.occurrences}
-        <span className="text-xs font-normal text-zinc-500 ml-1">matches</span>
+        <span className="text-xs font-normal text-zinc-500 ml-1">{t("analysis.matches")}</span>
       </div>
     </button>
   );
 }
 
-/** Time machine mini-card for preset date */
+/** Time machine mini-card for preset date — lazy-loaded via IntersectionObserver */
 function TimeMachinePreviewCard({
   presetDate,
   presetLabel,
@@ -521,8 +527,29 @@ function TimeMachinePreviewCard({
   const [data, setData] = useState<TimeMachineResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
+  // IntersectionObserver: only mark visible once, then disconnect
   useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Only fetch when scrolled into view
+  useEffect(() => {
+    if (!isVisible) return;
     let cancelled = false;
     setLoading(true);
     setError(false);
@@ -542,11 +569,11 @@ function TimeMachinePreviewCard({
     return () => {
       cancelled = true;
     };
-  }, [ticker, presetDate]);
+  }, [ticker, presetDate, isVisible]);
 
-  if (loading) {
+  if (!isVisible || loading) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 animate-pulse min-h-[100px]">
+      <div ref={cardRef} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 animate-pulse min-h-[100px]">
         <div className="w-24 h-4 bg-zinc-800 rounded mb-2" />
         <div className="w-32 h-3 bg-zinc-800 rounded mb-3" />
         <div className="w-20 h-5 bg-zinc-800 rounded" />
@@ -556,7 +583,7 @@ function TimeMachinePreviewCard({
 
   if (error || !data) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 min-h-[100px]">
+      <div ref={cardRef} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 min-h-[100px]">
         <div className="text-xs font-semibold text-zinc-400 mb-1">
           {presetLabel}
         </div>
@@ -631,6 +658,7 @@ function TimeMachinePreviewCard({
 // ---------------------------------------------------------------------------
 
 export default function AnalyzePage() {
+  const { t } = useI18n();
   const params = useParams<{ ticker: string }>();
   const router = useRouter();
   const ticker = (params.ticker || "").toUpperCase();
@@ -651,6 +679,9 @@ export default function AnalyzePage() {
 
   // Individual indicators collapsible
   const [indicatorsExpanded, setIndicatorsExpanded] = useState(false);
+
+  // Historical cases expandable
+  const [casesExpanded, setCasesExpanded] = useState(false);
 
   // Indicator probability period selector
   const [indicatorPeriod, setIndicatorPeriod] = useState<IndicatorPeriod>("20");
@@ -820,13 +851,13 @@ export default function AnalyzePage() {
             onClick={fetchAnalysis}
             className="px-4 py-2 rounded-lg bg-zinc-800 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
           >
-            Retry
+            {t("common.retry")}
           </button>
           <Link
             href="/dashboard"
             className="px-4 py-2 rounded-lg bg-zinc-800 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
           >
-            Back to Scanner
+            {t("analysis.backToScanner")}
           </Link>
         </div>
       </div>
@@ -855,12 +886,12 @@ export default function AnalyzePage() {
           href="/dashboard"
           className="hover:text-zinc-300 transition-colors"
         >
-          Scanner
+          {t("nav.scanner")}
         </Link>
         <ChevronRight className="w-3 h-3" />
         <span className="font-mono font-semibold text-zinc-300">{ticker}</span>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-zinc-400">Analysis</span>
+        <span className="text-zinc-400">{t("nav.analysis")}</span>
       </nav>
 
       {/* Top section: ticker info + price - Bloomberg-style */}
@@ -870,7 +901,7 @@ export default function AnalyzePage() {
             <button
               onClick={() => router.push("/dashboard")}
               className="flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all duration-200 mt-0.5 shrink-0"
-              aria-label="Back to scanner"
+              aria-label={t("analysis.backToScanner")}
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -1005,10 +1036,10 @@ export default function AnalyzePage() {
             <Target className="w-5 h-5 text-indigo-400 shrink-0" />
             <div>
               <h2 className="text-sm font-semibold text-zinc-200">
-                Combined Signal
+                {t("analysis.combinedSignal")}
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
-                Select indicators to customize the combined probability
+                {t("analysis.selectIndicators")}
               </p>
             </div>
             {smartLoading && (
@@ -1037,10 +1068,10 @@ export default function AnalyzePage() {
                   )}
                   title={
                     wouldBeUnderMin
-                      ? "Minimum 2 indicators required"
+                      ? t("analysis.minIndicators")
                       : isSelected
-                        ? `Remove ${key} from combined signal`
-                        : `Add ${key} to combined signal`
+                        ? t("analysis.removeIndicator").replace("{key}", key)
+                        : t("analysis.addIndicator").replace("{key}", key)
                   }
                 >
                   {isSelected && <Check className="w-3 h-3 text-indigo-400" />}
@@ -1066,6 +1097,7 @@ export default function AnalyzePage() {
                     onClick={() => {
                       if (smartResult.tiers[tk]?.occurrences > 0) {
                         setActiveTier(tk);
+                        setCasesExpanded(false);
                       }
                     }}
                   />
@@ -1078,16 +1110,16 @@ export default function AnalyzePage() {
               <div className="px-5 pb-5 space-y-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-semibold text-zinc-200">
-                    {TIER_META[activeTier].label}
+                    {t(TIER_META_KEYS[activeTier].labelKey as any)}
                   </span>
                   {smartResult.best_tier === activeTier && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                       <Star className="w-2.5 h-2.5 fill-amber-400" />
-                      Recommended
+                      {t("analysis.recommended")}
                     </span>
                   )}
                   <span className="text-xs text-zinc-500 font-mono ml-auto tabular-nums">
-                    {activeTierData.occurrences} historical matches
+                    {activeTierData.occurrences} {t("analysis.matches")}
                   </span>
                 </div>
 
@@ -1100,7 +1132,7 @@ export default function AnalyzePage() {
                     if (!pd) return null;
                     return (
                       <div key={fp} className="flex items-center gap-4">
-                        <WinRateBar label={fp === "252" ? "1Y" : `${fp}d`} value={pd.win_rate} />
+                        <WinRateBar label={INDICATOR_PERIOD_LABELS[fp]} value={pd.win_rate} />
                         <span
                           className={cn(
                             "text-xs font-mono font-semibold w-16 text-right shrink-0 tabular-nums",
@@ -1116,6 +1148,91 @@ export default function AnalyzePage() {
                     );
                   })}
                 </div>
+
+                {/* Historical Cases */}
+                {activeTierData?.cases && activeTierData.cases.length > 0 && (
+                  <div className="mt-4">
+                    <button
+                      onClick={() => setCasesExpanded(!casesExpanded)}
+                      className="flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                    >
+                      <ChevronDown
+                        className={cn(
+                          "w-4 h-4 transition-transform duration-200",
+                          casesExpanded && "rotate-180",
+                        )}
+                      />
+                      View {activeTierData.cases.length} historical cases
+                    </button>
+
+                    {casesExpanded && (
+                      <div className="mt-3 max-h-[400px] overflow-y-auto rounded-lg border border-zinc-800">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-zinc-900 z-10">
+                            <tr className="border-b border-zinc-800">
+                              <th className="px-3 py-2 text-left text-zinc-500 font-medium">Date</th>
+                              <th className="px-3 py-2 text-right text-zinc-500 font-medium">Entry Price</th>
+                              <th className="px-3 py-2 text-right text-zinc-500 font-medium">1W</th>
+                              <th className="px-3 py-2 text-right text-zinc-500 font-medium">1M</th>
+                              <th className="px-3 py-2 text-right text-zinc-500 font-medium">3M</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {activeTierData.cases.map((c, i) => (
+                              <tr
+                                key={i}
+                                className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors"
+                              >
+                                <td className="px-3 py-2 font-mono text-zinc-300">
+                                  {c.date}
+                                </td>
+                                <td className="px-3 py-2 text-right font-mono text-zinc-400">
+                                  ${c.entry_price.toFixed(2)}
+                                </td>
+                                <td
+                                  className={cn(
+                                    "px-3 py-2 text-right font-mono",
+                                    (c.returns["5"] ?? 0) >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400",
+                                  )}
+                                >
+                                  {c.returns["5"] != null
+                                    ? `${c.returns["5"] >= 0 ? "+" : ""}${c.returns["5"].toFixed(1)}%`
+                                    : "\u2014"}
+                                </td>
+                                <td
+                                  className={cn(
+                                    "px-3 py-2 text-right font-mono",
+                                    (c.returns["20"] ?? 0) >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400",
+                                  )}
+                                >
+                                  {c.returns["20"] != null
+                                    ? `${c.returns["20"] >= 0 ? "+" : ""}${c.returns["20"].toFixed(1)}%`
+                                    : "\u2014"}
+                                </td>
+                                <td
+                                  className={cn(
+                                    "px-3 py-2 text-right font-mono",
+                                    (c.returns["60"] ?? 0) >= 0
+                                      ? "text-emerald-400"
+                                      : "text-red-400",
+                                  )}
+                                >
+                                  {c.returns["60"] != null
+                                    ? `${c.returns["60"] >= 0 ? "+" : ""}${c.returns["60"].toFixed(1)}%`
+                                    : "\u2014"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="px-5 pb-5 text-center py-6">

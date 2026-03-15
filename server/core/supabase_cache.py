@@ -21,7 +21,8 @@ _SIGNAL_FIELDS = [
     "ticker", "price", "change_pct", "sector",
     "win_rate_5d", "win_rate_20d", "win_rate_60d",
     "win_rate_120d", "win_rate_252d",
-    "avg_return_20d", "avg_return_120d", "avg_return_252d",
+    "avg_return_5d", "avg_return_20d", "avg_return_60d",
+    "avg_return_120d", "avg_return_252d",
     "occurrences", "condition", "indicators_used", "strength", "tier",
     "volume_ratio", "volume_level",
     "updated_at",
@@ -109,7 +110,7 @@ def read_cached_signals() -> dict | None:
         return None
 
     try:
-        url = _rest_url("signal_cache?select=ticker,price,change_pct,sector,win_rate_5d,win_rate_20d,win_rate_60d,avg_return_20d,occurrences,condition,indicators_used,strength,tier,updated_at&order=strength.desc")
+        url = _rest_url("signal_cache?select=ticker,price,change_pct,sector,win_rate_5d,win_rate_20d,win_rate_60d,win_rate_120d,win_rate_252d,avg_return_5d,avg_return_20d,avg_return_60d,avg_return_120d,avg_return_252d,occurrences,condition,indicators_used,strength,tier,volume_ratio,volume_level,updated_at&order=strength.desc")
         req = urllib.request.Request(url, headers=_headers())
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
@@ -180,7 +181,7 @@ def write_cached_signals(signals: list[dict]) -> bool:
         del_req = urllib.request.Request(del_url, method="DELETE", headers=_headers())
         urllib.request.urlopen(del_req, timeout=10)
 
-        # Build rows — only include columns that exist in the table
+        # Build rows — include all period columns for full cache persistence
         rows = []
         for sig in signals:
             rows.append({
@@ -191,12 +192,20 @@ def write_cached_signals(signals: list[dict]) -> bool:
                 "win_rate_5d": sig["win_rate_5d"],
                 "win_rate_20d": sig["win_rate_20d"],
                 "win_rate_60d": sig["win_rate_60d"],
+                "win_rate_120d": sig.get("win_rate_120d", 50.0),
+                "win_rate_252d": sig.get("win_rate_252d", 50.0),
+                "avg_return_5d": sig.get("avg_return_5d", 0),
                 "avg_return_20d": sig.get("avg_return_20d", 0),
+                "avg_return_60d": sig.get("avg_return_60d", 0),
+                "avg_return_120d": sig.get("avg_return_120d", 0),
+                "avg_return_252d": sig.get("avg_return_252d", 0),
                 "occurrences": sig["occurrences"],
                 "condition": sig.get("condition", ""),
                 "indicators_used": sig.get("indicators_used", 0),
                 "strength": sig["strength"],
                 "tier": sig.get("tier", "normal"),
+                "volume_ratio": sig.get("volume_ratio", 1.0),
+                "volume_level": sig.get("volume_level", "normal"),
                 "updated_at": now,
             })
 

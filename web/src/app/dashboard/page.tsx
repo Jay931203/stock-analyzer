@@ -27,11 +27,11 @@ import type { TranslationKey } from "@/lib/i18n";
 // ---------------------------------------------------------------------------
 
 const PERIODS = [
-  { value: "1y", label: "1Y", desc: "1 Year" },
-  { value: "2y", label: "2Y", desc: "2 Years" },
-  { value: "3y", label: "3Y", desc: "3 Years" },
-  { value: "5y", label: "5Y", desc: "5 Years" },
-  { value: "10y", label: "10Y", desc: "10 Years" },
+  { value: "1y", label: "1Y", descKey: "period.1y" as TranslationKey },
+  { value: "2y", label: "2Y", descKey: "period.2y" as TranslationKey },
+  { value: "3y", label: "3Y", descKey: "period.3y" as TranslationKey },
+  { value: "5y", label: "5Y", descKey: "period.5y" as TranslationKey },
+  { value: "10y", label: "10Y", descKey: "period.10y" as TranslationKey },
 ] as const;
 
 type Period = (typeof PERIODS)[number]["value"];
@@ -74,10 +74,24 @@ function sectorToFilterKey(sector: string, ticker: string): SectorFilterKey {
 // Relative time helper
 // ---------------------------------------------------------------------------
 
-function getRelativeTime(iso: string): string {
+function getRelativeTime(iso: string, locale: string): string {
   const now = Date.now();
   const then = new Date(iso).getTime();
   const diffSec = Math.floor((now - then) / 1000);
+
+  if (locale === "ko") {
+    if (diffSec < 60) return "방금";
+    if (diffSec < 3600) {
+      const m = Math.floor(diffSec / 60);
+      return `${m}분 전`;
+    }
+    if (diffSec < 86400) {
+      const h = Math.floor(diffSec / 3600);
+      return `${h}시간 전`;
+    }
+    const d = Math.floor(diffSec / 86400);
+    return `${d}일 전`;
+  }
 
   if (diffSec < 60) return "just now";
   if (diffSec < 3600) {
@@ -96,7 +110,7 @@ function getRelativeTime(iso: string): string {
 // Market state helper
 // ---------------------------------------------------------------------------
 
-function getMarketState(): { label: string; color: string; isClosed: boolean } {
+function getMarketState(locale: string): { label: string; color: string; isClosed: boolean } {
   const now = new Date();
   const et = new Date(
     now.toLocaleString("en-US", { timeZone: "America/New_York" }),
@@ -106,14 +120,18 @@ function getMarketState(): { label: string; color: string; isClosed: boolean } {
   const day = et.getDay();
   const mins = h * 60 + m;
 
-  if (day === 0 || day === 6) return { label: "Closed", color: "text-zinc-500", isClosed: true };
+  const labels = locale === "ko"
+    ? { closed: "장 마감", open: "장 개장", pre: "프리마켓", after: "시간 외 거래" }
+    : { closed: "Closed", open: "Market Open", pre: "Pre-Market", after: "After Hours" };
+
+  if (day === 0 || day === 6) return { label: labels.closed, color: "text-zinc-500", isClosed: true };
   if (mins >= 570 && mins < 960)
-    return { label: "Market Open", color: "text-emerald-400", isClosed: false };
+    return { label: labels.open, color: "text-emerald-400", isClosed: false };
   if (mins >= 240 && mins < 570)
-    return { label: "Pre-Market", color: "text-amber-400", isClosed: false };
+    return { label: labels.pre, color: "text-amber-400", isClosed: false };
   if (mins >= 960 && mins < 1200)
-    return { label: "After Hours", color: "text-amber-400", isClosed: false };
-  return { label: "Closed", color: "text-zinc-500", isClosed: true };
+    return { label: labels.after, color: "text-amber-400", isClosed: false };
+  return { label: labels.closed, color: "text-zinc-500", isClosed: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +154,7 @@ const FILTER_CHIP_COLORS: Record<SectorFilterKey, { active: string; dot: string 
 // ---------------------------------------------------------------------------
 
 export default function ScannerPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [signals, setSignals] = useState<Signal[]>([]);
   const [totalSignals, setTotalSignals] = useState<number | undefined>();
   const [marketStateLabel, setMarketStateLabel] = useState<string | null>(null);
@@ -150,19 +168,19 @@ export default function ScannerPage() {
 
   const [localMarketState, setLocalMarketState] = useState<ReturnType<typeof getMarketState> | null>(null);
   useEffect(() => {
-    setLocalMarketState(getMarketState());
-  }, []);
+    setLocalMarketState(getMarketState(locale));
+  }, [locale]);
 
   // Relative time ticker
   const [relativeTime, setRelativeTime] = useState<string>("");
   useEffect(() => {
     if (!lastUpdated) return;
-    setRelativeTime(getRelativeTime(lastUpdated));
+    setRelativeTime(getRelativeTime(lastUpdated, locale));
     const interval = setInterval(() => {
-      setRelativeTime(getRelativeTime(lastUpdated));
+      setRelativeTime(getRelativeTime(lastUpdated, locale));
     }, 30_000);
     return () => clearInterval(interval);
-  }, [lastUpdated]);
+  }, [lastUpdated, locale]);
 
   const fetchSignals = useCallback(
     async (showRefresh = false) => {
@@ -273,7 +291,7 @@ export default function ScannerPage() {
                 "w-2 h-2 fill-current",
                 !(localMarketState?.isClosed ?? true) && "animate-pulse-dot",
               )} />
-              {marketStateLabel || localMarketState?.label || "Loading..."}
+              {marketStateLabel || localMarketState?.label || t("common.loading")}
             </span>
 
             {/* Divider */}
@@ -339,7 +357,7 @@ export default function ScannerPage() {
                 })}
               >
                 <Clock className="w-3 h-3" />
-                <span className="tabular-nums">{relativeTime || "just now"}</span>
+                <span className="tabular-nums">{relativeTime || t("dashboard.justNow")}</span>
                 {scanned > 0 && (
                   <span className="text-zinc-600 ml-0.5">
                     ({scanned.toLocaleString()} {t("dashboard.scannedSuffix")})
@@ -363,7 +381,7 @@ export default function ScannerPage() {
                 <button
                   key={p.value}
                   onClick={() => setPeriod(p.value)}
-                  title={p.desc}
+                  title={t(p.descKey)}
                   className={cn(
                     "px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-semibold transition-all duration-200",
                     period === p.value

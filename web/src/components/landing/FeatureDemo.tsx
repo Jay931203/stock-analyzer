@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -453,8 +453,34 @@ function TimeMachineTab() {
 /* FeatureDemo (main export)                                           */
 /* ------------------------------------------------------------------ */
 
+const AUTO_CYCLE_INTERVAL = 5000;
+
 export function FeatureDemo() {
   const [activeTab, setActiveTab] = useState<TabId>("scanner");
+  const [isPaused, setIsPaused] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cycleToNext = useCallback(() => {
+    setActiveTab((prev) => {
+      const idx = TABS.findIndex((t) => t.id === prev);
+      return TABS[(idx + 1) % TABS.length].id;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (isPaused) return;
+    timerRef.current = setInterval(cycleToNext, AUTO_CYCLE_INTERVAL);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isPaused, cycleToNext]);
+
+  const handleTabClick = (id: TabId) => {
+    setActiveTab(id);
+    // Reset the timer when user manually selects a tab
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(cycleToNext, AUTO_CYCLE_INTERVAL);
+  };
 
   return (
     <div className="relative group/demo">
@@ -462,7 +488,11 @@ export function FeatureDemo() {
       <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-primary/20 via-primary/5 to-transparent opacity-0 group-hover/demo:opacity-100 transition-opacity duration-500 blur-sm" />
       <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-primary/20 via-transparent to-transparent animate-border-glow" />
 
-      <div className="relative rounded-xl border border-border bg-card overflow-hidden">
+      <div
+        className="relative rounded-xl border border-border bg-card overflow-hidden"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+      >
         {/* Tab bar */}
         <div className="flex items-center border-b border-border bg-muted/30">
           {/* Window controls */}
@@ -480,7 +510,7 @@ export function FeatureDemo() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabClick(tab.id)}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-3.5 text-sm font-medium transition-all duration-200 relative",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
@@ -493,9 +523,17 @@ export function FeatureDemo() {
               >
                 <Icon className={cn("h-3.5 w-3.5", isActive && "text-primary")} />
                 <span className="hidden sm:inline">{tab.label}</span>
-                {/* Active indicator */}
+                {/* Active indicator with auto-cycle progress */}
                 {isActive && (
-                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />
+                  <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full overflow-hidden bg-primary/20">
+                    <span
+                      className={cn(
+                        "block h-full bg-primary rounded-full",
+                        isPaused ? "animate-none" : "animate-tab-progress",
+                      )}
+                      key={`${tab.id}-${activeTab}`}
+                    />
+                  </span>
                 )}
               </button>
             );

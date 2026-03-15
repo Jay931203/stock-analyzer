@@ -305,7 +305,10 @@ export interface TimeMachineResponse {
 const API_BASE = "/api";
 
 class StockAPI {
-  /** Fetch with sessionStorage caching for faster repeat loads */
+  /** In-flight request deduplication map: URL -> Promise */
+  private inflight = new Map<string, Promise<unknown>>();
+
+  /** Fetch with sessionStorage caching + request deduplication */
   private async fetchWithCache<T>(path: string, ttlMs: number = 300000, force: boolean = false): Promise<T> {
     const cacheKey = `sc:${path}`;
     if (!force && typeof window !== "undefined") {
@@ -319,18 +322,47 @@ class StockAPI {
         }
       }
     }
-    const result = await this.fetch<T>(path);
-    if (typeof window !== "undefined") {
-      try {
-        sessionStorage.setItem(
-          cacheKey,
-          JSON.stringify({ data: result, ts: Date.now() }),
-        );
-      } catch {
-        // sessionStorage full — silently ignore
+
+    // Deduplication: if the same path is already in-flight, return the same promise
+    const dedupeKey = `${path}:${force}`;
+    if (this.inflight.has(dedupeKey)) {
+      return this.inflight.get(dedupeKey) as Promise<T>;
+    }
+
+    const promise = this.fetch<T>(path)
+      .then((result) => {
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem(
+              cacheKey,
+              JSON.stringify({ data: result, ts: Date.now() }),
+            );
+          } catch {
+            // sessionStorage full — silently ignore
+          }
+        }
+        return result;
+      })
+      .finally(() => {
+        this.inflight.delete(dedupeKey);
+      });
+
+    this.inflight.set(dedupeKey, promise);
+    return promise;
+  }
+
+  /** Clear cached entries by path prefix (e.g. "/chart/" or "/signals") */
+  clearCache(pathPrefix?: string) {
+    if (typeof window === "undefined") return;
+    const prefix = pathPrefix ? `sc:${pathPrefix}` : "sc:";
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith(prefix)) {
+        keysToRemove.push(key);
       }
     }
-    return result;
+    keysToRemove.forEach((k) => sessionStorage.removeItem(k));
   }
 
   private async fetch<T>(path: string, init?: RequestInit): Promise<T> {

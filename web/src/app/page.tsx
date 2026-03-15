@@ -19,6 +19,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FeatureDemo } from "@/components/landing/FeatureDemo";
+import { Testimonials } from "@/components/landing/Testimonials";
+import { FAQ } from "@/components/landing/FAQ";
+import { NewsletterSignup } from "@/components/landing/NewsletterSignup";
 
 /* ------------------------------------------------------------------ */
 /* Feature cards data                                                 */
@@ -158,7 +161,7 @@ const FOOTER_LINKS = {
     { label: "Getting Started", href: "#" },
     { label: "Signal Guide", href: "#" },
     { label: "Indicator Library", href: "#" },
-    { label: "FAQ", href: "#" },
+    { label: "FAQ", href: "#faq" },
     { label: "Blog", href: "#" },
   ],
   Legal: [
@@ -254,8 +257,13 @@ export default function LandingPage() {
             <span className="text-foreground font-medium">probabilities</span>.
           </p>
 
-          {/* Social proof stats */}
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+          {/* Social proof */}
+          <p className="mt-8 text-sm font-medium text-foreground/80">
+            Join <span className="text-primary font-semibold">500+</span> traders already using Stock Scanner
+          </p>
+
+          {/* Stats */}
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <Database className="h-3.5 w-3.5 text-primary" />
               <span>150+ stocks analyzed</span>
@@ -478,6 +486,11 @@ export default function LandingPage() {
       </section>
 
       {/* ============================================================ */}
+      {/* TESTIMONIALS                                                 */}
+      {/* ============================================================ */}
+      <Testimonials />
+
+      {/* ============================================================ */}
       {/* PRICING                                                      */}
       {/* ============================================================ */}
       <section id="pricing" className="border-t border-border py-24 sm:py-32">
@@ -507,7 +520,7 @@ export default function LandingPage() {
               >
                 {plan.highlighted && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                    <Badge className="px-3 py-1 shadow-lg shadow-primary/20 text-xs font-semibold">
+                    <Badge className="px-3 py-1 shadow-lg shadow-primary/20 text-xs font-semibold animate-badge-pulse">
                       Most Popular
                     </Badge>
                   </div>
@@ -573,6 +586,11 @@ export default function LandingPage() {
       </section>
 
       {/* ============================================================ */}
+      {/* FAQ                                                          */}
+      {/* ============================================================ */}
+      <FAQ />
+
+      {/* ============================================================ */}
       {/* FOOTER                                                       */}
       {/* ============================================================ */}
       <footer className="border-t border-border bg-card/30">
@@ -591,6 +609,17 @@ export default function LandingPage() {
                 AI-powered technical analysis tools that help traders make
                 data-driven decisions with transparent, probability-based signals.
               </p>
+              {/* Newsletter signup */}
+              <div className="mt-6">
+                <p className="text-sm font-medium text-foreground mb-2">
+                  Stay in the loop
+                </p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Weekly market insights and product updates. No spam.
+                </p>
+                <NewsletterSignup />
+              </div>
+
               <div className="mt-6 flex items-center gap-2">
                 <Badge variant="outline" className="gap-1 text-xs">
                   <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-dot" />

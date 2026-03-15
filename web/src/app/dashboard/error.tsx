@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AlertTriangle, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
 
 export default function DashboardError({
   error,
@@ -11,6 +12,8 @@ export default function DashboardError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="flex items-center justify-center h-full px-4 py-16">
       <div className="text-center max-w-md">
@@ -20,17 +23,17 @@ export default function DashboardError({
         </div>
 
         <h1 className="text-xl font-semibold text-foreground">
-          Something went wrong
+          {t("error.title")}
         </h1>
 
         {/* Error message */}
         <div className="mt-4 rounded-lg bg-muted/50 border border-border px-4 py-3">
           <p className="text-sm text-muted-foreground break-words">
-            {error.message || "An unexpected error occurred. Please try again."}
+            {error.message || t("error.unexpected")}
           </p>
           {error.digest && (
             <p className="mt-2 text-xs text-muted-foreground/60 font-mono">
-              Error ID: {error.digest}
+              {t("error.errorId")} {error.digest}
             </p>
           )}
         </div>
@@ -39,19 +42,19 @@ export default function DashboardError({
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
           <Button onClick={reset} className="gap-2">
             <RefreshCw className="h-4 w-4" />
-            Try Again
+            {t("error.tryAgain")}
           </Button>
           <Link
             href="/dashboard"
             className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background border border-border bg-transparent hover:bg-secondary hover:text-secondary-foreground h-10 px-4 py-2"
           >
             <Search className="h-4 w-4" />
-            Go to Scanner
+            {t("error.goToScanner")}
           </Link>
         </div>
 
         <p className="mt-8 text-xs text-muted-foreground/50">
-          If this problem persists, please contact support.
+          {t("error.persistContact")}
         </p>
       </div>
     </div>

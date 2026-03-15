@@ -1,7 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { BarChart3, Home, Search } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export default function NotFound() {
+  const { t } = useI18n();
+
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
       <div className="text-center max-w-md">
@@ -18,10 +23,10 @@ export default function NotFound() {
         </div>
 
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Page Not Found
+          {t("notFound.title")}
         </h1>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-          The page you&apos;re looking for doesn&apos;t exist or has been moved.
+          {t("notFound.description")}
         </p>
 
         {/* Actions */}
@@ -31,20 +36,20 @@ export default function NotFound() {
             className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
           >
             <Search className="h-4 w-4" />
-            Go to Scanner
+            {t("notFound.goToScanner")}
           </Link>
           <Link
             href="/"
             className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background border border-border bg-transparent hover:bg-secondary hover:text-secondary-foreground h-10 px-4 py-2"
           >
             <Home className="h-4 w-4" />
-            Back to Home
+            {t("notFound.backToHome")}
           </Link>
         </div>
 
         {/* Decorative bottom text */}
         <p className="mt-12 text-xs text-muted-foreground/50">
-          Stock Scanner — AI-Powered Signal Analysis
+          {t("notFound.tagline")}
         </p>
       </div>
     </div>
