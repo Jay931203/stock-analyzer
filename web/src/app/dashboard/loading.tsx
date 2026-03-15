@@ -1,13 +1,22 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { Loader2 } from "lucide-react";
 
 export default function DashboardLoading() {
   return (
     <div className="flex gap-0 h-full">
       {/* Main content */}
       <div className="flex-1 min-w-0 p-6 overflow-y-auto">
-        {/* Market closed banner skeleton */}
-        <div className="mb-4">
-          <Skeleton className="h-16 w-full rounded-xl" />
+        {/* Loading progress indicator */}
+        <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-500/5 border border-indigo-500/15">
+          <Loader2 className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
+          <div>
+            <span className="text-sm font-medium text-indigo-300">
+              Loading signals...
+            </span>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              This may take up to 30 seconds on first visit while the scanner runs.
+            </p>
+          </div>
         </div>
 
         {/* Header skeleton */}

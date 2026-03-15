@@ -15,8 +15,6 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronRight,
-  ChevronLeft,
-  Lock,
   Loader2,
   AlertCircle,
   ArrowLeft,
@@ -42,6 +40,15 @@ interface IndicatorDisplayItem {
   occurrences: number;
 }
 
+/** Resolve a period from the probability periods object.
+ *  The API returns keys like "5", "20", "60" (plain numbers)
+ *  but some legacy code may use "5d", "20d", etc. Try both. */
+function resolvePeriod(periods: Record<string, { win_rate: number; avg_return: number; samples: number }> | undefined, key: string) {
+  if (!periods) return undefined;
+  // Try plain number first (API format), then with "d" suffix (legacy)
+  return periods[key] ?? periods[`${key}d`];
+}
+
 /** Extract display-friendly indicator list from the nested indicators object */
 function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   const items: IndicatorDisplayItem[] = [];
@@ -50,7 +57,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // RSI
   if (ind.rsi) {
     const prob = ind.rsi.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     items.push({
       name: "RSI",
       value: ind.rsi.value != null ? ind.rsi.value.toFixed(1) : "--",
@@ -67,7 +74,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // MACD
   if (ind.macd) {
     const prob = ind.macd.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     items.push({
       name: "MACD",
       value: ind.macd.macd != null ? ind.macd.macd.toFixed(2) : "--",
@@ -84,7 +91,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // Moving Averages
   if (ind.ma) {
     const prob = ind.ma.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     items.push({
       name: "Moving Averages",
       value: ind.ma.alignment || "--",
@@ -101,7 +108,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // Bollinger Bands
   if (ind.bb) {
     const prob = ind.bb.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     items.push({
       name: "Bollinger Bands",
       value: ind.bb.zone || (ind.bb.position != null ? `${(ind.bb.position * 100).toFixed(0)}%` : "--"),
@@ -118,7 +125,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // Volume
   if (ind.volume) {
     const prob = ind.volume.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     const ratio = ind.volume.ratio;
     items.push({
       name: "Volume",
@@ -136,7 +143,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // Stochastic
   if (ind.stochastic) {
     const prob = ind.stochastic.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     items.push({
       name: "Stochastic",
       value: ind.stochastic.k != null ? ind.stochastic.k.toFixed(1) : "--",
@@ -153,7 +160,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // Drawdown
   if (ind.drawdown) {
     const prob = ind.drawdown.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     const dd = ind.drawdown.from_252d_high;
     items.push({
       name: "Drawdown",
@@ -171,7 +178,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // ADX
   if (ind.adx) {
     const prob = ind.adx.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     items.push({
       name: "ADX",
       value: ind.adx.adx != null ? ind.adx.adx.toFixed(1) : "--",
@@ -188,7 +195,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // ATR
   if (ind.atr) {
     const prob = ind.atr.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     items.push({
       name: "ATR",
       value: ind.atr.atr_pct != null ? `${ind.atr.atr_pct.toFixed(2)}%` : "--",
@@ -203,7 +210,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // MA Distance
   if (ind.ma_distance) {
     const prob = ind.ma_distance.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     const d20 = ind.ma_distance.from_sma20;
     items.push({
       name: "MA Distance",
@@ -221,7 +228,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // Consecutive
   if (ind.consecutive) {
     const prob = ind.consecutive.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     items.push({
       name: "Consecutive Days",
       value: `${ind.consecutive.days}d ${ind.consecutive.streak_type}`,
@@ -238,7 +245,7 @@ function extractIndicators(data: AnalysisResponse): IndicatorDisplayItem[] {
   // 52-Week
   if (ind.week52) {
     const prob = ind.week52.probability;
-    const wr20 = prob?.periods?.["20d"];
+    const wr20 = resolvePeriod(prob?.periods, "20");
     const pos = ind.week52.position_pct;
     items.push({
       name: "52-Week Range",
@@ -421,11 +428,17 @@ export default function AnalyzePage() {
   const positive = price.change_pct >= 0;
 
   // Derive direction from combined win rate
-  const combinedWr5 = combined?.probability?.periods?.["5d"]?.win_rate ?? 50;
-  const combinedWr20 = combined?.probability?.periods?.["20d"]?.win_rate ?? 50;
-  const combinedWr60 = combined?.probability?.periods?.["60d"]?.win_rate ?? 50;
-  const combinedAvg20 = combined?.probability?.periods?.["20d"]?.avg_return ?? 0;
-  const direction = combinedWr20 > 50 ? "bullish" : combinedWr20 < 50 ? "bearish" : "neutral";
+  const combinedOccurrences = combined?.probability?.occurrences ?? 0;
+  const hasEnoughData = combinedOccurrences > 0;
+  const cPeriods = combined?.probability?.periods;
+  const combinedWr5 = (cPeriods?.["5"] ?? cPeriods?.["5d"])?.win_rate;
+  const combinedWr20 = (cPeriods?.["20"] ?? cPeriods?.["20d"])?.win_rate;
+  const combinedWr60 = (cPeriods?.["60"] ?? cPeriods?.["60d"])?.win_rate;
+  const combinedAvg20 = (cPeriods?.["20"] ?? cPeriods?.["20d"])?.avg_return;
+  const direction = !hasEnoughData ? "neutral"
+    : (combinedWr20 ?? 50) > 50 ? "bullish"
+    : (combinedWr20 ?? 50) < 50 ? "bearish"
+    : "neutral";
 
   // 52-week range
   const has52w = price.high_52w != null && price.low_52w != null;
@@ -622,54 +635,67 @@ export default function AnalyzePage() {
                 Combined Signal
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
-                Based on {combined?.probability?.occurrences ?? 0} historical matches
+                Based on {combinedOccurrences} historical matches
               </p>
             </div>
           </div>
 
           {/* Large score number */}
-          <div className="flex items-center gap-6">
-            <div className="text-center">
-              <div
-                className={cn(
-                  "text-4xl font-mono font-bold tracking-tight",
-                  combinedWr20 >= 60
-                    ? "text-emerald-400"
-                    : combinedWr20 >= 50
-                      ? "text-indigo-400"
-                      : combinedWr20 >= 40
-                        ? "text-amber-400"
-                        : "text-red-400",
-                )}
-              >
-                {combinedWr20.toFixed(1)}%
+          {hasEnoughData ? (
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <div
+                  className={cn(
+                    "text-4xl font-mono font-bold tracking-tight",
+                    (combinedWr20 ?? 0) >= 60
+                      ? "text-emerald-400"
+                      : (combinedWr20 ?? 0) >= 50
+                        ? "text-indigo-400"
+                        : (combinedWr20 ?? 0) >= 40
+                          ? "text-amber-400"
+                          : "text-red-400",
+                  )}
+                >
+                  {(combinedWr20 ?? 0).toFixed(1)}%
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">
+                  Win Rate (20d)
+                </div>
               </div>
-              <div className="text-[10px] text-zinc-500 mt-0.5">
-                Win Rate (20d)
+              <div className="text-center">
+                <div
+                  className={cn(
+                    "text-2xl font-mono font-bold",
+                    (combinedAvg20 ?? 0) >= 0 ? "text-emerald-400" : "text-red-400",
+                  )}
+                >
+                  {(combinedAvg20 ?? 0) >= 0 ? "+" : ""}{(combinedAvg20 ?? 0).toFixed(2)}%
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">
+                  Avg Return (20d)
+                </div>
               </div>
             </div>
-            <div className="text-center">
-              <div
-                className={cn(
-                  "text-2xl font-mono font-bold",
-                  combinedAvg20 >= 0 ? "text-emerald-400" : "text-red-400",
-                )}
-              >
-                {combinedAvg20 >= 0 ? "+" : ""}{combinedAvg20.toFixed(2)}%
+          ) : (
+            <div className="text-center sm:text-right">
+              <div className="text-sm font-medium text-amber-400">
+                Insufficient data
               </div>
-              <div className="text-[10px] text-zinc-500 mt-0.5">
-                Avg Return (20d)
+              <div className="text-xs text-zinc-500 mt-0.5">
+                Conditions too specific for historical matching
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Win rate bars by period */}
-        <div className="px-5 pb-4 space-y-2">
-          <WinRateBar label="5d" value={combinedWr5} />
-          <WinRateBar label="20d" value={combinedWr20} />
-          <WinRateBar label="60d" value={combinedWr60} />
-        </div>
+        {hasEnoughData && (
+          <div className="px-5 pb-4 space-y-2">
+            {combinedWr5 != null && <WinRateBar label="5d" value={combinedWr5} />}
+            {combinedWr20 != null && <WinRateBar label="20d" value={combinedWr20} />}
+            {combinedWr60 != null && <WinRateBar label="60d" value={combinedWr60} />}
+          </div>
+        )}
 
         {/* Conditions */}
         {conditions.length > 0 && (
@@ -705,10 +731,6 @@ export default function AnalyzePage() {
               <ChevronDown className="w-4 h-4" />
             )}
             Smart Analysis
-            <span className="ml-auto flex items-center gap-1 text-[10px] text-indigo-500/70">
-              <Lock className="w-3 h-3" />
-              Pro
-            </span>
           </button>
 
           {/* Smart Analysis results */}
@@ -726,7 +748,7 @@ export default function AnalyzePage() {
                 </div>
               ) : (
                 <p className="text-sm text-zinc-500 text-center py-4">
-                  Upgrade to Pro to unlock Smart Analysis
+                  No smart analysis data available. Try again.
                 </p>
               )}
             </div>

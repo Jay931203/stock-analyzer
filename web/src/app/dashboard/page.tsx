@@ -225,6 +225,7 @@ export default function ScannerPage() {
           signals={signals}
           loading={loading && !refreshing}
           totalSignals={totalSignals}
+          scanned={scanned}
         />
       </div>
 

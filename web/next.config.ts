@@ -12,6 +12,38 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Add caching headers for API responses
+  async headers() {
+    return [
+      {
+        source: "/api/signals",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=300, stale-while-revalidate=600",
+          },
+        ],
+      },
+      {
+        source: "/api/analyze/:ticker*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=300, stale-while-revalidate=600",
+          },
+        ],
+      },
+      {
+        source: "/api/chart/:ticker*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=60, stale-while-revalidate=120",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

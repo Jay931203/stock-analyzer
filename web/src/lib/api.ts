@@ -290,6 +290,34 @@ export interface TimeMachineResponse {
 const API_BASE = "/api";
 
 class StockAPI {
+  /** Fetch with sessionStorage caching for faster repeat loads */
+  private async fetchWithCache<T>(path: string, ttlMs: number = 300000): Promise<T> {
+    const cacheKey = `sc:${path}`;
+    if (typeof window !== "undefined") {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const { data, ts } = JSON.parse(cached);
+          if (Date.now() - ts < ttlMs) return data as T;
+        } catch {
+          sessionStorage.removeItem(cacheKey);
+        }
+      }
+    }
+    const result = await this.fetch<T>(path);
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem(
+          cacheKey,
+          JSON.stringify({ data: result, ts: Date.now() }),
+        );
+      } catch {
+        // sessionStorage full — silently ignore
+      }
+    }
+    return result;
+  }
+
   private async fetch<T>(path: string, init?: RequestInit): Promise<T> {
     const headers: HeadersInit = { "Content-Type": "application/json" };
 
@@ -326,23 +354,28 @@ class StockAPI {
     return res.json();
   }
 
-  // Signals
+  // Signals (5 min cache)
   async getSignals(period = "3y", limit = 101) {
-    return this.fetch<SignalsResponse>(
+    return this.fetchWithCache<SignalsResponse>(
       `/signals?data_period=${period}&limit=${limit}&include_calendar=true&include_flips=true`,
+      300_000,
     );
   }
 
-  // Analysis
+  // Analysis (5 min cache)
   async getAnalysis(ticker: string, period = "10y") {
-    return this.fetch<AnalysisResponse>(
+    return this.fetchWithCache<AnalysisResponse>(
       `/analyze/${ticker}?period=${period}`,
+      300_000,
     );
   }
 
-  // Chart data
+  // Chart data (1 min cache)
   async getChart(ticker: string, period = "1y") {
-    return this.fetch<ChartResponse>(`/chart/${ticker}?period=${period}`);
+    return this.fetchWithCache<ChartResponse>(
+      `/chart/${ticker}?period=${period}`,
+      60_000,
+    );
   }
 
   // Smart probability

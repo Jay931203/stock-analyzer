@@ -97,9 +97,10 @@ interface SignalTableProps {
   signals: Signal[];
   loading?: boolean;
   totalSignals?: number;
+  scanned?: number;
 }
 
-export function SignalTable({ signals, loading, totalSignals }: SignalTableProps) {
+export function SignalTable({ signals, loading, totalSignals, scanned }: SignalTableProps) {
   const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>("strength");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -169,7 +170,12 @@ export function SignalTable({ signals, loading, totalSignals }: SignalTableProps
         <span className="text-xs text-zinc-400 font-medium">
           <span className="text-zinc-100 font-semibold">{displayTotal}</span>{" "}
           signal{displayTotal !== 1 ? "s" : ""} found
-          {totalSignals && totalSignals > signals.length && (
+          {scanned != null && scanned > 0 && (
+            <span className="text-zinc-600 ml-1">
+              (scanned {scanned.toLocaleString()} tickers)
+            </span>
+          )}
+          {!scanned && totalSignals != null && totalSignals > signals.length && (
             <span className="text-zinc-600 ml-1">
               (showing {signals.length})
             </span>
