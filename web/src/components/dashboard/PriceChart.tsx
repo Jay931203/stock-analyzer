@@ -8,12 +8,13 @@ import { Loader2, AlertCircle } from "lucide-react";
 const CHART_PERIODS = ["1M", "3M", "6M", "1Y", "2Y", "5Y"] as const;
 type ChartPeriod = (typeof CHART_PERIODS)[number];
 
+// Fetch exactly the period requested — simpler, more reliable
 const FETCH_PERIOD_MAP: Record<ChartPeriod, string> = {
-  "1M": "1y",
-  "3M": "2y",
-  "6M": "2y",
-  "1Y": "5y",
-  "2Y": "5y",
+  "1M": "1m",
+  "3M": "3m",
+  "6M": "6m",
+  "1Y": "1y",
+  "2Y": "2y",
   "5Y": "5y",
 };
 
@@ -188,16 +189,8 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
           );
         }
 
-        // Set visible range
-        const visibleBars = PERIOD_BARS[period];
-        if (candleData.length > visibleBars) {
-          chart.timeScale().setVisibleRange({
-            from: candleData[candleData.length - visibleBars].time,
-            to: candleData[candleData.length - 1].time,
-          });
-        } else {
-          chart.timeScale().fitContent();
-        }
+        // Fit all data into view
+        chart.timeScale().fitContent();
 
         // Resize observer
         const obs = new ResizeObserver((entries) => {
