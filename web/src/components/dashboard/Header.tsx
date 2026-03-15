@@ -126,7 +126,10 @@ export function Header() {
       </div>
 
       {/* User menu */}
-      <div className="relative ml-auto md:ml-0">
+      <div className="relative ml-auto md:ml-0 flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-500 border border-zinc-700">
+          Free
+        </span>
         <button
           onClick={() => setUserMenuOpen(!userMenuOpen)}
           className="flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"

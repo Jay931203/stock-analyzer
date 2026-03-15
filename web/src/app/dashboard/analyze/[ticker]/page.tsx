@@ -693,9 +693,8 @@ export default function AnalyzePage() {
       if (selected.size < 2) return;
       setSmartLoading(true);
       try {
-        const indicatorNames = Array.from(selected).map((s) =>
-          s.toLowerCase(),
-        );
+        // API expects original case: "RSI", "MACD", "MA", "BB", etc.
+        const indicatorNames = Array.from(selected);
         const result = await api.getSmartProbability(
           ticker,
           indicatorNames,
@@ -720,13 +719,13 @@ export default function AnalyzePage() {
     [ticker, period],
   );
 
-  // Auto-fetch smart probability on initial load + when period/selection changes
+  // Auto-fetch smart probability on initial load + when period changes
+  // (indicator changes are handled by handleToggleIndicator directly)
   useEffect(() => {
     if (data && selectedIndicators.size >= 2) {
       fetchSmartProbability(selectedIndicators);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, period]);
+  }, [data, period, fetchSmartProbability, selectedIndicators]);
 
   const handleToggleIndicator = useCallback(
     (key: string) => {

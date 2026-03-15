@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useState, useCallback, useEffect } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatPercent } from "@/lib/utils";
@@ -33,7 +33,10 @@ export default function TimeMachinePage() {
   const params = useParams<{ ticker: string }>();
   const ticker = (params.ticker || "").toUpperCase();
 
-  const [selectedDate, setSelectedDate] = useState("");
+  const searchParams = useSearchParams();
+  const initialDate = searchParams.get("date") || "";
+
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [result, setResult] = useState<TimeMachineResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +62,13 @@ export default function TimeMachinePage() {
     },
     [ticker],
   );
+
+  // Auto-run if date is in URL query param (e.g., from Time Machine highlights)
+  useEffect(() => {
+    if (initialDate) {
+      runTimeMachine(initialDate);
+    }
+  }, [initialDate, runTimeMachine]);
 
   const totalReturn = result
     ? ((result.current_price - result.price_at_date) / result.price_at_date) * 100
