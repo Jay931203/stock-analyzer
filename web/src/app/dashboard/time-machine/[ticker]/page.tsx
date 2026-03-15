@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   Loader2,
   AlertCircle,
+  AlertTriangle,
   Calendar,
   CheckCircle2,
   XCircle,
@@ -223,59 +224,73 @@ export default function TimeMachinePage() {
           {/* Verdict card */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
             {/* Large verdict banner */}
-            <div
-              className={cn(
-                "flex items-center justify-between px-6 py-5",
-                result.accuracy.was_correct
-                  ? "bg-emerald-500/8 border-b border-emerald-500/15"
-                  : "bg-red-500/8 border-b border-red-500/15",
-              )}
-            >
-              <div className="flex items-center gap-4">
-                {result.accuracy.was_correct ? (
-                  <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/20">
-                    <CheckCircle2 className="w-7 h-7 text-emerald-400" />
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-red-500/15 border border-red-500/20">
-                    <XCircle className="w-7 h-7 text-red-400" />
-                  </div>
+            {result.accuracy ? (
+              <div
+                className={cn(
+                  "flex items-center justify-between px-6 py-5",
+                  result.accuracy.was_correct
+                    ? "bg-emerald-500/8 border-b border-emerald-500/15"
+                    : "bg-red-500/8 border-b border-red-500/15",
                 )}
-                <div>
-                  <div
-                    className={cn(
-                      "text-2xl font-bold",
-                      result.accuracy.was_correct ? "text-emerald-400" : "text-red-400",
-                    )}
-                  >
-                    {result.accuracy.was_correct ? "CORRECT" : "INCORRECT"}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span
+              >
+                <div className="flex items-center gap-4">
+                  {result.accuracy.was_correct ? (
+                    <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/20">
+                      <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-red-500/15 border border-red-500/20">
+                      <XCircle className="w-7 h-7 text-red-400" />
+                    </div>
+                  )}
+                  <div>
+                    <div
                       className={cn(
-                        "text-xs font-medium px-2 py-0.5 rounded-md border",
-                        result.signal.direction === "bullish"
-                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                          : "bg-red-500/10 text-red-400 border-red-500/20",
+                        "text-2xl font-bold",
+                        result.accuracy.was_correct ? "text-emerald-400" : "text-red-400",
                       )}
                     >
-                      {result.signal.direction}
-                    </span>
-                    <span className="text-xs text-zinc-500 font-mono">
-                      WR: {result.signal.win_rate_20d.toFixed(0)}% | n={result.signal.occurrences}
-                    </span>
+                      {result.accuracy.was_correct ? "CORRECT" : "INCORRECT"}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span
+                        className={cn(
+                          "text-xs font-medium px-2 py-0.5 rounded-md border",
+                          result.signal.direction === "bullish"
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-red-500/10 text-red-400 border-red-500/20",
+                        )}
+                      >
+                        {result.signal.direction}
+                      </span>
+                      <span className="text-xs text-zinc-500 font-mono">
+                        WR: {result.signal.win_rate_20d?.toFixed(0) ?? '—'}% | n={result.signal.occurrences}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-zinc-500 mb-1">
+                    Predicted: {result.accuracy.predicted_direction}
+                  </div>
+                  <div className="text-xs text-zinc-500">
+                    Actual: {result.accuracy.actual_direction}
                   </div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-xs text-zinc-500 mb-1">
-                  Predicted: {result.accuracy.predicted_direction}
+            ) : (
+              <div className="flex items-center gap-4 px-6 py-5 bg-zinc-800/30 border-b border-zinc-700/50">
+                <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-700/30 border border-zinc-600/30">
+                  <AlertTriangle className="w-7 h-7 text-zinc-500" />
                 </div>
-                <div className="text-xs text-zinc-500">
-                  Actual: {result.accuracy.actual_direction}
+                <div>
+                  <div className="text-2xl font-bold text-zinc-400">NO SIGNAL</div>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {result.signal.confidence_warning || "Insufficient historical data for a directional call"}
+                  </p>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Price comparison */}
             <div className="px-6 py-4 border-b border-zinc-800 flex flex-wrap items-center gap-6">
