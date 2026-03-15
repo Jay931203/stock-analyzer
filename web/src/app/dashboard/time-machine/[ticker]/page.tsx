@@ -286,7 +286,7 @@ export default function TimeMachinePage() {
                 <div>
                   <div className="text-2xl font-bold text-zinc-400">NO SIGNAL</div>
                   <p className="text-xs text-zinc-500 mt-1">
-                    {result.signal.confidence_warning || "Insufficient historical data for a directional call"}
+                    {(result.signal as unknown as Record<string, string>).confidence_warning || "Insufficient historical data for a directional call"}
                   </p>
                 </div>
               </div>

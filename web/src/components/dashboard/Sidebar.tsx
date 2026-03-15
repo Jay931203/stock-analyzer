@@ -77,20 +77,33 @@ export function Sidebar({ plan = "free" }: SidebarProps) {
         collapsed ? "w-16" : "w-60",
       )}
     >
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 h-14 border-b border-zinc-800 shrink-0">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 shrink-0 overflow-hidden">
-          {/* Inline SVG matching favicon.svg */}
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="w-6 h-6">
-            <path d="M8 22L14 12L18 16L24 8" stroke="#6366F1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-            <circle cx="24" cy="8" r="2" fill="#22C55E"/>
-          </svg>
+      {/* Logo + Collapse toggle */}
+      <div className="flex items-center justify-between px-4 h-14 border-b border-zinc-800 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 shrink-0 overflow-hidden">
+            {/* Inline SVG matching favicon.svg */}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="w-6 h-6">
+              <path d="M8 22L14 12L18 16L24 8" stroke="#6366F1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              <circle cx="24" cy="8" r="2" fill="#22C55E"/>
+            </svg>
+          </div>
+          {!collapsed && (
+            <span className="text-sm font-semibold text-zinc-100 whitespace-nowrap">
+              Stock Scanner
+            </span>
+          )}
         </div>
-        {!collapsed && (
-          <span className="text-sm font-semibold text-zinc-100 whitespace-nowrap">
-            Stock Scanner
-          </span>
-        )}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex items-center justify-center w-7 h-7 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors shrink-0"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <ChevronRight className="w-4 h-4" />
+          ) : (
+            <ChevronLeft className="w-4 h-4" />
+          )}
+        </button>
       </div>
 
       {/* Navigation */}
@@ -125,9 +138,9 @@ export function Sidebar({ plan = "free" }: SidebarProps) {
         </div>
       </nav>
 
-      {/* Plan badge & collapse */}
-      <div className="px-2 pb-3 space-y-2 shrink-0 border-t border-zinc-800/80 pt-3">
-        {!collapsed && (
+      {/* Plan badge */}
+      {!collapsed && (
+        <div className="px-2 pb-3 shrink-0 border-t border-zinc-800/80 pt-3">
           <div
             className={cn(
               "flex items-center justify-center py-1.5 rounded-md border text-xs font-medium",
@@ -136,19 +149,8 @@ export function Sidebar({ plan = "free" }: SidebarProps) {
           >
             {planLabel} Plan
           </div>
-        )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="flex items-center justify-center w-full py-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-colors"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? (
-            <ChevronRight className="w-4 h-4" />
-          ) : (
-            <ChevronLeft className="w-4 h-4" />
-          )}
-        </button>
-      </div>
+        </div>
+      )}
     </aside>
   );
 }

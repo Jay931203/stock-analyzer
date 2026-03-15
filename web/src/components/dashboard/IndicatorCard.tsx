@@ -10,6 +10,7 @@ interface IndicatorCardProps {
   winRate?: number;
   avgReturn?: number;
   occurrences?: number;
+  periodLabel?: string;
 }
 
 function getStateBadgeStyles(color: IndicatorCardProps["stateColor"]) {
@@ -46,6 +47,7 @@ export function IndicatorCard({
   winRate,
   avgReturn,
   occurrences,
+  periodLabel = "20d",
 }: IndicatorCardProps) {
   const wrColor =
     winRate != null
@@ -100,7 +102,7 @@ export function IndicatorCard({
           {/* Win rate bar */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-500">Win Rate (20d)</span>
+              <span className="text-zinc-500">Win Rate ({periodLabel})</span>
               <span className={cn("font-mono font-semibold", wrColor)}>
                 {winRate.toFixed(1)}%
               </span>
