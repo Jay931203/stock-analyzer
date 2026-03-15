@@ -1634,14 +1634,21 @@ def _calc_combined(df, states: dict, indicators: dict = None) -> CombinedProbabi
                 break
             elif result.occurrences > 0 and (best_result is None or result.occurrences > best_result.occurrences):
                 best_result = result
-        except Exception:
-            pass
+        except Exception as e:
+            import sys
+            print(f"[combined] calc_combined_probability failed with {len(used_conditions)} conditions: {e}", file=sys.stderr)
         # Drop the last condition and retry
         used_conditions = used_conditions[:-1]
         best_tier_name = f"relaxed_{len(used_conditions)}"
 
     if not best_result or best_result.occurrences == 0:
-        return None
+        # Return debug info instead of None
+        return CombinedProbability(
+            conditions=[f"DEBUG: selected={selected}, conditions_built={len(conditions)}, states_keys={list(states.keys())[:5]}"],
+            probability=None,
+            tier="no_data",
+            occurrences=0,
+        )
 
     prob_data = _to_prob_data(best_result)
 
