@@ -126,8 +126,9 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
           wickUpColor: "#22c55e",
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const candleData = data.candles.map((c) => ({
-          time: c.time as unknown as import("lightweight-charts").UTCTimestamp,
+          time: c.time as any,
           open: c.open,
           high: c.high,
           low: c.low,
@@ -145,7 +146,7 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
         });
         volSeries.setData(
           data.candles.map((c) => ({
-            time: c.time as unknown as import("lightweight-charts").UTCTimestamp,
+            time: c.time as any,
             value: c.volume,
             color: c.close >= c.open ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
           })),
@@ -163,7 +164,7 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
           });
           sma20Series.setData(
             sma20.map((s) => ({
-              time: s.time as unknown as import("lightweight-charts").UTCTimestamp,
+              time: s.time as any,
               value: s.value,
             })),
           );
@@ -181,7 +182,7 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
           });
           sma50Series.setData(
             sma50.map((s) => ({
-              time: s.time as unknown as import("lightweight-charts").UTCTimestamp,
+              time: s.time as any,
               value: s.value,
             })),
           );
