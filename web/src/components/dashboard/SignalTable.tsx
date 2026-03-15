@@ -271,7 +271,7 @@ export function SignalTable({ signals, loading, totalSignals, scanned, isMarketC
             const ar = (sig[AR_FIELD[displayPeriod]] as number | undefined) ?? 0;
             return (
               <tr
-                key={sig.ticker}
+                key={`${sig.ticker}-${idx}`}
                 onClick={() =>
                   router.push(`/dashboard/analyze/${sig.ticker}`)
                 }

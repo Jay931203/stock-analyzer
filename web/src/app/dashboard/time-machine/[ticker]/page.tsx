@@ -70,7 +70,7 @@ export default function TimeMachinePage() {
     }
   }, [initialDate, runTimeMachine]);
 
-  const totalReturn = result
+  const totalReturn = result && result.price_at_date > 0
     ? ((result.current_price - result.price_at_date) / result.price_at_date) * 100
     : 0;
 
@@ -296,7 +296,7 @@ export default function TimeMachinePage() {
                 <div>
                   <div className="text-2xl font-bold text-zinc-400">NO SIGNAL</div>
                   <p className="text-xs text-zinc-500 mt-1">
-                    {(result.signal as unknown as Record<string, string>).confidence_warning || "Insufficient historical data for a directional call"}
+                    {(result.signal as Record<string, unknown>).confidence_warning as string || "Insufficient historical data for a directional call"}
                   </p>
                 </div>
               </div>

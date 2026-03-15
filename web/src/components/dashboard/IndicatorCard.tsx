@@ -80,7 +80,7 @@ export function IndicatorCard({
             getStateBadgeStyles(stateColor),
           )}
         >
-          {getStateLabel(stateColor)}
+          {state || "Neutral"}
         </span>
       </div>
 

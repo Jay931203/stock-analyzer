@@ -42,10 +42,15 @@ export function Header() {
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchPrices() {
+    async function fetchPrices(retryCount = 0) {
       try {
         const res = await fetch("/api/live-prices?tickers=SPY,QQQ,DIA");
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (retryCount < 2) {
+            setTimeout(() => fetchPrices(retryCount + 1), 3000);
+          }
+          return;
+        }
         const data = await res.json();
         if (cancelled) return;
 
@@ -66,12 +71,14 @@ export function Header() {
         const firstState = updated.find((u) => u.marketState)?.marketState;
         setMarketBadge(getMarketStateBadge(firstState));
       } catch {
-        // silently fail
+        if (retryCount < 2) {
+          setTimeout(() => fetchPrices(retryCount + 1), 3000);
+        }
       }
     }
 
     fetchPrices();
-    const interval = setInterval(fetchPrices, 30_000);
+    const interval = setInterval(() => fetchPrices(), 30_000);
 
     return () => {
       cancelled = true;

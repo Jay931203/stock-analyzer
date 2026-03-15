@@ -303,9 +303,11 @@ export default function LandingPage() {
           <p className="text-sm text-muted-foreground">
             This is real data. Sign up to see all 101 live signals.
           </p>
-          <Button size="sm" className="gap-1.5 shadow-lg shadow-primary/15">
-            Unlock Full Scanner <ArrowRight className="h-3.5 w-3.5" />
-          </Button>
+          <Link href="/dashboard">
+            <Button size="sm" className="gap-1.5 shadow-lg shadow-primary/15">
+              Unlock Full Scanner <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </Link>
         </div>
       </section>
 
@@ -346,9 +348,11 @@ export default function LandingPage() {
                 ))}
               </div>
 
-              <Button variant="outline" className="mt-8 gap-2">
-                Try Time Machine <ExternalLink className="h-3.5 w-3.5" />
-              </Button>
+              <Link href="/dashboard/time-machine">
+                <Button variant="outline" className="mt-8 gap-2">
+                  Try Time Machine <ExternalLink className="h-3.5 w-3.5" />
+                </Button>
+              </Link>
             </div>
 
             {/* Right — demo card */}
@@ -539,12 +543,14 @@ export default function LandingPage() {
                       </li>
                     ))}
                   </ul>
-                  <Button
-                    className={`mt-8 w-full ${plan.highlighted ? "shadow-lg shadow-primary/20" : ""}`}
-                    variant={plan.highlighted ? "default" : "outline"}
-                  >
-                    {plan.cta}
-                  </Button>
+                  <Link href="/dashboard" className="block">
+                    <Button
+                      className={`mt-8 w-full ${plan.highlighted ? "shadow-lg shadow-primary/20" : ""}`}
+                      variant={plan.highlighted ? "default" : "outline"}
+                    >
+                      {plan.cta}
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
             ))}
@@ -557,9 +563,11 @@ export default function LandingPage() {
               <span className="text-foreground font-medium">14-day Pro trial</span>.
               No credit card required.
             </p>
-            <Button variant="link" className="mt-2 gap-1.5 text-sm">
-              Compare all features <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
+            <a href="#pricing">
+              <Button variant="link" className="mt-2 gap-1.5 text-sm">
+                Compare all features <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </a>
           </div>
         </div>
       </section>

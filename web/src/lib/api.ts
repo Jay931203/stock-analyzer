@@ -278,7 +278,7 @@ export interface TimeMachineResponse {
     predicted_direction: string;
     actual_direction: string;
     was_correct: boolean;
-  };
+  } | null;
   indicators_at_date: Record<string, unknown>;
   highlights: { text: string; type: string }[];
 }
@@ -291,9 +291,9 @@ const API_BASE = "/api";
 
 class StockAPI {
   /** Fetch with sessionStorage caching for faster repeat loads */
-  private async fetchWithCache<T>(path: string, ttlMs: number = 300000): Promise<T> {
+  private async fetchWithCache<T>(path: string, ttlMs: number = 300000, force: boolean = false): Promise<T> {
     const cacheKey = `sc:${path}`;
-    if (typeof window !== "undefined") {
+    if (!force && typeof window !== "undefined") {
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
         try {
@@ -355,10 +355,11 @@ class StockAPI {
   }
 
   // Signals (5 min cache)
-  async getSignals(period = "3y", limit = 101) {
+  async getSignals(period = "3y", limit = 101, force = false) {
     return this.fetchWithCache<SignalsResponse>(
       `/signals?data_period=${period}&limit=${limit}&include_calendar=true&include_flips=true`,
       300_000,
+      force,
     );
   }
 
@@ -395,8 +396,9 @@ class StockAPI {
 
   // Time Machine
   async getTimeMachine(ticker: string, date: string, period = "3y") {
-    return this.fetch<TimeMachineResponse>(
+    return this.fetchWithCache<TimeMachineResponse>(
       `/time-machine/${ticker}?date=${date}&period=${period}`,
+      300_000,
     );
   }
 

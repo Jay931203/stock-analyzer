@@ -119,7 +119,10 @@ export default function ScannerPage() {
   const [scanned, setScanned] = useState(0);
   const [sectorFilter, setSectorFilter] = useState<SectorFilterKey>("All");
 
-  const localMarketState = getMarketState();
+  const [localMarketState, setLocalMarketState] = useState<ReturnType<typeof getMarketState> | null>(null);
+  useEffect(() => {
+    setLocalMarketState(getMarketState());
+  }, []);
 
   const fetchSignals = useCallback(
     async (showRefresh = false) => {
@@ -128,7 +131,7 @@ export default function ScannerPage() {
       setError(null);
 
       try {
-        const data = await api.getSignals(period);
+        const data = await api.getSignals(period, 101, showRefresh);
         setSignals(data.signals);
         setTotalSignals(data.total_signals ?? data.signals.length);
         setMarketStateLabel(data.market_state || null);
@@ -180,7 +183,7 @@ export default function ScannerPage() {
     const bullish = signals.filter((s) => s.win_rate_20d > 50);
     const bearish = signals.filter((s) => s.win_rate_20d <= 50);
     const avgWinRate = signals.reduce((sum, s) => sum + s.win_rate_20d, 0) / signals.length;
-    const strongest = signals.reduce((best, s) => (s.strength > best.strength ? s : best), signals[0]);
+    const strongest = signals.reduce((best, s) => ((s.strength ?? 0) > (best.strength ?? 0) ? s : best), signals[0]);
 
     return {
       bullishCount: bullish.length,
@@ -205,7 +208,9 @@ export default function ScannerPage() {
     };
   }, [filteredSignals, sectorFilter]);
 
-  const isMarketClosed = localMarketState.isClosed || (marketStateLabel?.toLowerCase().includes("closed"));
+  const isMarketClosed = marketStateLabel
+    ? marketStateLabel.toLowerCase().includes("closed")
+    : localMarketState?.isClosed ?? false;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -217,15 +222,15 @@ export default function ScannerPage() {
             <span
               className={cn(
                 "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border",
-                localMarketState.isClosed
+                (localMarketState?.isClosed ?? true)
                   ? "border-zinc-700 bg-zinc-800/60 text-zinc-500"
-                  : localMarketState.color === "text-emerald-400"
+                  : localMarketState?.color === "text-emerald-400"
                     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                     : "border-amber-500/30 bg-amber-500/10 text-amber-400",
               )}
             >
               <Circle className="w-2 h-2 fill-current" />
-              {marketStateLabel || localMarketState.label}
+              {marketStateLabel || localMarketState?.label || "Loading..."}
             </span>
 
             {/* Divider */}

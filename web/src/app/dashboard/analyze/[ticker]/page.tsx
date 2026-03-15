@@ -586,12 +586,12 @@ function TimeMachinePreviewCard({
     >
       <div className="flex items-start justify-between mb-1">
         <div className="text-xs font-semibold text-zinc-300">{presetLabel}</div>
-        {wasCorrect != null &&
-          (wasCorrect ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          ) : (
-            <XCircle className="w-4 h-4 text-red-400 shrink-0" />
-          ))}
+        {wasCorrect === true && (
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        )}
+        {wasCorrect === false && (
+          <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+        )}
       </div>
       <div className="text-[11px] text-zinc-600 font-mono mb-2">
         {presetDate}
@@ -601,10 +601,14 @@ function TimeMachinePreviewCard({
         <span
           className={cn(
             "text-sm font-mono font-bold",
-            wasCorrect ? "text-emerald-400" : "text-red-400",
+            wasCorrect === true
+              ? "text-emerald-400"
+              : wasCorrect === false
+                ? "text-red-400"
+                : "text-zinc-500",
           )}
         >
-          {wasCorrect ? "CORRECT" : "INCORRECT"}
+          {wasCorrect === true ? "CORRECT" : wasCorrect === false ? "INCORRECT" : "NO SIGNAL"}
         </span>
         {returnPct != null && (
           <span
