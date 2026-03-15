@@ -1311,10 +1311,17 @@ function CombinedFallback({
   const prob = combined.probability;
   const occurrences = prob?.occurrences ?? 0;
   const periods = prob?.periods;
-  const wr5 = (periods?.["5"] ?? periods?.["5d"])?.win_rate;
-  const wr20 = (periods?.["20"] ?? periods?.["20d"])?.win_rate;
-  const wr60 = (periods?.["60"] ?? periods?.["60d"])?.win_rate;
-  const avg20 = (periods?.["20"] ?? periods?.["20d"])?.avg_return;
+
+  const ALL_PERIODS = [
+    { key: "5", label: "5d" },
+    { key: "10", label: "10d" },
+    { key: "20", label: "20d" },
+    { key: "60", label: "60d" },
+    { key: "120", label: "120d" },
+    { key: "252", label: "1Y" },
+  ];
+
+  const getPeriod = (k: string) => periods?.[k] ?? periods?.[k + "d"];
 
   const hasData = occurrences > 0;
 
@@ -1326,22 +1333,37 @@ function CombinedFallback({
             <span className="text-xs text-zinc-500 font-mono">
               {occurrences} historical matches
             </span>
-            {avg20 != null && (
-              <span
-                className={cn(
-                  "text-lg font-mono font-bold",
-                  avg20 >= 0 ? "text-emerald-400" : "text-red-400",
-                )}
-              >
-                {avg20 >= 0 ? "+" : ""}
-                {avg20.toFixed(2)}% avg (20d)
-              </span>
-            )}
           </div>
           <div className="space-y-2">
-            {wr5 != null && <WinRateBar label="5d" value={wr5} />}
-            {wr20 != null && <WinRateBar label="20d" value={wr20} />}
-            {wr60 != null && <WinRateBar label="60d" value={wr60} />}
+            {ALL_PERIODS.map(({ key, label }) => {
+              const p = getPeriod(key);
+              if (!p) return null;
+              const wr = p.win_rate;
+              const avg = p.avg_return;
+              return (
+                <div key={key} className="flex items-center gap-3">
+                  <span className="text-xs text-zinc-500 font-mono w-8 text-right shrink-0">{label}</span>
+                  <div className="flex-1 h-5 bg-zinc-800 rounded-full overflow-hidden relative">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-500",
+                        wr >= 60 ? "bg-emerald-500" : wr >= 40 ? "bg-indigo-500" : "bg-red-500",
+                      )}
+                      style={{ width: `${Math.max(wr, 2)}%` }}
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-bold text-white drop-shadow">
+                      {wr.toFixed(1)}%
+                    </span>
+                  </div>
+                  <span className={cn(
+                    "text-xs font-mono w-16 text-right shrink-0",
+                    avg >= 0 ? "text-emerald-400" : "text-red-400",
+                  )}>
+                    {avg >= 0 ? "+" : ""}{avg.toFixed(1)}%
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (
