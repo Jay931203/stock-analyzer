@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   api,
@@ -153,18 +153,83 @@ const FILTER_CHIP_COLORS: Record<SectorFilterKey, { active: string; dot: string 
 // Page Component
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Helpers: read cached signals from sessionStorage synchronously
+// ---------------------------------------------------------------------------
+
+function getCacheKey(period: string): string {
+  return `sc:/signals?data_period=${period}&limit=101&include_calendar=true&include_flips=true`;
+}
+
+interface CachedSignalsResult {
+  signals: Signal[];
+  totalSignals?: number;
+  marketState?: string;
+  scanned?: number;
+  lastUpdated?: string;
+}
+
+function readCachedSignals(period: string): CachedSignalsResult | null {
+  if (typeof window === "undefined") return null;
+  const key = getCacheKey(period);
+  const raw = sessionStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    const { data } = JSON.parse(raw);
+    if (!data || !Array.isArray(data.signals)) return null;
+    return {
+      signals: data.signals,
+      totalSignals: data.total_signals ?? data.signals.length,
+      marketState: data.market_state || undefined,
+      scanned: data.scanned || 0,
+      lastUpdated: data.updated || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function ScannerPage() {
   const { t, locale } = useI18n();
-  const [signals, setSignals] = useState<Signal[]>([]);
-  const [totalSignals, setTotalSignals] = useState<number | undefined>();
-  const [marketStateLabel, setMarketStateLabel] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("3y");
-  const [loading, setLoading] = useState(true);
+
+  // Initialize from sessionStorage synchronously so we never show empty on repeat visits
+  const [signals, setSignals] = useState<Signal[]>(() => {
+    const cached = readCachedSignals("3y");
+    return cached?.signals ?? [];
+  });
+  const [totalSignals, setTotalSignals] = useState<number | undefined>(() => {
+    const cached = readCachedSignals("3y");
+    return cached?.totalSignals;
+  });
+  const [marketStateLabel, setMarketStateLabel] = useState<string | null>(() => {
+    const cached = readCachedSignals("3y");
+    return cached?.marketState ?? null;
+  });
+  const [lastUpdated, setLastUpdated] = useState<string | null>(() => {
+    const cached = readCachedSignals("3y");
+    return cached?.lastUpdated ?? null;
+  });
+  const [scanned, setScanned] = useState(() => {
+    const cached = readCachedSignals("3y");
+    return cached?.scanned ?? 0;
+  });
+
+  // loading = true only when we have NO cached data at all
+  const [loading, setLoading] = useState(() => {
+    const cached = readCachedSignals("3y");
+    return !cached?.signals?.length;
+  });
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [scanned, setScanned] = useState(0);
   const [sectorFilter, setSectorFilter] = useState<SectorFilterKey>("All");
+
+  // Whether a background fetch is in progress (for progress bar)
+  const [backgroundFetching, setBackgroundFetching] = useState(false);
+
+  // Track whether we have data without causing re-renders of fetchSignals
+  const hasDataRef = useRef(signals.length > 0);
+  hasDataRef.current = signals.length > 0;
 
   const [localMarketState, setLocalMarketState] = useState<ReturnType<typeof getMarketState> | null>(null);
   useEffect(() => {
@@ -184,8 +249,17 @@ export default function ScannerPage() {
 
   const fetchSignals = useCallback(
     async (showRefresh = false) => {
-      if (showRefresh) setRefreshing(true);
-      else setLoading(true);
+      const hasExistingData = hasDataRef.current;
+
+      if (showRefresh) {
+        setRefreshing(true);
+      } else if (!hasExistingData) {
+        // Only show full loading state when we have zero data
+        setLoading(true);
+      } else {
+        // We have stale data — show subtle progress bar
+        setBackgroundFetching(true);
+      }
       setError(null);
 
       try {
@@ -196,18 +270,34 @@ export default function ScannerPage() {
         setScanned(data.scanned || 0);
         setLastUpdated(data.updated || new Date().toISOString());
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to fetch signals");
+        // Only show error if we have no cached data to fall back on
+        if (!hasExistingData) {
+          setError(err instanceof Error ? err.message : "Failed to fetch signals");
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);
+        setBackgroundFetching(false);
       }
     },
     [period],
   );
 
+  // On period change, try to load from cache first, then fetch
   useEffect(() => {
+    const cached = readCachedSignals(period);
+    if (cached?.signals?.length) {
+      // Immediately show cached data for this period
+      setSignals(cached.signals);
+      setTotalSignals(cached.totalSignals);
+      setMarketStateLabel(cached.marketState ?? null);
+      setScanned(cached.scanned ?? 0);
+      setLastUpdated(cached.lastUpdated ?? null);
+      setLoading(false);
+    }
+    // Then fetch fresh data (will be background if we have cache)
     fetchSignals();
-  }, [fetchSignals]);
+  }, [period]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- Sector counts and filtering ----
   const sectorCounts = useMemo(() => {
@@ -271,7 +361,13 @@ export default function ScannerPage() {
     : localMarketState?.isClosed ?? false;
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto relative">
+      {/* Thin indigo progress bar for background fetching */}
+      {(backgroundFetching || (loading && signals.length > 0)) && (
+        <div className="absolute top-0 left-0 right-0 z-50 h-0.5 bg-zinc-800/50 overflow-hidden">
+          <div className="h-full bg-indigo-500 animate-progress-bar" />
+        </div>
+      )}
       <div className="max-w-[1600px] mx-auto px-3 py-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4">
         {/* ====== Market Summary Bar ====== */}
         <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 sm:px-4 py-2.5 sm:py-3">
@@ -516,8 +612,8 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {/* ====== Loading State (first load) ====== */}
-        {loading && !refreshing && (
+        {/* ====== Loading State (first load only — no cached data) ====== */}
+        {loading && !refreshing && signals.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-zinc-800/50 border border-zinc-700">
               <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
@@ -533,8 +629,8 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {/* ====== Signal Table (full width) ====== */}
-        {!loading && signals.length > 0 && (
+        {/* ====== Signal Table (show whenever we have data, even if stale) ====== */}
+        {signals.length > 0 && (
           <SignalTable
             signals={filteredSignals}
             loading={false}

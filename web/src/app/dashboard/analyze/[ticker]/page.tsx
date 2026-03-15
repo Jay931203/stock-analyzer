@@ -86,10 +86,10 @@ const TIER_META: Record<TierKey, { label: string; desc: string }> = {
 const FORWARD_PERIODS = ["5", "10", "20", "60", "120", "252"] as const;
 
 const PRESET_DATES = [
-  { date: "2020-03-23", label: "COVID Bottom" },
-  { date: "2024-08-05", label: "Yen Carry Unwind" },
-  { date: "2025-01-27", label: "DeepSeek Crash" },
-  { date: "2024-11-05", label: "2024 Election" },
+  { date: "2020-03-23", labelKey: "tm.preset.covidBottom" as const },
+  { date: "2024-08-05", labelKey: "tm.preset.yenCarry" as const },
+  { date: "2025-01-27", labelKey: "tm.preset.deepseekCrash" as const },
+  { date: "2024-11-05", labelKey: "tm.preset.2024Election" as const },
 ];
 
 // ---------------------------------------------------------------------------
@@ -524,6 +524,7 @@ function TimeMachinePreviewCard({
   presetLabel: string;
   ticker: string;
 }) {
+  const { t } = useI18n();
   const [data, setData] = useState<TimeMachineResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -590,7 +591,7 @@ function TimeMachinePreviewCard({
         <div className="text-[11px] text-zinc-600 font-mono mb-2">
           {presetDate}
         </div>
-        <div className="text-xs text-zinc-600">Data unavailable</div>
+        <div className="text-xs text-zinc-600">{t("analysis.dataUnavailable")}</div>
       </div>
     );
   }
@@ -615,7 +616,7 @@ function TimeMachinePreviewCard({
 
       <div className="flex items-center gap-1.5 flex-wrap">
         <span className="text-xs font-mono font-medium text-zinc-400">
-          {occurrences} pattern{occurrences !== 1 ? "s" : ""}
+          {occurrences} {t("analysis.patterns")}
         </span>
         {winRate20 != null && (
           <>
@@ -626,7 +627,7 @@ function TimeMachinePreviewCard({
                 winRate20 >= 55 ? "text-emerald-400" : winRate20 <= 45 ? "text-red-400" : "text-zinc-400",
               )}
             >
-              {winRate20.toFixed(0)}% went up
+              {winRate20.toFixed(0)}% {t("analysis.wentUp")}
             </span>
           </>
         )}
@@ -647,7 +648,7 @@ function TimeMachinePreviewCard({
       </div>
 
       <div className="text-[10px] text-indigo-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        View details
+        {t("analysis.viewDetails")}
       </div>
     </Link>
   );
@@ -696,7 +697,7 @@ export default function AnalyzePage() {
       setData(result);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to load analysis",
+        err instanceof Error ? err.message : t("common.error"),
       );
     } finally {
       setLoading(false);
@@ -921,7 +922,7 @@ export default function AnalyzePage() {
                         : "bg-zinc-700/30 text-zinc-400 border-zinc-700",
                   )}
                 >
-                  {direction.charAt(0).toUpperCase() + direction.slice(1)}
+                  {t(`analysis.direction.${direction}` as any)}
                 </span>
               </div>
               <p className="text-sm text-zinc-400 mt-1">
@@ -1015,7 +1016,7 @@ export default function AnalyzePage() {
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600/15 border border-indigo-500/25 text-sm font-medium text-indigo-400 hover:bg-indigo-600/25 hover:border-indigo-500/40 transition-all"
           >
             <Clock className="w-4 h-4" />
-            Time Machine
+            {t("analysis.timeMachineLink")}
             <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
           </Link>
         </div>
@@ -1162,7 +1163,7 @@ export default function AnalyzePage() {
                           casesExpanded && "rotate-180",
                         )}
                       />
-                      View {activeTierData.cases.length} historical cases
+                      {t("analysis.viewHistoricalCases").replace("{n}", String(activeTierData.cases.length))}
                     </button>
 
                     {casesExpanded && (
@@ -1170,8 +1171,8 @@ export default function AnalyzePage() {
                         <table className="w-full text-xs">
                           <thead className="sticky top-0 bg-zinc-900 z-10">
                             <tr className="border-b border-zinc-800">
-                              <th className="px-3 py-2 text-left text-zinc-500 font-medium">Date</th>
-                              <th className="px-3 py-2 text-right text-zinc-500 font-medium">Entry Price</th>
+                              <th className="px-3 py-2 text-left text-zinc-500 font-medium">{t("analysis.date")}</th>
+                              <th className="px-3 py-2 text-right text-zinc-500 font-medium">{t("analysis.entryPrice")}</th>
                               <th className="px-3 py-2 text-right text-zinc-500 font-medium">1W</th>
                               <th className="px-3 py-2 text-right text-zinc-500 font-medium">1M</th>
                               <th className="px-3 py-2 text-right text-zinc-500 font-medium">3M</th>
@@ -1237,8 +1238,7 @@ export default function AnalyzePage() {
             ) : (
               <div className="px-5 pb-5 text-center py-6">
                 <p className="text-sm text-zinc-500">
-                  No historical matches for the {TIER_META[activeTier].label}{" "}
-                  tier. Try a different tier or adjust your indicator selection.
+                  {t("analysis.noHistoricalMatches").replace("{tier}", t(TIER_META_KEYS[activeTier].labelKey as any))}
                 </p>
               </div>
             )}
@@ -1263,14 +1263,14 @@ export default function AnalyzePage() {
         >
           <BarChart3 className="w-4 h-4 text-zinc-500" />
           <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
-            Individual Indicators
+            {t("analysis.individualIndicators")}
           </h2>
           <span className="text-xs text-zinc-600 font-mono">
-            {indicators.length} active
+            {indicators.length} {t("analysis.active")}
           </span>
           <div className="flex-1" />
           <span className="text-xs text-zinc-500 group-hover:text-zinc-300 transition-colors">
-            {indicatorsExpanded ? "Collapse" : "Expand All"}
+            {indicatorsExpanded ? t("analysis.collapse") : t("analysis.expandAll")}
           </span>
           {indicatorsExpanded ? (
             <ChevronUp className="w-4 h-4 text-zinc-500" />
@@ -1281,7 +1281,7 @@ export default function AnalyzePage() {
 
         {/* Probability period selector */}
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-[11px] text-zinc-600">Show probabilities for:</span>
+          <span className="text-[11px] text-zinc-600">{t("analysis.showProbabilities")}</span>
           <div className="flex items-center bg-zinc-800/60 rounded-md p-0.5 gap-0.5">
             {INDICATOR_PERIODS.map((ip) => (
               <button
@@ -1336,13 +1336,13 @@ export default function AnalyzePage() {
         <div className="flex items-center gap-2 mb-4">
           <History className="w-4 h-4 text-zinc-500" />
           <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
-            Time Machine Highlights
+            {t("analysis.timeMachineHighlights")}
           </h2>
           <Link
             href={`/dashboard/time-machine/${ticker}`}
             className="ml-auto text-xs text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
           >
-            Explore more dates
+            {t("analysis.exploreMoreDates")}
             <ChevronRight className="w-3 h-3" />
           </Link>
         </div>
@@ -1352,7 +1352,7 @@ export default function AnalyzePage() {
             <TimeMachinePreviewCard
               key={preset.date}
               presetDate={preset.date}
-              presetLabel={preset.label}
+              presetLabel={t(preset.labelKey as any)}
               ticker={ticker}
             />
           ))}
@@ -1371,6 +1371,7 @@ function IndicatorCompactRow({
 }: {
   indicator: IndicatorDisplayItem;
 }) {
+  const { t } = useI18n();
   const badgeStyles = {
     green: "bg-emerald-500/15 text-emerald-400",
     red: "bg-red-500/15 text-red-400",
@@ -1399,12 +1400,12 @@ function IndicatorCompactRow({
         )}
       >
         {indicator.state_color === "green"
-          ? "Bullish"
+          ? t("analysis.direction.bullish")
           : indicator.state_color === "red"
-            ? "Bearish"
+            ? t("analysis.direction.bearish")
             : indicator.state_color === "yellow"
-              ? "Unusual"
-              : "Neutral"}
+              ? t("analysis.direction.unusual")
+              : t("analysis.direction.neutral")}
       </span>
       <div className="flex-1" />
       {indicator.win_rate > 0 && (
@@ -1450,11 +1451,12 @@ function CombinedFallback({
 }: {
   combined: AnalysisResponse["combined"];
 }) {
+  const { t } = useI18n();
   if (!combined) {
     return (
       <div className="px-5 pb-5 text-center py-6">
         <p className="text-sm text-zinc-500">
-          No combined signal data available. The smart analysis is loading...
+          {t("analysis.noSmartDataFallback")}
         </p>
       </div>
     );
@@ -1483,7 +1485,7 @@ function CombinedFallback({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-zinc-500 font-mono">
-              {occurrences} historical matches
+              {occurrences} {t("analysis.historicalMatches")}
             </span>
           </div>
           <div className="space-y-2">

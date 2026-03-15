@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { SearchBar } from "./SearchBar";
 import { TrendingUp, TrendingDown, User, LogOut, ChevronDown, Menu, Globe } from "lucide-react";
-import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import { api, type LivePriceData } from "@/lib/api";
 
 interface IndexPrice {
@@ -26,20 +26,32 @@ function getMarketStateBadge(state?: string): { label: string; color: string } |
   if (!state) return null;
   const s = state.toLowerCase();
   if (s.includes("open") || s === "regular") return { label: "Live", color: "bg-emerald-500" };
-  if (s.includes("pre")) return { label: "Pre", color: "bg-amber-500" };
-  if (s.includes("after") || s.includes("post")) return { label: "AH", color: "bg-amber-500" };
+  if (s.includes("pre")) return { label: "Pre-Market", color: "bg-amber-500" };
+  if (s.includes("after") || s.includes("post")) return { label: "After Hours", color: "bg-amber-500" };
   if (s.includes("closed")) return { label: "Closed", color: "bg-zinc-600" };
   return null;
 }
 
 /**
- * Compute a human-readable countdown to market open or close.
+ * Compute a clean, compact market status with context.
  * NYSE hours: 9:30 AM - 4:00 PM ET, Mon-Fri.
+ *
+ * Returns:
+ * - status: "closed" | "open" | "pre" | "after"
+ * - label: short label (e.g. "Closed", "Live", "Pre-Market")
+ * - detail: context string (e.g. "Opens 9:30 AM ET", "45m left")
+ * - dotColor: tailwind bg class for the status dot
  */
-function getMarketCountdown(t: (key: TranslationKey) => string): string | null {
-  const now = new Date();
+interface MarketStatus {
+  status: "closed" | "open" | "pre" | "after";
+  label: string;
+  mobileLabel: string;
+  detail: string;
+  dotColor: string;
+}
 
-  // Get current time in ET
+function getMarketStatus(): MarketStatus {
+  const now = new Date();
   const etString = now.toLocaleString("en-US", { timeZone: "America/New_York" });
   const et = new Date(etString);
 
@@ -48,46 +60,78 @@ function getMarketCountdown(t: (key: TranslationKey) => string): string | null {
   const minutes = et.getMinutes();
   const totalMinutes = hours * 60 + minutes;
 
-  const openMinutes = 9 * 60 + 30; // 9:30 AM
-  const closeMinutes = 16 * 60;     // 4:00 PM
+  const openMinutes = 9 * 60 + 30;  // 9:30 AM
+  const closeMinutes = 16 * 60;      // 4:00 PM
+  const preMinutes = 4 * 60;         // 4:00 AM pre-market
+  const afterEndMinutes = 20 * 60;   // 8:00 PM after-hours end
 
   // Weekend
   if (day === 0 || day === 6) {
-    const daysUntilMonday = day === 0 ? 1 : 2;
-    const minutesUntilOpen = daysUntilMonday * 24 * 60 - totalMinutes + openMinutes;
-    return formatCountdown(minutesUntilOpen, t("header.opensIn"));
+    return {
+      status: "closed",
+      label: "Closed",
+      mobileLabel: "Closed",
+      detail: "Opens Mon 9:30 AM ET",
+      dotColor: "bg-zinc-500",
+    };
   }
 
-  // Before market open
-  if (totalMinutes < openMinutes) {
-    const diff = openMinutes - totalMinutes;
-    return formatCountdown(diff, t("header.opensIn"));
+  // Pre-market: 4:00 AM - 9:30 AM ET
+  if (totalMinutes >= preMinutes && totalMinutes < openMinutes) {
+    return {
+      status: "pre",
+      label: "Pre-Market",
+      mobileLabel: "Pre",
+      detail: "Opens 9:30 AM ET",
+      dotColor: "bg-amber-500",
+    };
   }
 
-  // During market hours
-  if (totalMinutes < closeMinutes) {
-    const diff = closeMinutes - totalMinutes;
-    return formatCountdown(diff, t("header.closesIn"));
+  // Market open: 9:30 AM - 4:00 PM ET
+  if (totalMinutes >= openMinutes && totalMinutes < closeMinutes) {
+    const remaining = closeMinutes - totalMinutes;
+    const h = Math.floor(remaining / 60);
+    const m = remaining % 60;
+    const timeLeft = h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+    return {
+      status: "open",
+      label: "Live",
+      mobileLabel: "Live",
+      detail: timeLeft,
+      dotColor: "bg-emerald-500",
+    };
   }
 
-  // After market close — show time until next open
-  if (day === 5) {
-    // Friday after close — next open is Monday
-    const minutesUntilOpen = (2 * 24 * 60) + (24 * 60 - totalMinutes) + openMinutes;
-    return formatCountdown(minutesUntilOpen, t("header.opensIn"));
+  // After hours: 4:00 PM - 8:00 PM ET
+  if (totalMinutes >= closeMinutes && totalMinutes < afterEndMinutes) {
+    return {
+      status: "after",
+      label: "After Hours",
+      mobileLabel: "AH",
+      detail: "Opens 9:30 AM ET",
+      dotColor: "bg-amber-500",
+    };
   }
-  // Weekday after close — next open is tomorrow
-  const minutesUntilOpen = (24 * 60 - totalMinutes) + openMinutes;
-  return formatCountdown(minutesUntilOpen, t("header.opensIn"));
-}
 
-function formatCountdown(totalMinutes: number, prefix: string): string {
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  if (h > 0) {
-    return `${prefix} ${h}h ${m}m`;
+  // Before pre-market (midnight - 4 AM) or after post-market (8 PM+)
+  if (day === 5 && totalMinutes >= afterEndMinutes) {
+    // Friday night — next open is Monday
+    return {
+      status: "closed",
+      label: "Closed",
+      mobileLabel: "Closed",
+      detail: "Opens Mon 9:30 AM ET",
+      dotColor: "bg-zinc-500",
+    };
   }
-  return `${prefix} ${m}m`;
+
+  return {
+    status: "closed",
+    label: "Closed",
+    mobileLabel: "Closed",
+    detail: "Opens 9:30 AM ET",
+    dotColor: "bg-zinc-500",
+  };
 }
 
 export function Header() {
@@ -100,14 +144,12 @@ export function Header() {
   const [marketBadge, setMarketBadge] = useState<{ label: string; color: string } | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // Market countdown updates every minute
-  const [, setTick] = useState(0);
+  // Compute local market status (updates every minute)
+  const [marketStatus, setMarketStatus] = useState<MarketStatus>(() => getMarketStatus());
   useEffect(() => {
-    const timer = setInterval(() => setTick((n) => n + 1), 60_000);
+    const timer = setInterval(() => setMarketStatus(getMarketStatus()), 60_000);
     return () => clearInterval(timer);
   }, []);
-
-  const countdown = useMemo(() => getMarketCountdown(t as (key: TranslationKey) => string), [t, indices]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let cancelled = false;
@@ -174,8 +216,28 @@ export function Header() {
       {/* Search */}
       <SearchBar />
 
-      {/* Mobile: compact SPY only */}
+      {/* Mobile: compact SPY + market dot */}
       <div className="flex md:hidden items-center gap-2 ml-auto shrink-0">
+        {/* Market status dot + label (mobile) */}
+        <span
+          className={cn(
+            "flex items-center gap-1 text-[10px] font-semibold",
+            marketStatus.status === "open"
+              ? "text-emerald-400"
+              : marketStatus.status === "pre" || marketStatus.status === "after"
+                ? "text-amber-400"
+                : "text-zinc-500",
+          )}
+        >
+          <span
+            className={cn(
+              "w-1.5 h-1.5 rounded-full shrink-0",
+              marketStatus.dotColor,
+              marketStatus.status === "open" && "animate-pulse-dot",
+            )}
+          />
+          {locale === "ko" ? (marketStatus.status === "open" ? "실시간" : marketStatus.status === "pre" ? "프리" : marketStatus.status === "after" ? "시간외" : "마감") : marketStatus.mobileLabel}
+        </span>
         {spy.price > 0 && (
           <>
             <span className="text-[10px] font-bold text-zinc-500">SPY</span>
@@ -197,24 +259,29 @@ export function Header() {
 
       {/* Desktop: Market indices - ticker tape style */}
       <div className="hidden md:flex items-center gap-0 ml-auto">
-        {/* Market state badge + countdown */}
-        {marketBadge && (
-          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-400 border border-zinc-700/60 rounded-full px-2.5 py-1 mr-3">
-            <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse-dot", marketBadge.color)} />
-            {marketBadge.label}
-            {countdown && (
-              <span className="text-zinc-500 ml-1 border-l border-zinc-700/60 pl-1.5">
-                {countdown}
-              </span>
+        {/* Market status pill */}
+        <span
+          className={cn(
+            "flex items-center gap-1.5 text-[10px] font-semibold border rounded-full px-2.5 py-1 mr-3",
+            marketStatus.status === "open"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+              : marketStatus.status === "pre" || marketStatus.status === "after"
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                : "border-zinc-700/60 bg-zinc-800/40 text-zinc-400",
+          )}
+        >
+          <span
+            className={cn(
+              "w-1.5 h-1.5 rounded-full shrink-0",
+              marketStatus.dotColor,
+              marketStatus.status === "open" && "animate-pulse-dot",
             )}
+          />
+          {locale === "ko" ? (marketStatus.status === "open" ? "실시간" : marketStatus.status === "pre" ? "프리마켓" : marketStatus.status === "after" ? "시간 외 거래" : "장 마감") : ((marketBadge?.label) || marketStatus.label)}
+          <span className="text-zinc-500 ml-0.5 border-l border-zinc-700/40 pl-1.5">
+            {locale === "ko" ? marketStatus.detail.replace("Opens", "개장").replace("left", "남음") : marketStatus.detail}
           </span>
-        )}
-        {/* Show countdown standalone when no badge yet */}
-        {!marketBadge && countdown && (
-          <span className="text-[10px] font-semibold text-zinc-500 border border-zinc-700/60 rounded-full px-2.5 py-1 mr-3">
-            {countdown}
-          </span>
-        )}
+        </span>
 
         {indices.map((idx, i) => {
           const positive = idx.change >= 0;

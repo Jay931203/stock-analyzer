@@ -307,7 +307,7 @@ export function Sidebar({ plan = "free" }: SidebarProps) {
               )}
             />
             <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
-              {plan} plan
+              {t("sidebar.plan").replace("{plan}", plan)}
             </span>
           </div>
         </div>

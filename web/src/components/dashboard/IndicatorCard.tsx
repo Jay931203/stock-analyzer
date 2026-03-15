@@ -427,7 +427,7 @@ export function IndicatorCard(props: IndicatorCardProps) {
             <div className="pt-2.5 border-t border-zinc-800/40 space-y-1.5">
               {bestReturn != null && (
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-600">Best return</span>
+                  <span className="text-zinc-600">{t("indicator.bestReturn")}</span>
                   <span className="font-mono font-medium text-emerald-400/80 tabular-nums">
                     +{Math.abs(bestReturn).toFixed(2)}%
                   </span>
@@ -435,7 +435,7 @@ export function IndicatorCard(props: IndicatorCardProps) {
               )}
               {worstReturn != null && (
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-600">Worst return</span>
+                  <span className="text-zinc-600">{t("indicator.worstReturn")}</span>
                   <span className="font-mono font-medium text-red-400/80 tabular-nums">
                     {worstReturn >= 0 ? "+" : ""}{worstReturn.toFixed(2)}%
                   </span>
@@ -443,7 +443,7 @@ export function IndicatorCard(props: IndicatorCardProps) {
               )}
               {occurrences != null && (
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-600">Samples</span>
+                  <span className="text-zinc-600">{t("indicator.samples")}</span>
                   <span className="font-mono font-medium text-zinc-400 tabular-nums">
                     {occurrences}
                   </span>
@@ -451,7 +451,7 @@ export function IndicatorCard(props: IndicatorCardProps) {
               )}
               {stdDev != null && (
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-600">Std dev</span>
+                  <span className="text-zinc-600">{t("indicator.stdDev")}</span>
                   <span className="font-mono font-medium text-zinc-400 tabular-nums">
                     {stdDev.toFixed(2)}%
                   </span>
