@@ -48,13 +48,13 @@ const ALL_INDICATORS = [
   { key: "MACD", label: "MACD" },
   { key: "MA", label: "MA" },
   { key: "BB", label: "BB" },
-  { key: "Volume", label: "Volume" },
+  { key: "Vol", label: "Volume" },
   { key: "Drawdown", label: "Drawdown" },
   { key: "ADX", label: "ADX" },
-  { key: "Stochastic", label: "Stochastic" },
-  { key: "MA Distance", label: "MA Dist" },
-  { key: "Consecutive", label: "Consec." },
-  { key: "52-Week", label: "52-Week" },
+  { key: "Stoch", label: "Stochastic" },
+  { key: "MADist", label: "MA Dist" },
+  { key: "Consec", label: "Consec." },
+  { key: "W52", label: "52-Week" },
 ] as const;
 
 /** Default indicators included in combined calculation */
@@ -139,12 +139,12 @@ const INDICATOR_PERIODS = ["5", "10", "20", "60", "120", "252"] as const;
 type IndicatorPeriod = (typeof INDICATOR_PERIODS)[number];
 
 const INDICATOR_PERIOD_LABELS: Record<IndicatorPeriod, string> = {
-  "5": "5d",
-  "10": "10d",
-  "20": "20d",
-  "60": "60d",
-  "120": "120d",
-  "252": "252d",
+  "5": "1W",
+  "10": "2W",
+  "20": "1M",
+  "60": "3M",
+  "120": "6M",
+  "252": "1Y",
 };
 
 function extractIndicators(data: AnalysisResponse, periodKey: IndicatorPeriod = "20"): IndicatorDisplayItem[] {
@@ -723,20 +723,20 @@ export default function AnalyzePage() {
     const indicators = Array.from(selectedIndicators);
     const key = indicators.sort().join(",");
 
-    console.log("[SmartProb] Fetching:", key, "period:", period);
+    // Fetch smart probability
 
     async function doFetch() {
       setSmartLoading(true);
       try {
         const result = await api.getSmartProbability(ticker, indicators, period);
-        console.log("[SmartProb] Result:", JSON.stringify(result).slice(0, 200));
+        // Result received
         if (cancelled) return;
         setSmartResult(result as unknown as SmartResult);
         if (result && typeof result === "object" && "best_tier" in result) {
           setActiveTier((result as Record<string, unknown>).best_tier as TierKey);
         }
       } catch (err) {
-        console.error("[SmartProb] Error:", err);
+        // Error occurred
         if (!cancelled) setSmartResult(null);
       } finally {
         if (!cancelled) setSmartLoading(false);
@@ -749,16 +749,14 @@ export default function AnalyzePage() {
 
   const handleToggleIndicator = useCallback(
     (key: string) => {
-      console.log("[Toggle] Clicked:", key);
       setSelectedIndicators((prev) => {
         const next = new Set(prev);
         if (next.has(key)) {
-          if (next.size <= 2) { console.log("[Toggle] Can't remove, min 2"); return prev; }
+          if (next.size <= 2) return prev;
           next.delete(key);
         } else {
           next.add(key);
         }
-        console.log("[Toggle] New selection:", Array.from(next).join(","));
         return next;
       });
     },
@@ -1350,11 +1348,11 @@ function CombinedFallback({
   const periods = prob?.periods;
 
   const ALL_PERIODS = [
-    { key: "5", label: "5d" },
-    { key: "10", label: "10d" },
-    { key: "20", label: "20d" },
-    { key: "60", label: "60d" },
-    { key: "120", label: "120d" },
+    { key: "5", label: "1W" },
+    { key: "10", label: "2W" },
+    { key: "20", label: "1M" },
+    { key: "60", label: "3M" },
+    { key: "120", label: "6M" },
     { key: "252", label: "1Y" },
   ];
 

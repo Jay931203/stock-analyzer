@@ -312,3 +312,19 @@ body {
 .strength-bar-gradient {
   background: linear-gradient(90deg, #ef4444 0%, #eab308 35%, #22c55e 65%, #22c55e 100%);
 }
+
+/* Minimal scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.5);
+}
