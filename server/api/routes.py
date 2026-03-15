@@ -279,8 +279,10 @@ def _recompute_analysis(ticker: str, period: str = "10y") -> AnalysisResponse:
         price_distribution=price_distribution,
     )
 
-    # No try/except — let errors propagate for debugging
-    combined = _calc_combined(df, states, indicators)
+    try:
+        combined = _calc_combined(df, states, indicators)
+    except Exception:
+        combined = None
     data_range = f"{df.index[0].strftime('%Y-%m-%d')} ~ {df.index[-1].strftime('%Y-%m-%d')} ({len(df)} days)"
 
     response = AnalysisResponse(
@@ -1546,7 +1548,17 @@ def _strip_cases(d: dict) -> None:
 def _to_prob_data(result) -> ProbabilityData:
     periods = {}
     for k, v in result.periods.items():
-        periods[str(k)] = PeriodStats(**v)
+        if isinstance(v, dict):
+            # Only pass fields that PeriodStats accepts
+            periods[str(k)] = PeriodStats(
+                win_rate=round(v.get("win_rate", 0), 1),
+                avg_return=round(v.get("avg_return", 0), 2),
+                median_return=round(v.get("median_return", 0), 2),
+                best=round(v.get("best", 0), 2),
+                worst=round(v.get("worst", 0), 2),
+                samples=v.get("samples", 0),
+                std_dev=round(v.get("std_dev", 0), 2),
+            )
 
     cases = None
     if result.cases:
