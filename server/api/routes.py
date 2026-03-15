@@ -285,7 +285,7 @@ def _recompute_analysis(ticker: str, period: str = "10y") -> AnalysisResponse:
         price_distribution=price_distribution,
     )
 
-    combined = _calc_combined(df, states)
+    combined = _calc_combined(df, states, indicators)
     data_range = f"{df.index[0].strftime('%Y-%m-%d')} ~ {df.index[-1].strftime('%Y-%m-%d')} ({len(df)} days)"
 
     response = AnalysisResponse(
@@ -1583,33 +1583,113 @@ def _to_prob_data(result) -> ProbabilityData:
     )
 
 
-def _calc_combined(df, states: dict) -> CombinedProbability | None:
-    conditions = []
+def _calc_combined(df, states: dict, indicators: dict = None) -> CombinedProbability | None:
+    """Compute combined probability using adaptive matching.
 
+    Uses calc_adaptive_combined (smart matcher) instead of exact matching.
+    Automatically widens bins to find historical matches instead of
+    returning "insufficient data" for strict conditions.
+    """
+    # Build selected indicators list
+    selected = []
     if "rsi_bin" in states:
-        conditions.append({"indicator": "rsi", "state": states["rsi_bin"]})
+        selected.append("rsi")
     if states.get("macd_event"):
-        conditions.append({"indicator": "macd_event", "state": states["macd_event"]})
+        selected.append("macd")
     if states.get("ma_alignment") and states["ma_alignment"] != "none":
-        conditions.append({"indicator": "ma_alignment", "state": states["ma_alignment"]})
+        selected.append("ma")
     if states.get("bb_zone"):
-        conditions.append({"indicator": "bb_zone", "state": states["bb_zone"]})
+        selected.append("bb")
     if states.get("volume_level") and states["volume_level"] != "normal":
-        conditions.append({"indicator": "volume_level", "state": states["volume_level"]})
+        selected.append("volume")
     if states.get("drawdown_60d"):
-        conditions.append({"indicator": "drawdown_60d", "state": states["drawdown_60d"]})
+        selected.append("drawdown")
     if states.get("adx_trend"):
-        conditions.append({"indicator": "adx_trend", "state": states["adx_trend"]})
+        selected.append("adx")
 
-    if len(conditions) < 2:
+    if len(selected) < 2:
         return None
 
-    result = calc_combined_probability(df, conditions)
-    prob_data = _to_prob_data(result)
+    # Build current_values for adaptive matching
+    current_values = _build_current_values(indicators, states) if indicators else {}
+
+    # Use adaptive matching — progressively widens bins to find matches
+    smart_result = calc_adaptive_combined(
+        df, selected, current_values,
+        lookback_days=len(df),
+        compute_impact=False,
+    )
+
+    # Pick the best tier with sufficient data
+    best_tier = None
+    best_tier_name = "none"
+    for tier_name in ["strict", "normal", "relaxed"]:
+        tier_data = smart_result.get(tier_name)
+        if tier_data and tier_data.get("occurrences", 0) >= 5:
+            best_tier = tier_data
+            best_tier_name = tier_name
+            break
+
+    # Fallback to relaxed even if < 5
+    if not best_tier:
+        for tier_name in ["relaxed", "normal", "strict"]:
+            tier_data = smart_result.get(tier_name)
+            if tier_data and tier_data.get("occurrences", 0) > 0:
+                best_tier = tier_data
+                best_tier_name = tier_name
+                break
+
+    if not best_tier or best_tier.get("occurrences", 0) == 0:
+        return None
+
+    # Convert to ProbabilityData format
+    periods_data = best_tier.get("periods", {})
+    prob_data = _to_prob_data_from_dict(periods_data, best_tier.get("occurrences", 0))
+
+    # Build condition strings
+    condition_strs = []
+    for ind in selected:
+        state_key = {
+            "rsi": "rsi_bin", "macd": "macd_event", "ma": "ma_alignment",
+            "bb": "bb_zone", "volume": "volume_level", "drawdown": "drawdown_60d",
+            "adx": "adx_trend",
+        }.get(ind, ind)
+        state_val = states.get(state_key, "?")
+        condition_strs.append(f"{ind}:{state_val}")
 
     return CombinedProbability(
-        conditions=[c["indicator"] + ":" + c["state"] for c in conditions],
+        conditions=condition_strs,
         probability=prob_data,
+        tier=best_tier_name,
+        occurrences=best_tier.get("occurrences", 0),
+    )
+
+
+def _to_prob_data_from_dict(periods: dict, occurrences: int) -> ProbabilityData | None:
+    """Convert adaptive matcher periods dict to ProbabilityData."""
+    if not periods:
+        return None
+
+    period_stats = {}
+    for p_key, p_val in periods.items():
+        if isinstance(p_val, dict) and p_val.get("samples", 0) > 0:
+            period_stats[int(p_key)] = PeriodStats(
+                win_rate=round(p_val.get("win_rate", 0), 1),
+                avg_return=round(p_val.get("avg_return", 0), 2),
+                median_return=round(p_val.get("median_return", 0), 2),
+                best=round(p_val.get("best", 0), 2),
+                worst=round(p_val.get("worst", 0), 2),
+                samples=p_val.get("samples", 0),
+                std_dev=round(p_val.get("std_dev", 0), 2),
+            )
+
+    if not period_stats:
+        return None
+
+    return ProbabilityData(
+        condition=f"Combined ({occurrences} matches)",
+        occurrences=occurrences,
+        periods=period_stats,
     )
 
 

@@ -130,7 +130,9 @@ class Week52Data(BaseModel):
 
 class CombinedProbability(BaseModel):
     conditions: list[str]
-    probability: ProbabilityData
+    probability: ProbabilityData | None = None
+    tier: str | None = None
+    occurrences: int | None = None
 
 
 class PriceInfo(BaseModel):
