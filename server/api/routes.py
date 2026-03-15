@@ -1192,47 +1192,79 @@ async def time_machine(
     price_at_date = float(df_past["Close"].iloc[-1])
     current_price = float(df_full["Close"].iloc[-1])
 
-    # ── Compute combined probability on truncated data ──
-    conditions = []
-    if "rsi_bin" in states:
-        conditions.append({"indicator": "rsi", "state": states["rsi_bin"]})
-    if states.get("macd_event"):
-        conditions.append({"indicator": "macd_event", "state": states["macd_event"]})
-    if states.get("ma_alignment") and states["ma_alignment"] != "none":
-        conditions.append({"indicator": "ma_alignment", "state": states["ma_alignment"]})
-    if states.get("bb_zone"):
-        conditions.append({"indicator": "bb_zone", "state": states["bb_zone"]})
-    if states.get("volume_level") and states["volume_level"] != "normal":
-        conditions.append({"indicator": "volume_level", "state": states["volume_level"]})
-    if states.get("drawdown_60d"):
-        conditions.append({"indicator": "drawdown_60d", "state": states["drawdown_60d"]})
-    if states.get("adx_trend"):
-        conditions.append({"indicator": "adx_trend", "state": states["adx_trend"]})
+    # ── Compute combined probability using adaptive matching ──
+    current_values = _build_current_values(indicators, states)
 
-    # Determine signal direction and win rate from combined probability
+    selected_indicators = []
+    if "rsi_bin" in states:
+        selected_indicators.append("rsi")
+    if states.get("macd_event"):
+        selected_indicators.append("macd")
+    if states.get("ma_alignment") and states["ma_alignment"] != "none":
+        selected_indicators.append("ma")
+    if states.get("bb_zone"):
+        selected_indicators.append("bb")
+    if states.get("volume_level") and states["volume_level"] != "normal":
+        selected_indicators.append("volume")
+    if states.get("drawdown_60d"):
+        selected_indicators.append("drawdown")
+    if states.get("adx_trend"):
+        selected_indicators.append("adx")
+
+    # Determine signal direction and win rate from adaptive combined probability
     signal_direction = "neutral"
     win_rate_20d = None
     occurrences = 0
-    combo_result = None
+    used_tier = None
+    best_tier_data = None
 
-    if len(conditions) >= 2:
-        combo_result = calc_combined_probability(df_past, conditions)
-        occurrences = combo_result.occurrences
-        p20 = combo_result.periods.get(20, {})
-        if isinstance(p20, dict):
-            win_rate_20d = p20.get("win_rate")
-        if win_rate_20d is not None:
-            if win_rate_20d >= 55:
-                signal_direction = "bullish"
-            elif win_rate_20d <= 45:
-                signal_direction = "bearish"
-            else:
-                signal_direction = "neutral"
+    if len(selected_indicators) >= 2:
+        smart_result = calc_adaptive_combined(
+            df_past,
+            selected_indicators,
+            current_values,
+            lookback_days=len(df_past),
+            compute_impact=False,
+        )
+
+        # Pick the best tier (strict > normal > relaxed) with enough samples
+        for tier_name in ["strict", "normal", "relaxed"]:
+            tier_prob = smart_result.get("tiers", {}).get(tier_name)
+            if tier_prob and tier_prob.occurrences >= 5:
+                best_tier_data = tier_prob
+                used_tier = tier_name
+                break
+
+        if not best_tier_data:
+            # Fall back to relaxed even if < 5 occurrences
+            for tier_name in ["relaxed", "normal", "strict"]:
+                tier_prob = smart_result.get("tiers", {}).get(tier_name)
+                if tier_prob and tier_prob.occurrences > 0:
+                    best_tier_data = tier_prob
+                    used_tier = tier_name
+                    break
+
+        if best_tier_data:
+            occurrences = best_tier_data.occurrences
+            periods_data = best_tier_data.periods
+
+            # Extract 20-day win rate for direction
+            p20 = periods_data.get(20, {})
+            if isinstance(p20, dict):
+                win_rate_20d = p20.get("win_rate")
+
+            if win_rate_20d is not None and occurrences >= 3:
+                if win_rate_20d >= 55:
+                    signal_direction = "bullish"
+                elif win_rate_20d <= 45:
+                    signal_direction = "bearish"
+                else:
+                    signal_direction = "neutral"
 
     win_rates = {}
-    if len(conditions) >= 2 and combo_result is not None:
+    if best_tier_data is not None:
         for p_key in [5, 20, 60, 120]:
-            p_data = combo_result.periods.get(p_key, {})
+            p_data = best_tier_data.periods.get(p_key, {})
             if isinstance(p_data, dict):
                 wr = p_data.get("win_rate")
                 if wr is not None:
@@ -1243,7 +1275,8 @@ async def time_machine(
         "win_rate_20d": round(win_rate_20d, 1) if win_rate_20d is not None else None,
         "win_rates": win_rates,
         "occurrences": occurrences,
-        "conditions": [{"indicator": c["indicator"], "state": c["state"]} for c in conditions],
+        "tier": used_tier,
+        "conditions": [{"indicator": ind} for ind in selected_indicators],
     }
 
     # ── Compute ACTUAL forward returns ──
@@ -1259,8 +1292,9 @@ async def time_machine(
             }
 
     # ── Compute accuracy ──
+    # Only judge accuracy when we had a clear signal with sufficient historical data
     accuracy = None
-    if signal_direction in ("bullish", "bearish") and "20" in actual_returns:
+    if signal_direction in ("bullish", "bearish") and occurrences >= 3 and "20" in actual_returns:
         actual_went_up = actual_returns["20"]["went_up"]
         actual_dir = "up" if actual_went_up else "down"
         was_correct = (
