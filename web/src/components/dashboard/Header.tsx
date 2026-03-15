@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { SearchBar } from "./SearchBar";
-import { TrendingUp, TrendingDown, User, LogOut, ChevronDown } from "lucide-react";
+import { TrendingUp, TrendingDown, User, LogOut, ChevronDown, Menu } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 interface IndexPrice {
   symbol: string;
@@ -31,6 +32,7 @@ function getMarketStateBadge(state?: string): { label: string; color: string } |
 }
 
 export function Header() {
+  const { t } = useI18n();
   const [indices, setIndices] = useState<IndexPrice[]>([
     { symbol: "SPY", price: 0, change: 0, changePercent: 0 },
     { symbol: "QQQ", price: 0, change: 0, changePercent: 0 },
@@ -85,12 +87,26 @@ export function Header() {
     };
   }, []);
 
+  const handleHamburger = () => {
+    const fn = (window as unknown as Record<string, unknown>).__openMobileSidebar;
+    if (typeof fn === "function") fn();
+  };
+
   return (
-    <header className="flex items-center gap-4 h-14 px-4 border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md shrink-0">
+    <header className="flex items-center gap-2 sm:gap-4 h-14 px-3 sm:px-4 border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md shrink-0">
+      {/* Hamburger menu - mobile only */}
+      <button
+        onClick={handleHamburger}
+        className="flex md:hidden items-center justify-center w-8 h-8 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors shrink-0"
+        aria-label="Open menu"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
       {/* Search */}
       <SearchBar />
 
-      {/* Market indices - ticker tape style */}
+      {/* Market indices - ticker tape style - hidden on mobile */}
       <div className="hidden md:flex items-center gap-0 ml-auto">
         {/* Market state badge */}
         {marketBadge && (
@@ -137,16 +153,16 @@ export function Header() {
       </div>
 
       {/* User menu */}
-      <div className="relative ml-auto md:ml-0 flex items-center gap-2.5">
+      <div className="relative ml-auto md:ml-0 flex items-center gap-2 sm:gap-2.5">
         {/* Plan badge with gradient */}
-        <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md bg-gradient-to-r from-zinc-800 to-zinc-800/80 text-zinc-500 border border-zinc-700/60">
-          Free
+        <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md bg-gradient-to-r from-zinc-800 to-zinc-800/80 text-zinc-500 border border-zinc-700/60">
+          {t("common.free")}
         </span>
 
         {/* Modern user menu trigger */}
         <button
           onClick={() => setUserMenuOpen(!userMenuOpen)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800/80 transition-all duration-200"
+          className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800/80 transition-all duration-200"
           aria-label="User menu"
         >
           <div className="flex items-center justify-center w-5 h-5 rounded-md bg-zinc-800 border border-zinc-700/50">
@@ -167,12 +183,12 @@ export function Header() {
             <div className="absolute right-0 top-full mt-1.5 w-44 bg-zinc-900 border border-zinc-700/60 rounded-xl shadow-xl shadow-black/20 z-50 py-1 backdrop-blur-lg">
               <button className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800/60 transition-colors rounded-lg mx-0">
                 <User className="w-3.5 h-3.5 text-zinc-500" />
-                Profile
+                {t("header.profile")}
               </button>
               <div className="mx-2 my-1 border-t border-zinc-800/60" />
               <button className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800/60 transition-colors rounded-lg mx-0">
                 <LogOut className="w-3.5 h-3.5 text-zinc-500" />
-                Sign Out
+                {t("header.signOut")}
               </button>
             </div>
           </>

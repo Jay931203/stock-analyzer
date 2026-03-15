@@ -19,6 +19,8 @@ import {
   Loader2,
   CalendarClock,
 } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
+import type { TranslationKey } from "@/lib/i18n";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -38,14 +40,14 @@ const ETF_TICKERS = new Set(["SPY", "QQQ", "DIA", "IWM", "ARKK"]);
 
 /** Sector filter categories. Order matters for display. */
 const SECTOR_FILTERS = [
-  { key: "All", label: "All" },
-  { key: "Technology", label: "Technology" },
-  { key: "Healthcare", label: "Healthcare" },
-  { key: "Energy", label: "Energy" },
-  { key: "Finance", label: "Finance" },
-  { key: "Consumer", label: "Consumer" },
-  { key: "Industrial", label: "Industrial" },
-  { key: "ETFs", label: "ETFs" },
+  { key: "All", labelKey: "sector.all" as TranslationKey },
+  { key: "Technology", labelKey: "sector.technology" as TranslationKey },
+  { key: "Healthcare", labelKey: "sector.healthcare" as TranslationKey },
+  { key: "Energy", labelKey: "sector.energy" as TranslationKey },
+  { key: "Finance", labelKey: "sector.finance" as TranslationKey },
+  { key: "Consumer", labelKey: "sector.consumer" as TranslationKey },
+  { key: "Industrial", labelKey: "sector.industrial" as TranslationKey },
+  { key: "ETFs", labelKey: "sector.etfs" as TranslationKey },
 ] as const;
 
 type SectorFilterKey = (typeof SECTOR_FILTERS)[number]["key"];
@@ -134,6 +136,7 @@ const FILTER_CHIP_COLORS: Record<SectorFilterKey, { active: string; dot: string 
 // ---------------------------------------------------------------------------
 
 export default function ScannerPage() {
+  const { t } = useI18n();
   const [signals, setSignals] = useState<Signal[]>([]);
   const [totalSignals, setTotalSignals] = useState<number | undefined>();
   const [marketStateLabel, setMarketStateLabel] = useState<string | null>(null);
@@ -251,10 +254,10 @@ export default function ScannerPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-[1600px] mx-auto p-4 sm:p-6 space-y-4">
+      <div className="max-w-[1600px] mx-auto px-3 py-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4">
         {/* ====== Market Summary Bar ====== */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-3 sm:px-4 py-2.5 sm:py-3">
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2">
             {/* Market state badge */}
             <span
               className={cn(
@@ -279,7 +282,7 @@ export default function ScannerPage() {
             {/* Bullish card */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/10 hover:border-emerald-500/20 transition-colors">
               <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-[11px] text-zinc-500">Bullish</span>
+              <span className="text-[11px] text-zinc-500">{t("dashboard.bullish")}</span>
               <span className="font-mono font-bold text-sm text-emerald-400 tabular-nums">
                 {stats?.bullishCount ?? "--"}
               </span>
@@ -288,7 +291,7 @@ export default function ScannerPage() {
             {/* Bearish card */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/5 border border-red-500/10 hover:border-red-500/20 transition-colors">
               <TrendingDown className="w-3.5 h-3.5 text-red-500" />
-              <span className="text-[11px] text-zinc-500">Bearish</span>
+              <span className="text-[11px] text-zinc-500">{t("dashboard.bearish")}</span>
               <span className="font-mono font-bold text-sm text-red-400 tabular-nums">
                 {stats?.bearishCount ?? "--"}
               </span>
@@ -297,7 +300,7 @@ export default function ScannerPage() {
             {/* Avg Win Rate */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-zinc-800/40 transition-colors">
               <Target className="w-3.5 h-3.5 text-indigo-500" />
-              <span className="text-[11px] text-zinc-500">Avg WR</span>
+              <span className="text-[11px] text-zinc-500">{t("dashboard.avgWinRate")}</span>
               <span className="font-mono font-bold text-sm text-indigo-400 tabular-nums">
                 {stats ? `${stats.avgWinRate.toFixed(1)}%` : "--%"}
               </span>
@@ -309,7 +312,7 @@ export default function ScannerPage() {
               stats?.strongest && "animate-strength-pulse hover:bg-amber-500/5",
             )}>
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-[11px] text-zinc-500">Strongest</span>
+              <span className="text-[11px] text-zinc-500">{t("dashboard.strongest")}</span>
               {stats?.strongest ? (
                 <span className="font-mono font-bold text-sm text-zinc-100 tabular-nums">
                   {stats.strongest.ticker}
@@ -339,7 +342,7 @@ export default function ScannerPage() {
                 <span className="tabular-nums">{relativeTime || "just now"}</span>
                 {scanned > 0 && (
                   <span className="text-zinc-600 ml-0.5">
-                    ({scanned.toLocaleString()} scanned)
+                    ({scanned.toLocaleString()} {t("dashboard.scannedSuffix")})
                   </span>
                 )}
               </div>
@@ -350,7 +353,7 @@ export default function ScannerPage() {
         {/* ====== Header: Title + Period Tabs + Refresh ====== */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h1 className="text-xl font-semibold text-zinc-100">
-            Signal Scanner
+            {t("dashboard.title")}
           </h1>
 
           <div className="flex items-center gap-3">
@@ -362,7 +365,7 @@ export default function ScannerPage() {
                   onClick={() => setPeriod(p.value)}
                   title={p.desc}
                   className={cn(
-                    "px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200",
+                    "px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-semibold transition-all duration-200",
                     period === p.value
                       ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/25"
                       : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800",
@@ -382,7 +385,7 @@ export default function ScannerPage() {
               <RefreshCw
                 className={cn("w-3.5 h-3.5 transition-transform", refreshing && "animate-spin")}
               />
-              {refreshing ? "Refreshing..." : "Refresh"}
+              {refreshing ? t("dashboard.refreshingBtn") : t("dashboard.refresh")}
             </button>
           </div>
         </div>
@@ -405,7 +408,7 @@ export default function ScannerPage() {
                     : "border-zinc-800/80 text-zinc-500 bg-transparent hover:text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900/50",
                 )}
               >
-                {sf.label}
+                {t(sf.labelKey)}
                 <span
                   className={cn(
                     "font-mono text-[10px] px-1.5 py-0.5 rounded-full tabular-nums",
@@ -431,28 +434,28 @@ export default function ScannerPage() {
               <div className="hidden sm:block w-px h-5 bg-zinc-800" />
               <div className="flex items-center gap-1.5 text-xs">
                 <TrendingUp className="w-3 h-3 text-emerald-500" />
-                <span className="text-zinc-500">Bullish</span>
+                <span className="text-zinc-500">{t("dashboard.bullish")}</span>
                 <span className="font-mono font-semibold text-emerald-400 tabular-nums">
                   {sectorSummary.bullishCount}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-xs">
                 <TrendingDown className="w-3 h-3 text-red-500" />
-                <span className="text-zinc-500">Bearish</span>
+                <span className="text-zinc-500">{t("dashboard.bearish")}</span>
                 <span className="font-mono font-semibold text-red-400 tabular-nums">
                   {sectorSummary.bearishCount}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-xs">
                 <BarChart3 className="w-3 h-3 text-indigo-500" />
-                <span className="text-zinc-500">Avg WR</span>
+                <span className="text-zinc-500">{t("dashboard.avgWinRate")}</span>
                 <span className="font-mono font-semibold text-indigo-400 tabular-nums">
                   {sectorSummary.avgWinRate.toFixed(1)}%
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-xs">
                 <Zap className="w-3 h-3 text-amber-400" />
-                <span className="text-zinc-500">Top Signal</span>
+                <span className="text-zinc-500">{t("dashboard.topSignal")}</span>
                 <span className="font-mono font-semibold text-zinc-100 tabular-nums">
                   {sectorSummary.topSignal.ticker}
                   <span className="text-amber-400 ml-1">
@@ -472,7 +475,7 @@ export default function ScannerPage() {
               onClick={() => fetchSignals()}
               className="px-3 py-1 rounded-md bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-colors text-xs font-medium"
             >
-              Retry
+              {t("common.retry")}
             </button>
           </div>
         )}
@@ -485,11 +488,10 @@ export default function ScannerPage() {
             </div>
             <div className="text-center space-y-1">
               <h2 className="text-lg font-semibold text-zinc-200">
-                Signal scanner is refreshing
+                {t("dashboard.refreshing")}
               </h2>
               <p className="text-sm text-zinc-500 max-w-md">
-                Data updates every day at market close. If this is your first visit,
-                the scan may take a moment to complete.
+                {t("dashboard.refreshingDesc")}
               </p>
             </div>
             <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
@@ -504,10 +506,10 @@ export default function ScannerPage() {
             </div>
             <div className="text-center space-y-1">
               <h2 className="text-lg font-semibold text-zinc-200">
-                Loading signals...
+                {t("dashboard.loadingSignals")}
               </h2>
               <p className="text-sm text-zinc-500">
-                Fetching the latest scanner results.
+                {t("dashboard.loadingDesc")}
               </p>
             </div>
           </div>
@@ -526,9 +528,9 @@ export default function ScannerPage() {
 
         {/* Refreshing overlay indicator */}
         {refreshing && signals.length > 0 && (
-          <div className="fixed bottom-6 right-6 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/90 border border-zinc-700/60 shadow-xl backdrop-blur-md text-xs text-zinc-300 z-50">
+          <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/90 border border-zinc-700/60 shadow-xl backdrop-blur-md text-xs text-zinc-300 z-50">
             <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
-            Refreshing signals...
+            {t("dashboard.refreshingSignals")}
           </div>
         )}
       </div>

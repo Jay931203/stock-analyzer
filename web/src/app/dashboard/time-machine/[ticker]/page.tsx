@@ -179,7 +179,7 @@ export default function TimeMachinePage() {
       : null;
 
   return (
-    <div className="p-6 max-w-5xl space-y-6">
+    <div className="px-3 py-4 sm:p-4 md:p-6 max-w-5xl space-y-4 sm:space-y-6">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs text-zinc-500">
         <Link

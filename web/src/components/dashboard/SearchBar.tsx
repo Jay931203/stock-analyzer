@@ -207,14 +207,15 @@ export function SearchBar() {
 
   return (
     <>
-      {/* Trigger button */}
+      {/* Trigger button - compact on mobile, full on desktop */}
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700 text-zinc-400 text-sm hover:border-zinc-600 hover:text-zinc-300 transition-colors min-w-[220px]"
+        className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700 text-zinc-400 text-sm hover:border-zinc-600 hover:text-zinc-300 transition-colors min-w-0 sm:min-w-[220px] flex-1 sm:flex-initial max-w-[280px]"
       >
-        <Search className="w-3.5 h-3.5" />
-        <span className="flex-1 text-left">Search ticker...</span>
-        <kbd className="hidden sm:flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-zinc-700/60 text-[10px] text-zinc-500 font-mono">
+        <Search className="w-3.5 h-3.5 shrink-0" />
+        <span className="flex-1 text-left truncate hidden xs:inline sm:inline">Search ticker...</span>
+        <span className="flex-1 text-left xs:hidden sm:hidden">Search...</span>
+        <kbd className="hidden sm:flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-zinc-700/60 text-[10px] text-zinc-500 font-mono shrink-0">
           <Command className="w-2.5 h-2.5" />K
         </kbd>
       </button>

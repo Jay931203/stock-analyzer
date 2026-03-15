@@ -50,7 +50,7 @@ function buildColumns(dp: DisplayPeriod): Column[] {
     { key: "ticker", label: "Ticker", align: "left", width: "w-36" },
     { key: "sector", label: "Sector", align: "left", width: "w-28", hideOnMobile: true },
     { key: "price", label: "Price", align: "right", width: "w-24" },
-    { key: "change_pct", label: "Change%", shortLabel: "Chg%", align: "right", width: "w-20" },
+    { key: "change_pct", label: "Change%", shortLabel: "Chg%", align: "right", width: "w-20", hideOnMobile: true },
     { key: "win_rate", label: `WR ${dp}`, align: "right", width: "w-24" },
     { key: "avg_return", label: `Avg Ret ${dp}`, shortLabel: `Ret ${dp}`, align: "right", width: "w-22", hideOnMobile: true },
     { key: "strength", label: "Strength", align: "right", width: "w-32" },
@@ -277,8 +277,8 @@ export function SignalTable({ signals, loading, totalSignals, scanned, isMarketC
                 </span>
               </th>
             ))}
-            {/* View column */}
-            <th className="px-2 py-2.5 w-14" />
+            {/* View column - hidden on mobile */}
+            <th className="px-2 py-2.5 w-14 hidden sm:table-cell" />
           </tr>
         </thead>
         <tbody>
@@ -350,8 +350,8 @@ export function SignalTable({ signals, loading, totalSignals, scanned, isMarketC
                   ${formatPrice(sig.price)}
                 </td>
 
-                {/* Change% */}
-                <td className="px-2 py-2 text-right">
+                {/* Change% - hidden on mobile */}
+                <td className="px-2 py-2 text-right hidden lg:table-cell">
                   {sig.change_pct === 0 ? (
                     <span
                       className="font-mono text-xs px-1.5 py-0.5 rounded text-zinc-500 bg-zinc-500/5 tabular-nums"
@@ -447,8 +447,8 @@ export function SignalTable({ signals, loading, totalSignals, scanned, isMarketC
                   </div>
                 </td>
 
-                {/* View button */}
-                <td className="px-2 py-2 text-right">
+                {/* View button - hidden on mobile */}
+                <td className="px-2 py-2 text-right hidden sm:table-cell">
                   <span className="inline-flex items-center gap-1 text-[10px] text-zinc-600 group-hover:text-indigo-400 transition-colors">
                     View
                     <ExternalLink className="w-3 h-3" />

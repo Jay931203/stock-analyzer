@@ -777,7 +777,7 @@ export default function AnalyzePage() {
   // -- Loading skeleton --
   if (loading) {
     return (
-      <div className="p-6 space-y-6 max-w-7xl">
+      <div className="px-3 py-4 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl">
         <div className="flex items-center gap-2">
           <div className="w-20 h-4 bg-zinc-800 rounded animate-pulse" />
           <div className="w-4 h-4" />
@@ -793,7 +793,7 @@ export default function AnalyzePage() {
             <div className="w-20 h-4 bg-zinc-800 rounded animate-pulse" />
           </div>
         </div>
-        <div className="w-full h-[440px] bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />
+        <div className="w-full h-[300px] sm:h-[440px] bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />
         {/* Combined signal skeleton */}
         <div className="w-full h-[300px] bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -848,7 +848,7 @@ export default function AnalyzePage() {
       : null;
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl">
+    <div className="px-3 py-4 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs text-zinc-500">
         <Link
@@ -877,7 +877,7 @@ export default function AnalyzePage() {
 
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold text-zinc-100 font-mono tracking-tight">
+                <h1 className="text-2xl sm:text-3xl font-bold text-zinc-100 font-mono tracking-tight">
                   {info.ticker}
                 </h1>
                 <span
@@ -903,7 +903,7 @@ export default function AnalyzePage() {
           </div>
 
           <div className="text-right">
-            <div className="text-4xl font-mono font-bold text-zinc-100 tracking-tight tabular-nums">
+            <div className="text-2xl sm:text-4xl font-mono font-bold text-zinc-100 tracking-tight tabular-nums">
               {formatCurrency(price.current)}
             </div>
             <div
@@ -1055,7 +1055,7 @@ export default function AnalyzePage() {
         {smartResult?.tiers ? (
           <>
             <div className="px-5 pb-4">
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 {TIER_ORDER.map((tk) => (
                   <TierCard
                     key={tk}

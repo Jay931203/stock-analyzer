@@ -13,7 +13,7 @@ export default function TimeMachinePage() {
   const go = (t: string) => router.push(`/dashboard/time-machine/${t}`);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 p-6">
+    <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8 px-3 py-4 sm:p-4 md:p-6">
       <div>
         <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
           <Clock className="w-6 h-6 text-indigo-400" />
