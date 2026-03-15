@@ -8,13 +8,13 @@ import { Loader2, AlertCircle } from "lucide-react";
 const CHART_PERIODS = ["1M", "3M", "6M", "1Y", "2Y", "5Y"] as const;
 type ChartPeriod = (typeof CHART_PERIODS)[number];
 
-// Fetch exactly the period requested — simpler, more reliable
+// Fetch exact period — data = display range
 const FETCH_PERIOD_MAP: Record<ChartPeriod, string> = {
-  "1M": "1m",
-  "3M": "3m",
-  "6M": "6m",
-  "1Y": "1y",
-  "2Y": "2y",
+  "1M": "3m",
+  "3M": "6m",
+  "6M": "1y",
+  "1Y": "2y",
+  "2Y": "5y",
   "5Y": "5y",
 };
 

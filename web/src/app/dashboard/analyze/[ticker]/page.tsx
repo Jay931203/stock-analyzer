@@ -720,18 +720,23 @@ export default function AnalyzePage() {
   useEffect(() => {
     if (!data || selectedIndicators.size < 2) return;
     let cancelled = false;
+    const indicators = Array.from(selectedIndicators);
+    const key = indicators.sort().join(",");
+
+    console.log("[SmartProb] Fetching:", key, "period:", period);
 
     async function doFetch() {
       setSmartLoading(true);
       try {
-        const indicatorNames = Array.from(selectedIndicators);
-        const result = await api.getSmartProbability(ticker, indicatorNames, period);
+        const result = await api.getSmartProbability(ticker, indicators, period);
+        console.log("[SmartProb] Result:", JSON.stringify(result).slice(0, 200));
         if (cancelled) return;
         setSmartResult(result as unknown as SmartResult);
         if (result && typeof result === "object" && "best_tier" in result) {
           setActiveTier((result as Record<string, unknown>).best_tier as TierKey);
         }
-      } catch {
+      } catch (err) {
+        console.error("[SmartProb] Error:", err);
         if (!cancelled) setSmartResult(null);
       } finally {
         if (!cancelled) setSmartLoading(false);
@@ -744,14 +749,16 @@ export default function AnalyzePage() {
 
   const handleToggleIndicator = useCallback(
     (key: string) => {
+      console.log("[Toggle] Clicked:", key);
       setSelectedIndicators((prev) => {
         const next = new Set(prev);
         if (next.has(key)) {
-          if (next.size <= 2) return prev;
+          if (next.size <= 2) { console.log("[Toggle] Can't remove, min 2"); return prev; }
           next.delete(key);
         } else {
           next.add(key);
         }
+        console.log("[Toggle] New selection:", Array.from(next).join(","));
         return next;
       });
     },
