@@ -261,6 +261,16 @@ export interface TimeMachineActual {
   went_up: boolean;
 }
 
+export interface TimeMachineBaseline {
+  win_rate: number;
+  avg_return: number;
+}
+
+export interface TimeMachineDistribution {
+  total_cases: number;
+  lookback_days: number;
+}
+
 export interface TimeMachineResponse {
   ticker: string;
   date: string;
@@ -271,7 +281,9 @@ export interface TimeMachineResponse {
     win_rate_20d: number;
     win_rates?: Record<string, number>;
     occurrences: number;
+    tier?: string;
     conditions: { indicator: string; state: string }[];
+    confidence_warning?: string;
   };
   actual: Record<string, TimeMachineActual>;
   accuracy: {
@@ -281,6 +293,9 @@ export interface TimeMachineResponse {
   } | null;
   indicators_at_date: Record<string, unknown>;
   highlights: { text: string; type: string }[];
+  baseline: Record<string, TimeMachineBaseline>;
+  percentile_rank: number | null;
+  distribution: TimeMachineDistribution;
 }
 
 // ---------------------------------------------------------------------------

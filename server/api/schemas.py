@@ -202,6 +202,16 @@ class TimeMachineHighlight(BaseModel):
     type: str = Field(description="bullish or bearish")
 
 
+class TimeMachineBaseline(BaseModel):
+    win_rate: float = Field(description="Win rate for random entry")
+    avg_return: float = Field(description="Average return for random entry")
+
+
+class TimeMachineDistribution(BaseModel):
+    total_cases: int = Field(default=0, description="Number of similar pattern matches")
+    lookback_days: int = Field(default=0, description="Total trading days analyzed")
+
+
 class TimeMachineResponse(BaseModel):
     ticker: str
     date: str
@@ -212,6 +222,9 @@ class TimeMachineResponse(BaseModel):
     accuracy: TimeMachineAccuracy | None = None
     indicators_at_date: dict = Field(default_factory=dict, description="Indicator values at the selected date")
     highlights: list[TimeMachineHighlight] = Field(default_factory=list)
+    baseline: dict[str, TimeMachineBaseline] = Field(default_factory=dict, description="Random entry baseline returns by period")
+    percentile_rank: float | None = Field(default=None, description="Percentile rank of actual return within similar historical cases")
+    distribution: TimeMachineDistribution = Field(default_factory=TimeMachineDistribution, description="Distribution metadata")
 
 
 class TimeMachineRangeResponse(BaseModel):

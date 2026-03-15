@@ -1298,6 +1298,41 @@ async def time_machine(
             "was_correct": was_correct,
         }
 
+    # ── Compute baseline: average returns for any random trading day ──
+    import numpy as np
+
+    baseline = {}
+    close_past = df_past["Close"].values.astype(float)
+    n_past = len(close_past)
+    for bp_days in [5, 20, 60]:
+        if bp_days < n_past:
+            # Every possible entry point (except last bp_days bars)
+            entries = close_past[:n_past - bp_days]
+            exits = close_past[bp_days:]
+            if len(entries) > 0:
+                rets = (exits - entries) / entries * 100
+                baseline[str(bp_days)] = {
+                    "win_rate": round(float(np.mean(rets > 0) * 100), 1),
+                    "avg_return": round(float(np.mean(rets)), 2),
+                }
+
+    # ── Percentile rank: where does the actual return fall in the distribution? ──
+    percentile_rank = None
+    if best_tier_data and "20" in actual_returns:
+        cases = best_tier_data.cases or []
+        if cases:
+            case_returns = [c.returns.get(20, 0) for c in cases if 20 in c.returns]
+            if case_returns:
+                actual_ret = actual_returns["20"]["return_pct"]
+                rank = sum(1 for r in case_returns if r <= actual_ret) / len(case_returns)
+                percentile_rank = round(rank * 100, 1)
+
+    # ── Distribution metadata ──
+    distribution = {
+        "total_cases": occurrences,
+        "lookback_days": len(df_past),
+    }
+
     # ── Build indicators at date ──
     indicators_at_date = {
         "rsi": indicators["rsi"]["value"],
@@ -1335,6 +1370,9 @@ async def time_machine(
         accuracy=accuracy,
         indicators_at_date=indicators_at_date,
         highlights=highlights,
+        baseline=baseline,
+        percentile_rank=percentile_rank,
+        distribution=distribution,
     )
 
     # ── Cache the result ──

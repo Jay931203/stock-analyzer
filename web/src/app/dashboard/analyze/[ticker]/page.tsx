@@ -27,8 +27,6 @@ import {
   Target,
   Star,
   Check,
-  CheckCircle2,
-  XCircle,
   History,
 } from "lucide-react";
 
@@ -570,14 +568,11 @@ function TimeMachinePreviewCard({
     );
   }
 
-  const wasCorrect = data.accuracy?.was_correct;
-  const actualDir = data.accuracy?.actual_direction;
-  // Pick the longest-term actual return available
-  const actualKeys = Object.keys(data.actual || {}).sort(
-    (a, b) => parseInt(b) - parseInt(a),
-  );
-  const bestActual = actualKeys.length > 0 ? data.actual[actualKeys[0]] : null;
-  const returnPct = bestActual?.return_pct;
+  const occurrences = data.distribution?.total_cases ?? data.signal.occurrences;
+  const winRate20 = data.signal.win_rate_20d;
+  // Pick the 20d actual return for summary
+  const actual20 = data.actual?.["20"];
+  const avgReturn = actual20?.return_pct;
 
   return (
     <Link
@@ -586,48 +581,43 @@ function TimeMachinePreviewCard({
     >
       <div className="flex items-start justify-between mb-1">
         <div className="text-xs font-semibold text-zinc-300">{presetLabel}</div>
-        {wasCorrect === true && (
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-        )}
-        {wasCorrect === false && (
-          <XCircle className="w-4 h-4 text-red-400 shrink-0" />
-        )}
       </div>
       <div className="text-[11px] text-zinc-600 font-mono mb-2">
         {presetDate}
       </div>
 
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "text-sm font-mono font-bold",
-            wasCorrect === true
-              ? "text-emerald-400"
-              : wasCorrect === false
-                ? "text-red-400"
-                : "text-zinc-500",
-          )}
-        >
-          {wasCorrect === true ? "CORRECT" : wasCorrect === false ? "INCORRECT" : "NO SIGNAL"}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs font-mono font-medium text-zinc-400">
+          {occurrences} pattern{occurrences !== 1 ? "s" : ""}
         </span>
-        {returnPct != null && (
-          <span
-            className={cn(
-              "text-xs font-mono",
-              returnPct >= 0 ? "text-emerald-400" : "text-red-400",
-            )}
-          >
-            {returnPct >= 0 ? "+" : ""}
-            {returnPct.toFixed(1)}%
-          </span>
+        {winRate20 != null && (
+          <>
+            <span className="text-zinc-600">|</span>
+            <span
+              className={cn(
+                "text-xs font-mono font-bold",
+                winRate20 >= 55 ? "text-emerald-400" : winRate20 <= 45 ? "text-red-400" : "text-zinc-400",
+              )}
+            >
+              {winRate20.toFixed(0)}% went up
+            </span>
+          </>
+        )}
+        {avgReturn != null && (
+          <>
+            <span className="text-zinc-600">|</span>
+            <span
+              className={cn(
+                "text-xs font-mono",
+                avgReturn >= 0 ? "text-emerald-400" : "text-red-400",
+              )}
+            >
+              {avgReturn >= 0 ? "+" : ""}
+              {avgReturn.toFixed(1)}%
+            </span>
+          </>
         )}
       </div>
-
-      {actualDir && (
-        <div className="text-[11px] text-zinc-500 mt-1">
-          Market went {actualDir}
-        </div>
-      )}
 
       <div className="text-[10px] text-indigo-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
         View details
