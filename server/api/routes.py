@@ -1608,40 +1608,42 @@ def _calc_combined(df, states: dict, indicators: dict = None) -> CombinedProbabi
     # Build current_values for adaptive matching
     current_values = _build_current_values(indicators, states) if indicators else {}
 
-    # Use adaptive matching — progressively widens bins to find matches
-    try:
-        smart_result = calc_adaptive_combined(
-            df, selected, current_values,
-            lookback_days=len(df),
-            compute_impact=False,
-        )
-    except Exception as e:
-        print(f"[combined] adaptive matching failed: {e}")
-        traceback.print_exc()
-        return None
+    # Build conditions for exact matching
+    conditions = []
+    state_keys = {
+        "rsi": "rsi_bin", "macd": "macd_event", "ma": "ma_alignment",
+        "bb": "bb_zone", "volume": "volume_level", "drawdown": "drawdown_60d",
+        "adx": "adx_trend",
+    }
+    for ind in selected:
+        sk = state_keys.get(ind, ind)
+        if sk in states:
+            conditions.append({"indicator": sk, "state": states[sk]})
 
-    # smart_result has "tiers" (dict of ProbabilityResult) and "best_tier" (str name)
-    tiers = smart_result.get("tiers", {})
-    best_tier_name = smart_result.get("best_tier", "normal")
-    best_tier = tiers.get(best_tier_name)
+    # Try exact match with all conditions first.
+    # If occurrences < 5, progressively drop conditions until we get enough matches.
+    best_result = None
+    best_tier_name = "exact"
+    used_conditions = list(conditions)
 
-    # Fallback if best_tier is empty
-    if not best_tier or best_tier.occurrences == 0:
-        for tier_name in ["relaxed", "normal", "strict"]:
-            tier_data = tiers.get(tier_name)
-            if tier_data and tier_data.occurrences > 0:
-                best_tier = tier_data
-                best_tier_name = tier_name
+    while len(used_conditions) >= 2:
+        try:
+            result = calc_combined_probability(df, used_conditions)
+            if result.occurrences >= 5:
+                best_result = result
                 break
+            elif result.occurrences > 0 and (best_result is None or result.occurrences > best_result.occurrences):
+                best_result = result
+        except Exception:
+            pass
+        # Drop the last condition and retry
+        used_conditions = used_conditions[:-1]
+        best_tier_name = f"relaxed_{len(used_conditions)}"
 
-    if not best_tier or best_tier.occurrences == 0:
-        print(f"[combined] No tier has occurrences > 0 for selected={selected}")
+    if not best_result or best_result.occurrences == 0:
         return None
 
-    print(f"[combined] Using tier={best_tier_name} occ={best_tier.occurrences} for selected={selected}")
-
-    # Convert ProbabilityResult to ProbabilityData format
-    prob_data = _to_prob_data(best_tier)
+    prob_data = _to_prob_data(best_result)
 
     # Build condition strings
     condition_strs = []
