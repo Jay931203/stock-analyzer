@@ -1939,3 +1939,58 @@ async def get_chart_data(
         })
 
     return {"ticker": ticker, "period": period, "candles": candles}
+
+
+@router.get("/debug/combined/{ticker}")
+async def debug_combined(ticker: str, period: str = Query("10y", pattern="^(1y|2y|3y|5y|10y)$")):
+    """Debug endpoint to check why combined is None."""
+    ticker = _validate_ticker(ticker)
+    try:
+        df = fetch_price_history(ticker, period=period)
+    except Exception as e:
+        return {"error": f"fetch failed: {e}"}
+
+    indicators = compute_all_indicators(df)
+    states = get_indicator_state(indicators)
+
+    selected = []
+    if "rsi_bin" in states: selected.append("rsi")
+    if states.get("macd_event"): selected.append("macd")
+    if states.get("ma_alignment") and states["ma_alignment"] != "none": selected.append("ma")
+    if states.get("bb_zone"): selected.append("bb")
+    if states.get("volume_level") and states["volume_level"] != "normal": selected.append("volume")
+    if states.get("drawdown_60d"): selected.append("drawdown")
+    if states.get("adx_trend"): selected.append("adx")
+
+    state_keys = {
+        "rsi": "rsi_bin", "macd": "macd_event", "ma": "ma_alignment",
+        "bb": "bb_zone", "volume": "volume_level", "drawdown": "drawdown_60d",
+        "adx": "adx_trend",
+    }
+    conditions = []
+    for ind in selected:
+        sk = state_keys.get(ind, ind)
+        if sk in states:
+            conditions.append({"indicator": sk, "state": states[sk]})
+
+    # Try calc
+    results = []
+    used = list(conditions)
+    while len(used) >= 2:
+        try:
+            r = calc_combined_probability(df, used)
+            results.append({"n_conditions": len(used), "occurrences": r.occurrences, "error": None})
+            if r.occurrences >= 5:
+                break
+        except Exception as e:
+            results.append({"n_conditions": len(used), "occurrences": 0, "error": str(e)})
+        used = used[:-1]
+
+    return {
+        "ticker": ticker,
+        "states": {k: str(v) for k, v in states.items()},
+        "selected": selected,
+        "conditions_built": len(conditions),
+        "conditions": conditions,
+        "results": results,
+    }
