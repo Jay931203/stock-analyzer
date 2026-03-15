@@ -61,6 +61,10 @@ function sectorToFilterKey(sector: string, ticker: string): SectorFilterKey {
   if (s.includes("financ") || s.includes("bank")) return "Finance";
   if (s.includes("consumer") || s.includes("retail") || s.includes("staple")) return "Consumer";
   if (s.includes("industrial") || s.includes("defense") || s.includes("aero")) return "Industrial";
+  if (s.includes("communication") || s.includes("media") || s.includes("telecom")) return "Technology";
+  if (s.includes("real estate") || s.includes("reit")) return "Finance";
+  if (s.includes("utilit")) return "Industrial";
+  if (s.includes("material") || s.includes("mining") || s.includes("chemical")) return "Industrial";
   return "All";
 }
 

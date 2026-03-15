@@ -283,8 +283,11 @@ export function SignalTable({ signals, loading, totalSignals, scanned, isMarketC
         </thead>
         <tbody>
           {sorted.map((sig, idx) => {
-            const wr = (sig[WR_FIELD[displayPeriod]] as number | undefined) ?? 0;
-            const ar = (sig[AR_FIELD[displayPeriod]] as number | undefined) ?? 0;
+            const wrRaw = sig[WR_FIELD[displayPeriod]] as number | undefined;
+            const arRaw = sig[AR_FIELD[displayPeriod]] as number | undefined;
+            const wr = wrRaw ?? 0;
+            const ar = arRaw ?? 0;
+            const hasData = wrRaw !== undefined;
             return (
               <tr
                 key={`${sig.ticker}-${idx}`}

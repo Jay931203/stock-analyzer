@@ -121,7 +121,7 @@ const PRICING = [
       "Export to CSV",
       "Priority support",
     ],
-    cta: "Start 7-Day Trial",
+    cta: "Start 14-Day Trial",
     highlighted: true,
   },
   {

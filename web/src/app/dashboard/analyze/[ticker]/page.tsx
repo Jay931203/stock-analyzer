@@ -569,7 +569,7 @@ function TimeMachinePreviewCard({
   }
 
   const occurrences = data.distribution?.total_cases ?? data.signal.occurrences;
-  const winRate20 = data.signal.win_rate_20d;
+  const winRate20 = data.signal.win_rate_20d ?? data.signal.win_rates?.["20"];
   // Pick the 20d actual return for summary
   const actual20 = data.actual?.["20"];
   const avgReturn = actual20?.return_pct;
