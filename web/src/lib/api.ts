@@ -293,9 +293,9 @@ class StockAPI {
   private async fetch<T>(path: string, init?: RequestInit): Promise<T> {
     const headers: HeadersInit = { "Content-Type": "application/json" };
 
-    // 30-second timeout to avoid hanging requests
+    // 60-second timeout (signal scan can take 30-50s on cold start)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
 
     let res: Response;
     try {

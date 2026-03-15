@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Database,
 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -209,12 +210,16 @@ export default function LandingPage() {
 
           {/* CTA */}
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm">
-              Log In
-            </Button>
-            <Button size="sm" className="shadow-lg shadow-primary/20">
-              Start Free
-            </Button>
+            <Link href="/dashboard">
+              <Button variant="ghost" size="sm">
+                Log In
+              </Button>
+            </Link>
+            <Link href="/dashboard">
+              <Button size="sm" className="shadow-lg shadow-primary/20">
+                Start Free
+              </Button>
+            </Link>
           </div>
         </div>
       </nav>
@@ -268,13 +273,17 @@ export default function LandingPage() {
           </div>
 
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-            <Button size="lg" className="gap-2 text-base shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-shadow">
-              Start Analyzing — It&apos;s Free
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button size="lg" variant="outline" className="gap-2 text-base">
-              Watch Demo
-            </Button>
+            <Link href="/dashboard">
+              <Button size="lg" className="gap-2 text-base shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-shadow">
+                Start Analyzing — It&apos;s Free
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <a href="#demo">
+              <Button size="lg" variant="outline" className="gap-2 text-base">
+                Watch Demo
+              </Button>
+            </a>
           </div>
 
           <p className="mt-4 text-sm text-muted-foreground">
