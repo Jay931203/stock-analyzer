@@ -279,18 +279,8 @@ def _recompute_analysis(ticker: str, period: str = "10y") -> AnalysisResponse:
         price_distribution=price_distribution,
     )
 
-    try:
-        combined = _calc_combined(df, states, indicators)
-    except Exception as e:
-        import sys
-        print(f"[analyze] _calc_combined failed for {ticker}: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        combined = CombinedProbability(
-            conditions=[f"ERROR: {str(e)[:200]}"],
-            probability=None,
-            tier="error",
-            occurrences=0,
-        )
+    # No try/except — let errors propagate for debugging
+    combined = _calc_combined(df, states, indicators)
     data_range = f"{df.index[0].strftime('%Y-%m-%d')} ~ {df.index[-1].strftime('%Y-%m-%d')} ({len(df)} days)"
 
     response = AnalysisResponse(
