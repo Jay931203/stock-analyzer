@@ -138,19 +138,7 @@ export function Sidebar({ plan = "free" }: SidebarProps) {
         </div>
       </nav>
 
-      {/* Plan badge */}
-      {!collapsed && (
-        <div className="px-2 pb-3 shrink-0 border-t border-zinc-800/80 pt-3">
-          <div
-            className={cn(
-              "flex items-center justify-center py-1.5 rounded-md border text-xs font-medium",
-              planColor,
-            )}
-          >
-            {planLabel} Plan
-          </div>
-        </div>
-      )}
+      {/* Plan badge moved to Header */}
     </aside>
   );
 }

@@ -295,7 +295,8 @@ export function PriceChart({ ticker, className }: PriceChartProps) {
       {/* Chart container */}
       <div
         ref={containerRef}
-        className="w-full h-[400px] rounded-lg overflow-hidden"
+        className="w-full min-h-[400px] h-[400px] rounded-lg overflow-hidden"
+        style={{ height: 400 }}
       >
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 z-10 rounded-lg backdrop-blur-sm">

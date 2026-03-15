@@ -87,7 +87,7 @@ const TIER_META: Record<TierKey, { label: string; description: string }> = {
   },
 };
 
-const FORWARD_PERIODS = ["5", "20", "60"] as const;
+const FORWARD_PERIODS = ["5", "10", "20", "60", "120", "252"] as const;
 
 const PRESET_DATES = [
   { date: "2020-03-23", label: "COVID Bottom" },
@@ -719,31 +719,31 @@ export default function AnalyzePage() {
     [ticker, period],
   );
 
-  // Auto-fetch smart probability on initial load + when period changes
-  // (indicator changes are handled by handleToggleIndicator directly)
+  // Track selected indicators as a serialized string for dependency comparison
+  const selectedKey = Array.from(selectedIndicators).sort().join(",");
+
+  // Auto-fetch smart probability on initial load + when selection/period changes
   useEffect(() => {
     if (data && selectedIndicators.size >= 2) {
       fetchSmartProbability(selectedIndicators);
     }
-  }, [data, period, fetchSmartProbability, selectedIndicators]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, period, selectedKey]);
 
   const handleToggleIndicator = useCallback(
     (key: string) => {
       setSelectedIndicators((prev) => {
         const next = new Set(prev);
         if (next.has(key)) {
-          // Don't allow fewer than 2
           if (next.size <= 2) return prev;
           next.delete(key);
         } else {
           next.add(key);
         }
-        // Trigger fetch
-        fetchSmartProbability(next);
         return next;
       });
     },
-    [fetchSmartProbability],
+    [],
   );
 
   // Active tier data
@@ -1079,7 +1079,7 @@ export default function AnalyzePage() {
                     if (!pd) return null;
                     return (
                       <div key={fp} className="flex items-center gap-4">
-                        <WinRateBar label={`${fp}d`} value={pd.win_rate} />
+                        <WinRateBar label={fp === "252" ? "1Y" : `${fp}d`} value={pd.win_rate} />
                         <span
                           className={cn(
                             "text-xs font-mono font-semibold w-16 text-right shrink-0",

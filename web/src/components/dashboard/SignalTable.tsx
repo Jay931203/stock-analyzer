@@ -326,17 +326,27 @@ export function SignalTable({ signals, loading, totalSignals, scanned, isMarketC
 
                 {/* Change% */}
                 <td className="px-2 py-1.5 text-right">
-                  {isMarketClosed ? (
+                  {sig.change_pct === 0 ? (
+                    <span
+                      className="font-mono text-xs px-1.5 py-0.5 rounded text-zinc-500 bg-zinc-500/5"
+                      title={isMarketClosed ? "Market closed — no change from last session" : undefined}
+                    >
+                      0.00%
+                      {isMarketClosed && (
+                        <span className="text-[9px] text-zinc-600 ml-0.5">(prev)</span>
+                      )}
+                    </span>
+                  ) : isMarketClosed ? (
                     <span
                       className={cn(
                         "font-mono text-xs px-1.5 py-0.5 rounded",
-                        sig.change_pct >= 0
+                        sig.change_pct > 0
                           ? "text-emerald-400/70 bg-emerald-500/5"
                           : "text-red-400/70 bg-red-500/5",
                       )}
                       title="Market closed — showing last session change"
                     >
-                      {sig.change_pct >= 0 ? "+" : ""}
+                      {sig.change_pct > 0 ? "+" : ""}
                       {sig.change_pct.toFixed(2)}%
                       <span className="text-[9px] text-zinc-600 ml-0.5">(prev)</span>
                     </span>
@@ -344,12 +354,12 @@ export function SignalTable({ signals, loading, totalSignals, scanned, isMarketC
                     <span
                       className={cn(
                         "font-mono text-xs px-1.5 py-0.5 rounded",
-                        sig.change_pct >= 0
+                        sig.change_pct > 0
                           ? "text-emerald-400 bg-emerald-500/10"
                           : "text-red-400 bg-red-500/10",
                       )}
                     >
-                      {sig.change_pct >= 0 ? "+" : ""}
+                      {sig.change_pct > 0 ? "+" : ""}
                       {sig.change_pct.toFixed(2)}%
                     </span>
                   )}

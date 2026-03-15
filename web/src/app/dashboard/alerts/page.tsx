@@ -30,11 +30,11 @@ export default function AlertsPage() {
         <div className="grid sm:grid-cols-2 gap-4 max-w-lg mx-auto text-left">
           <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
             <p className="text-sm font-medium text-zinc-300 mb-1">Signal Alert</p>
-            <p className="text-xs text-zinc-500">&quot;Notify me when AAPL enters an Oversold Bounce signal&quot;</p>
+            <p className="text-xs text-zinc-500">&quot;Notify me when AAPL enters an Oversold Bounce signal with 60%+ win rate&quot;</p>
           </div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-            <p className="text-sm font-medium text-zinc-300 mb-1">Price Alert</p>
-            <p className="text-xs text-zinc-500">&quot;Notify me when NVDA drops below $100&quot;</p>
+            <p className="text-sm font-medium text-zinc-300 mb-1">Probability Alert</p>
+            <p className="text-xs text-zinc-500">&quot;Notify me when any stock has combined win rate above 80% (20d)&quot;</p>
           </div>
         </div>
 
