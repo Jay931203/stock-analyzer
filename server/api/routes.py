@@ -85,7 +85,7 @@ async def analyze_ticker(
     All features open during launch phase.
     """
     ticker = _validate_ticker(ticker)
-    # ── Always return cache if available (even if stale) ──
+    # ── Check cache ──
     cached = read_cached_analysis(ticker)
     if cached and cached.get("data"):
         updated_at = cached.get("updated_at", "")
@@ -94,17 +94,10 @@ async def analyze_ticker(
         # Log search in background
         background_tasks.add_task(log_recent_search, ticker)
 
-        if not is_fresh and not _IS_VERCEL:
-            # Stale cache: return it instantly, refresh in background
-            # Skip on Vercel where background tasks may not complete
-            def _bg_recompute():
-                try:
-                    _recompute_analysis(ticker, period)
-                except Exception:
-                    pass
-            background_tasks.add_task(_bg_recompute)
-
-        return cached["data"]
+        if is_fresh:
+            return cached["data"]
+        # Stale cache on Vercel: recompute immediately (background tasks unreliable)
+        # This is slower but ensures users always see fresh data
 
     # ── No cache at all: must compute (first ever visit) ──
     response = _recompute_analysis(ticker, period)
