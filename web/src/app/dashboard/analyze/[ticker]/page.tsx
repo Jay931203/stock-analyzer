@@ -718,11 +718,29 @@ export default function AnalyzePage() {
 
   // Auto-fetch smart probability on initial load + when selection/period changes
   useEffect(() => {
-    if (data && selectedIndicators.size >= 2) {
-      fetchSmartProbability(selectedIndicators);
+    if (!data || selectedIndicators.size < 2) return;
+    let cancelled = false;
+
+    async function doFetch() {
+      setSmartLoading(true);
+      try {
+        const indicatorNames = Array.from(selectedIndicators);
+        const result = await api.getSmartProbability(ticker, indicatorNames, period);
+        if (cancelled) return;
+        setSmartResult(result as unknown as SmartResult);
+        if (result && typeof result === "object" && "best_tier" in result) {
+          setActiveTier((result as Record<string, unknown>).best_tier as TierKey);
+        }
+      } catch {
+        if (!cancelled) setSmartResult(null);
+      } finally {
+        if (!cancelled) setSmartLoading(false);
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, period, selectedKey]);
+
+    doFetch();
+    return () => { cancelled = true; };
+  }, [data, ticker, period, selectedKey]);
 
   const handleToggleIndicator = useCallback(
     (key: string) => {
