@@ -61,7 +61,29 @@ function sectorToFilterKey(sector: string, ticker: string): SectorFilterKey {
   if (s.includes("financ") || s.includes("bank")) return "Finance";
   if (s.includes("consumer") || s.includes("retail") || s.includes("staple")) return "Consumer";
   if (s.includes("industrial") || s.includes("defense") || s.includes("aero")) return "Industrial";
-  return "All"; // falls through to "All" only
+  return "All";
+}
+
+// ---------------------------------------------------------------------------
+// Relative time helper
+// ---------------------------------------------------------------------------
+
+function getRelativeTime(iso: string): string {
+  const now = Date.now();
+  const then = new Date(iso).getTime();
+  const diffSec = Math.floor((now - then) / 1000);
+
+  if (diffSec < 60) return "just now";
+  if (diffSec < 3600) {
+    const m = Math.floor(diffSec / 60);
+    return `${m} min${m > 1 ? "s" : ""} ago`;
+  }
+  if (diffSec < 86400) {
+    const h = Math.floor(diffSec / 3600);
+    return `${h} hr${h > 1 ? "s" : ""} ago`;
+  }
+  const d = Math.floor(diffSec / 86400);
+  return `${d} day${d > 1 ? "s" : ""} ago`;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,15 +114,15 @@ function getMarketState(): { label: string; color: string; isClosed: boolean } {
 // Sector filter chip badge colors (reuse table colors)
 // ---------------------------------------------------------------------------
 
-const FILTER_CHIP_COLORS: Record<SectorFilterKey, string> = {
-  All: "border-zinc-600 text-zinc-300 bg-zinc-800",
-  Technology: "border-indigo-500/40 text-indigo-400 bg-indigo-500/10",
-  Healthcare: "border-cyan-500/40 text-cyan-400 bg-cyan-500/10",
-  Energy: "border-orange-500/40 text-orange-400 bg-orange-500/10",
-  Finance: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
-  Consumer: "border-amber-500/40 text-amber-400 bg-amber-500/10",
-  Industrial: "border-slate-400/40 text-slate-400 bg-slate-400/10",
-  ETFs: "border-purple-500/40 text-purple-400 bg-purple-500/10",
+const FILTER_CHIP_COLORS: Record<SectorFilterKey, { active: string; dot: string }> = {
+  All: { active: "border-zinc-500 text-zinc-200 bg-zinc-700/50", dot: "bg-zinc-400" },
+  Technology: { active: "border-indigo-500/40 text-indigo-300 bg-indigo-500/15", dot: "bg-indigo-400" },
+  Healthcare: { active: "border-cyan-500/40 text-cyan-300 bg-cyan-500/15", dot: "bg-cyan-400" },
+  Energy: { active: "border-orange-500/40 text-orange-300 bg-orange-500/15", dot: "bg-orange-400" },
+  Finance: { active: "border-emerald-500/40 text-emerald-300 bg-emerald-500/15", dot: "bg-emerald-400" },
+  Consumer: { active: "border-amber-500/40 text-amber-300 bg-amber-500/15", dot: "bg-amber-400" },
+  Industrial: { active: "border-slate-400/40 text-slate-300 bg-slate-400/15", dot: "bg-slate-400" },
+  ETFs: { active: "border-purple-500/40 text-purple-300 bg-purple-500/15", dot: "bg-purple-400" },
 };
 
 // ---------------------------------------------------------------------------
@@ -123,6 +145,17 @@ export default function ScannerPage() {
   useEffect(() => {
     setLocalMarketState(getMarketState());
   }, []);
+
+  // Relative time ticker
+  const [relativeTime, setRelativeTime] = useState<string>("");
+  useEffect(() => {
+    if (!lastUpdated) return;
+    setRelativeTime(getRelativeTime(lastUpdated));
+    const interval = setInterval(() => {
+      setRelativeTime(getRelativeTime(lastUpdated));
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
 
   const fetchSignals = useCallback(
     async (showRefresh = false) => {
@@ -215,60 +248,66 @@ export default function ScannerPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-[1600px] mx-auto p-4 sm:p-6 space-y-4">
-        {/* ====== Market Summary Bar (full-width, horizontal) ====== */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        {/* ====== Market Summary Bar ====== */}
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             {/* Market state badge */}
             <span
               className={cn(
-                "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border",
+                "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors",
                 (localMarketState?.isClosed ?? true)
-                  ? "border-zinc-700 bg-zinc-800/60 text-zinc-500"
+                  ? "border-zinc-700/60 bg-zinc-800/60 text-zinc-500"
                   : localMarketState?.color === "text-emerald-400"
                     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                     : "border-amber-500/30 bg-amber-500/10 text-amber-400",
               )}
             >
-              <Circle className="w-2 h-2 fill-current" />
+              <Circle className={cn(
+                "w-2 h-2 fill-current",
+                !(localMarketState?.isClosed ?? true) && "animate-pulse-dot",
+              )} />
               {marketStateLabel || localMarketState?.label || "Loading..."}
             </span>
 
             {/* Divider */}
             <div className="hidden sm:block w-px h-6 bg-zinc-800" />
 
-            {/* Bullish count */}
-            <div className="flex items-center gap-1.5 text-xs">
+            {/* Bullish card */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/5 border border-emerald-500/10 hover:border-emerald-500/20 transition-colors">
               <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-zinc-500">Bullish</span>
-              <span className="font-mono font-semibold text-emerald-400">
+              <span className="text-[11px] text-zinc-500">Bullish</span>
+              <span className="font-mono font-bold text-sm text-emerald-400 tabular-nums">
                 {stats?.bullishCount ?? "--"}
               </span>
             </div>
 
-            {/* Bearish count */}
-            <div className="flex items-center gap-1.5 text-xs">
+            {/* Bearish card */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/5 border border-red-500/10 hover:border-red-500/20 transition-colors">
               <TrendingDown className="w-3.5 h-3.5 text-red-500" />
-              <span className="text-zinc-500">Bearish</span>
-              <span className="font-mono font-semibold text-red-400">
+              <span className="text-[11px] text-zinc-500">Bearish</span>
+              <span className="font-mono font-bold text-sm text-red-400 tabular-nums">
                 {stats?.bearishCount ?? "--"}
               </span>
             </div>
 
             {/* Avg Win Rate */}
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-zinc-800/40 transition-colors">
               <Target className="w-3.5 h-3.5 text-indigo-500" />
-              <span className="text-zinc-500">Avg WR</span>
-              <span className="font-mono font-semibold text-indigo-400">
+              <span className="text-[11px] text-zinc-500">Avg WR</span>
+              <span className="font-mono font-bold text-sm text-indigo-400 tabular-nums">
                 {stats ? `${stats.avgWinRate.toFixed(1)}%` : "--%"}
               </span>
             </div>
 
-            {/* Strongest Signal */}
-            <div className="flex items-center gap-1.5 text-xs">
+            {/* Strongest Signal - with subtle pulse */}
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors",
+              stats?.strongest && "animate-strength-pulse hover:bg-amber-500/5",
+            )}>
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-zinc-500">Strongest</span>
+              <span className="text-[11px] text-zinc-500">Strongest</span>
               {stats?.strongest ? (
-                <span className="font-mono font-semibold text-zinc-100">
+                <span className="font-mono font-bold text-sm text-zinc-100 tabular-nums">
                   {stats.strongest.ticker}
                   <span className="text-amber-400 ml-1">
                     ({stats.strongest.strength.toFixed(0)})
@@ -282,19 +321,20 @@ export default function ScannerPage() {
             {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Last updated */}
+            {/* Last updated - relative time */}
             {lastUpdated && (
-              <div className="text-[11px] text-zinc-500 flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                Updated{" "}
-                {new Date(lastUpdated).toLocaleTimeString("en-US", {
-                  hour: "2-digit",
-                  minute: "2-digit",
+              <div
+                className="text-[11px] text-zinc-500 flex items-center gap-1.5 cursor-default"
+                title={new Date(lastUpdated).toLocaleString("en-US", {
                   timeZone: "America/New_York",
-                })}{" "}
-                ET
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              >
+                <Clock className="w-3 h-3" />
+                <span className="tabular-nums">{relativeTime || "just now"}</span>
                 {scanned > 0 && (
-                  <span className="text-zinc-600 ml-1">
+                  <span className="text-zinc-600 ml-0.5">
                     ({scanned.toLocaleString()} scanned)
                   </span>
                 )}
@@ -311,7 +351,7 @@ export default function ScannerPage() {
 
           <div className="flex items-center gap-3">
             {/* Period tabs (prominent) */}
-            <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg p-1 shadow-lg">
+            <div className="flex items-center bg-zinc-900 border border-zinc-700/60 rounded-lg p-1 shadow-lg">
               {PERIODS.map((p) => (
                 <button
                   key={p.value}
@@ -333,7 +373,7 @@ export default function ScannerPage() {
             <button
               onClick={() => fetchSignals(true)}
               disabled={refreshing}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all duration-200 disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700/60 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all duration-200 disabled:opacity-50"
             >
               <RefreshCw
                 className={cn("w-3.5 h-3.5 transition-transform", refreshing && "animate-spin")}
@@ -348,26 +388,26 @@ export default function ScannerPage() {
           {SECTOR_FILTERS.map((sf) => {
             const count = sectorCounts[sf.key];
             const isActive = sectorFilter === sf.key;
-            // Hide sectors with 0 signals (except "All")
             if (sf.key !== "All" && count === 0) return null;
+            const chipColors = FILTER_CHIP_COLORS[sf.key];
             return (
               <button
                 key={sf.key}
                 onClick={() => setSectorFilter(sf.key)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200",
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200",
                   isActive
-                    ? cn(FILTER_CHIP_COLORS[sf.key], "ring-1 ring-white/10 shadow-sm")
-                    : "border-zinc-800 text-zinc-500 bg-zinc-900/50 hover:text-zinc-300 hover:border-zinc-700",
+                    ? cn(chipColors.active, "ring-1 ring-white/5 shadow-sm")
+                    : "border-zinc-800/80 text-zinc-500 bg-transparent hover:text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900/50",
                 )}
               >
                 {sf.label}
                 <span
                   className={cn(
-                    "font-mono text-[10px] px-1.5 py-0.5 rounded-full",
+                    "font-mono text-[10px] px-1.5 py-0.5 rounded-full tabular-nums",
                     isActive
                       ? "bg-white/10"
-                      : "bg-zinc-800 text-zinc-600",
+                      : "bg-zinc-800/80 text-zinc-600",
                   )}
                 >
                   {count}
@@ -379,37 +419,37 @@ export default function ScannerPage() {
 
         {/* ====== Sector Summary Card (shown when a specific sector is selected) ====== */}
         {sectorSummary && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+          <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 px-4 py-3">
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
               <span className="text-sm font-semibold text-zinc-200">
                 {sectorFilter}
               </span>
               <div className="hidden sm:block w-px h-5 bg-zinc-800" />
-              <div className="flex items-center gap-1 text-xs">
+              <div className="flex items-center gap-1.5 text-xs">
                 <TrendingUp className="w-3 h-3 text-emerald-500" />
                 <span className="text-zinc-500">Bullish</span>
-                <span className="font-mono font-semibold text-emerald-400">
+                <span className="font-mono font-semibold text-emerald-400 tabular-nums">
                   {sectorSummary.bullishCount}
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-xs">
+              <div className="flex items-center gap-1.5 text-xs">
                 <TrendingDown className="w-3 h-3 text-red-500" />
                 <span className="text-zinc-500">Bearish</span>
-                <span className="font-mono font-semibold text-red-400">
+                <span className="font-mono font-semibold text-red-400 tabular-nums">
                   {sectorSummary.bearishCount}
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-xs">
+              <div className="flex items-center gap-1.5 text-xs">
                 <BarChart3 className="w-3 h-3 text-indigo-500" />
                 <span className="text-zinc-500">Avg WR</span>
-                <span className="font-mono font-semibold text-indigo-400">
+                <span className="font-mono font-semibold text-indigo-400 tabular-nums">
                   {sectorSummary.avgWinRate.toFixed(1)}%
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-xs">
+              <div className="flex items-center gap-1.5 text-xs">
                 <Zap className="w-3 h-3 text-amber-400" />
                 <span className="text-zinc-500">Top Signal</span>
-                <span className="font-mono font-semibold text-zinc-100">
+                <span className="font-mono font-semibold text-zinc-100 tabular-nums">
                   {sectorSummary.topSignal.ticker}
                   <span className="text-amber-400 ml-1">
                     ({sectorSummary.topSignal.strength.toFixed(0)})
@@ -482,7 +522,7 @@ export default function ScannerPage() {
 
         {/* Refreshing overlay indicator */}
         {refreshing && signals.length > 0 && (
-          <div className="fixed bottom-6 right-6 flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900 border border-zinc-700 shadow-xl text-xs text-zinc-300 z-50">
+          <div className="fixed bottom-6 right-6 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-900/90 border border-zinc-700/60 shadow-xl backdrop-blur-md text-xs text-zinc-300 z-50">
             <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
             Refreshing signals...
           </div>

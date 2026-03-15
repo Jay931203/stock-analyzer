@@ -29,6 +29,9 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.svg",
   },
+  other: {
+    "theme-color": "#09090b",
+  },
   openGraph: {
     title: "Stock Scanner — AI-Powered Signal Analysis",
     description:
@@ -50,6 +53,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <meta name="theme-color" content="#09090b" />
+      </head>
       <body className={`${inter.variable} ${mono.variable} antialiased`}>
         {children}
       </body>

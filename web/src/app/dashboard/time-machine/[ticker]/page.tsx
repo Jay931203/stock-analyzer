@@ -18,6 +18,7 @@ import {
   ChevronRight,
   TrendingUp,
   TrendingDown,
+  Info,
 } from "lucide-react";
 
 const PRESET_DATES = [
@@ -63,7 +64,6 @@ export default function TimeMachinePage() {
     [ticker],
   );
 
-  // Auto-run if date is in URL query param (e.g., from Time Machine highlights)
   useEffect(() => {
     if (initialDate) {
       runTimeMachine(initialDate);
@@ -99,7 +99,7 @@ export default function TimeMachinePage() {
       <div className="flex items-center gap-4">
         <Link
           href={`/dashboard/analyze/${ticker}`}
-          className="flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors shrink-0"
+          className="flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all duration-200 shrink-0"
           aria-label="Back to analysis"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -121,7 +121,7 @@ export default function TimeMachinePage() {
       </div>
 
       {/* Date picker + presets */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+      <div className="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5">
         <div className="flex flex-col sm:flex-row gap-4">
           {/* Calendar input */}
           <div className="flex-1">
@@ -141,13 +141,13 @@ export default function TimeMachinePage() {
                   onChange={(e) => setSelectedDate(e.target.value)}
                   max={new Date().toISOString().split("T")[0]}
                   min="2015-01-01"
-                  className="w-full pl-10 pr-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm font-mono text-zinc-200 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all [color-scheme:dark]"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm font-mono text-zinc-200 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:shadow-[0_0_15px_rgba(99,102,241,0.1)] transition-all [color-scheme:dark]"
                 />
               </div>
               <button
                 onClick={() => runTimeMachine(selectedDate)}
                 disabled={!selectedDate || loading}
-                className="px-5 py-2.5 rounded-lg bg-indigo-600 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm shadow-indigo-500/20"
+                className="px-5 py-2.5 rounded-lg bg-indigo-600 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm shadow-indigo-500/20 hover:shadow-md hover:shadow-indigo-500/25"
               >
                 {loading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -171,14 +171,17 @@ export default function TimeMachinePage() {
                 onClick={() => runTimeMachine(preset.date)}
                 disabled={loading}
                 className={cn(
-                  "flex flex-col items-center px-3 py-2.5 rounded-lg border text-center transition-all",
+                  "flex flex-col items-center px-3 py-2.5 rounded-lg border text-center transition-all duration-200 group",
                   selectedDate === preset.date
                     ? "bg-indigo-600/15 border-indigo-500/30 text-indigo-400 shadow-sm shadow-indigo-500/10"
-                    : "bg-zinc-800/40 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300 hover:bg-zinc-800/60",
+                    : "bg-zinc-800/40 border-zinc-800/60 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300 hover:bg-zinc-800/60",
                 )}
               >
-                <span className="text-xs font-medium">{preset.label}</span>
-                <span className="text-[10px] text-zinc-600 mt-0.5 font-mono">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="w-3 h-3 opacity-50" />
+                  <span className="text-xs font-medium">{preset.label}</span>
+                </div>
+                <span className="text-[10px] text-zinc-600 mt-0.5 font-mono tabular-nums">
                   {preset.date}
                 </span>
               </button>
@@ -204,8 +207,7 @@ export default function TimeMachinePage() {
       {/* Loading skeleton */}
       {loading && (
         <div className="space-y-4">
-          {/* Verdict skeleton */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="bg-zinc-900 border border-zinc-800/80 rounded-xl overflow-hidden">
             <div className="h-20 bg-zinc-800/30 animate-pulse" />
             <div className="px-5 py-4 space-y-3">
               <div className="w-48 h-5 bg-zinc-800 rounded animate-pulse" />
@@ -216,8 +218,7 @@ export default function TimeMachinePage() {
               </div>
             </div>
           </div>
-          {/* Conditions skeleton */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <div className="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5">
             <div className="w-32 h-4 bg-zinc-800 rounded animate-pulse mb-3" />
             <div className="grid grid-cols-4 gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -230,9 +231,16 @@ export default function TimeMachinePage() {
 
       {/* Result */}
       {result && !loading && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-reveal-up">
           {/* Verdict card */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className={cn(
+            "bg-zinc-900 border rounded-xl overflow-hidden transition-all",
+            result.accuracy
+              ? result.accuracy.was_correct
+                ? "border-emerald-500/20 animate-glow-green"
+                : "border-red-500/20 animate-glow-red"
+              : "border-zinc-800/80",
+          )}>
             {/* Large verdict banner */}
             {result.accuracy ? (
               <div
@@ -256,7 +264,7 @@ export default function TimeMachinePage() {
                   <div>
                     <div
                       className={cn(
-                        "text-2xl font-bold",
+                        "text-2xl font-bold tracking-tight",
                         result.accuracy.was_correct ? "text-emerald-400" : "text-red-400",
                       )}
                     >
@@ -273,28 +281,28 @@ export default function TimeMachinePage() {
                       >
                         {result.signal.direction}
                       </span>
-                      <span className="text-xs text-zinc-500 font-mono">
-                        WR: {result.signal.win_rate_20d?.toFixed(0) ?? '—'}% | n={result.signal.occurrences}
+                      <span className="text-xs text-zinc-500 font-mono tabular-nums">
+                        WR: {result.signal.win_rate_20d?.toFixed(0) ?? "\u2014"}% | n={result.signal.occurrences}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-zinc-500 mb-1">
-                    Predicted: {result.accuracy.predicted_direction}
+                    Predicted: <span className="text-zinc-400 font-medium">{result.accuracy.predicted_direction}</span>
                   </div>
                   <div className="text-xs text-zinc-500">
-                    Actual: {result.accuracy.actual_direction}
+                    Actual: <span className="text-zinc-400 font-medium">{result.accuracy.actual_direction}</span>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-4 px-6 py-5 bg-zinc-800/30 border-b border-zinc-700/50">
+              <div className="flex items-center gap-4 px-6 py-5 bg-zinc-800/20 border-b border-zinc-700/30">
                 <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-700/30 border border-zinc-600/30">
-                  <AlertTriangle className="w-7 h-7 text-zinc-500" />
+                  <Info className="w-7 h-7 text-zinc-500" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-zinc-400">NO SIGNAL</div>
+                  <div className="text-2xl font-bold text-zinc-400 tracking-tight">NO SIGNAL</div>
                   <p className="text-xs text-zinc-500 mt-1">
                     {(result.signal as Record<string, unknown>).confidence_warning as string || "Insufficient historical data for a directional call"}
                   </p>
@@ -303,12 +311,12 @@ export default function TimeMachinePage() {
             )}
 
             {/* Price comparison */}
-            <div className="px-6 py-4 border-b border-zinc-800 flex flex-wrap items-center gap-6">
+            <div className="px-6 py-4 border-b border-zinc-800/60 flex flex-wrap items-center gap-6">
               <div>
                 <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
                   Price on {result.date}
                 </div>
-                <div className="text-xl font-mono font-bold text-zinc-200">
+                <div className="text-xl font-mono font-bold text-zinc-200 tabular-nums">
                   {formatCurrency(result.price_at_date)}
                 </div>
               </div>
@@ -323,7 +331,7 @@ export default function TimeMachinePage() {
                 <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">
                   Current Price
                 </div>
-                <div className="text-xl font-mono font-bold text-zinc-200">
+                <div className="text-xl font-mono font-bold text-zinc-200 tabular-nums">
                   {formatCurrency(result.current_price)}
                 </div>
               </div>
@@ -333,7 +341,7 @@ export default function TimeMachinePage() {
                 </div>
                 <div
                   className={cn(
-                    "text-xl font-mono font-bold",
+                    "text-xl font-mono font-bold tabular-nums",
                     totalReturn >= 0 ? "text-emerald-400" : "text-red-400",
                   )}
                 >
@@ -350,45 +358,50 @@ export default function TimeMachinePage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-800">
-                      <th className="text-left text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2 pr-4">
+                    <tr className="border-b border-zinc-800/60">
+                      <th className="text-left text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2.5 pr-4">
                         Period
                       </th>
-                      <th className="text-right text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2 pr-4">
+                      <th className="text-right text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2.5 pr-4">
                         Return
                       </th>
-                      <th className="text-right text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2 pr-4">
+                      <th className="text-right text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2.5 pr-4">
                         End Price
                       </th>
-                      <th className="text-center text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2">
+                      <th className="text-center text-[11px] text-zinc-500 font-medium uppercase tracking-wider pb-2.5">
                         Direction
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {Object.entries(result.actual).map(([period, data]) => (
-                      <tr key={period} className="border-b border-zinc-800/50 last:border-0">
-                        <td className="py-2.5 pr-4">
-                          <span className="text-xs font-mono font-medium text-zinc-400">
+                      <tr
+                        key={period}
+                        className="border-b border-zinc-800/30 last:border-0 hover:bg-zinc-800/20 transition-colors"
+                      >
+                        <td className="py-3 pr-4">
+                          <span className="text-xs font-mono font-medium text-zinc-400 tabular-nums">
                             {period}
                           </span>
                         </td>
-                        <td className="py-2.5 pr-4 text-right">
+                        <td className="py-3 pr-4 text-right">
                           <span
                             className={cn(
-                              "font-mono font-semibold",
-                              data.return_pct >= 0 ? "text-emerald-400" : "text-red-400",
+                              "font-mono font-semibold tabular-nums px-2 py-0.5 rounded",
+                              data.return_pct >= 0
+                                ? "text-emerald-400 bg-emerald-500/5"
+                                : "text-red-400 bg-red-500/5",
                             )}
                           >
                             {formatPercent(data.return_pct)}
                           </span>
                         </td>
-                        <td className="py-2.5 pr-4 text-right">
-                          <span className="font-mono text-zinc-400">
+                        <td className="py-3 pr-4 text-right">
+                          <span className="font-mono text-zinc-400 tabular-nums">
                             {formatCurrency(data.end_price)}
                           </span>
                         </td>
-                        <td className="py-2.5 text-center">
+                        <td className="py-3 text-center">
                           {data.went_up ? (
                             <CheckCircle2 className="w-4 h-4 text-emerald-500 inline-block" />
                           ) : (
@@ -405,7 +418,7 @@ export default function TimeMachinePage() {
 
           {/* Signal conditions */}
           {result.signal.conditions.length > 0 && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div className="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5">
               <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
                 Signal Conditions on {result.date}
               </h3>
@@ -413,7 +426,7 @@ export default function TimeMachinePage() {
                 {result.signal.conditions.map((cond, i) => (
                   <li
                     key={i}
-                    className="flex items-start gap-3 px-3 py-2.5 rounded-lg bg-zinc-800/40"
+                    className="flex items-start gap-3 px-3 py-2.5 rounded-lg bg-zinc-800/40 hover:bg-zinc-800/60 transition-colors"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
                     <div>
@@ -432,7 +445,7 @@ export default function TimeMachinePage() {
 
           {/* Highlights */}
           {result.highlights && result.highlights.length > 0 && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+            <div className="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5">
               <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
                 Highlights
               </h3>
@@ -441,12 +454,12 @@ export default function TimeMachinePage() {
                   <li
                     key={i}
                     className={cn(
-                      "text-sm px-4 py-2.5 rounded-lg flex items-start gap-2",
+                      "text-sm px-4 py-2.5 rounded-lg flex items-start gap-2 border transition-colors",
                       h.type === "positive"
-                        ? "bg-emerald-500/10 text-emerald-400"
+                        ? "bg-emerald-500/5 text-emerald-400 border-emerald-500/10"
                         : h.type === "negative"
-                          ? "bg-red-500/10 text-red-400"
-                          : "bg-zinc-800/40 text-zinc-300",
+                          ? "bg-red-500/5 text-red-400 border-red-500/10"
+                          : "bg-zinc-800/40 text-zinc-300 border-zinc-800/60",
                     )}
                   >
                     {h.type === "positive" ? (

@@ -410,16 +410,16 @@ function extractIndicators(data: AnalysisResponse, periodKey: IndicatorPeriod = 
 // Sub-components
 // ---------------------------------------------------------------------------
 
-/** Horizontal win-rate bar */
+/** Horizontal win-rate bar with gradient fill */
 function WinRateBar({ label, value }: { label: string; value: number }) {
   const barColor =
     value >= 60
-      ? "bg-emerald-500"
+      ? "from-emerald-600 to-emerald-400"
       : value >= 50
-        ? "bg-indigo-500"
+        ? "from-indigo-600 to-indigo-400"
         : value >= 40
-          ? "bg-amber-500"
-          : "bg-red-500";
+          ? "from-amber-600 to-amber-400"
+          : "from-red-600 to-red-400";
 
   const textColor =
     value >= 60
@@ -432,20 +432,20 @@ function WinRateBar({ label, value }: { label: string; value: number }) {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs text-zinc-500 w-10 shrink-0 font-mono">
+      <span className="text-xs text-zinc-500 w-10 shrink-0 font-mono tabular-nums">
         {label}
       </span>
-      <div className="flex-1 h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+      <div className="flex-1 h-2.5 bg-zinc-800/80 rounded-full overflow-hidden">
         <div
           className={cn(
-            "h-full rounded-full transition-all duration-700",
+            "h-full rounded-full transition-all duration-700 bg-gradient-to-r",
             barColor,
           )}
           style={{ width: `${Math.min(value, 100)}%` }}
         />
       </div>
       <span
-        className={cn("text-xs font-mono font-semibold w-14 text-right", textColor)}
+        className={cn("text-xs font-mono font-semibold w-14 text-right tabular-nums", textColor)}
       >
         {value.toFixed(1)}%
       </span>
@@ -474,12 +474,12 @@ function TierCard({
     <button
       onClick={onClick}
       className={cn(
-        "flex-1 min-w-0 p-4 rounded-xl border text-left transition-all",
+        "flex-1 min-w-0 p-4 rounded-xl border text-left transition-all duration-200",
         isActive
-          ? "bg-zinc-800/80 border-indigo-500/40 ring-1 ring-indigo-500/20"
+          ? "bg-zinc-800/80 border-indigo-500/40 ring-1 ring-indigo-500/20 shadow-lg shadow-indigo-500/5"
           : isEmpty
             ? "bg-zinc-900/40 border-zinc-800/50 opacity-50 cursor-default"
-            : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 cursor-pointer",
+            : "bg-zinc-900 border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-800/60 hover:shadow-md cursor-pointer",
       )}
       disabled={isEmpty}
     >
@@ -499,7 +499,7 @@ function TierCard({
       <div className="text-xs text-zinc-500">{meta.description}</div>
       <div
         className={cn(
-          "mt-2 text-lg font-mono font-bold",
+          "mt-2 text-lg font-mono font-bold tabular-nums",
           isEmpty ? "text-zinc-600" : "text-zinc-200",
         )}
       >
@@ -850,67 +850,71 @@ export default function AnalyzePage() {
         <span className="text-zinc-400">Analysis</span>
       </nav>
 
-      {/* Top section: ticker info + price */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div className="flex items-start gap-5">
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors mt-0.5 shrink-0"
-            aria-label="Back to scanner"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
+      {/* Top section: ticker info + price - Bloomberg-style */}
+      <div className="rounded-xl border border-zinc-800/80 bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-900/80 p-5">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all duration-200 mt-0.5 shrink-0"
+              aria-label="Back to scanner"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
 
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-zinc-100 font-mono tracking-tight">
-                {info.ticker}
-              </h1>
-              <span
-                className={cn(
-                  "inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border",
-                  direction === "bullish"
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                    : direction === "bearish"
-                      ? "bg-red-500/10 text-red-400 border-red-500/20"
-                      : "bg-zinc-700/30 text-zinc-400 border-zinc-700",
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold text-zinc-100 font-mono tracking-tight">
+                  {info.ticker}
+                </h1>
+                <span
+                  className={cn(
+                    "inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border",
+                    direction === "bullish"
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : direction === "bearish"
+                        ? "bg-red-500/10 text-red-400 border-red-500/20"
+                        : "bg-zinc-700/30 text-zinc-400 border-zinc-700",
+                  )}
+                >
+                  {direction.charAt(0).toUpperCase() + direction.slice(1)}
+                </span>
+              </div>
+              <p className="text-sm text-zinc-400 mt-1">
+                {info.name}
+                {info.sector && (
+                  <span className="text-zinc-600 ml-1.5 pl-1.5 border-l border-zinc-800">{info.sector}</span>
                 )}
-              >
-                {direction.charAt(0).toUpperCase() + direction.slice(1)}
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <div className="text-4xl font-mono font-bold text-zinc-100 tracking-tight tabular-nums">
+              {formatCurrency(price.current)}
+            </div>
+            <div
+              className={cn(
+                "inline-flex items-center gap-1.5 text-sm font-mono mt-1 px-2.5 py-1 rounded-lg",
+                positive
+                  ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/15"
+                  : "text-red-400 bg-red-500/10 border border-red-500/15",
+              )}
+            >
+              {positive ? (
+                <TrendingUp className="w-4 h-4" />
+              ) : (
+                <TrendingDown className="w-4 h-4" />
+              )}
+              <span className="font-semibold tabular-nums">
+                {positive ? "+" : ""}
+                {formatCurrency(price.change).replace("$", "$")}
+              </span>
+              <span className="text-zinc-600">|</span>
+              <span className="font-semibold tabular-nums">
+                {formatPercent(price.change_pct)}
               </span>
             </div>
-            <p className="text-sm text-zinc-500 mt-0.5">
-              {info.name}
-              {info.sector && (
-                <span className="text-zinc-600"> / {info.sector}</span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="text-right">
-          <div className="text-3xl font-mono font-bold text-zinc-100 tracking-tight">
-            {formatCurrency(price.current)}
-          </div>
-          <div
-            className={cn(
-              "flex items-center justify-end gap-1.5 text-sm font-mono mt-0.5",
-              positive ? "text-emerald-400" : "text-red-400",
-            )}
-          >
-            {positive ? (
-              <TrendingUp className="w-4 h-4" />
-            ) : (
-              <TrendingDown className="w-4 h-4" />
-            )}
-            <span className="font-semibold">
-              {positive ? "+" : ""}
-              {formatCurrency(price.change).replace("$", "$")}
-            </span>
-            <span className="text-zinc-600">|</span>
-            <span className="font-semibold">
-              {formatPercent(price.change_pct)}
-            </span>
           </div>
         </div>
       </div>
@@ -1012,9 +1016,9 @@ export default function AnalyzePage() {
                   onClick={() => handleToggleIndicator(key)}
                   disabled={wouldBeUnderMin}
                   className={cn(
-                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200",
                     isSelected
-                      ? "bg-indigo-600/15 text-indigo-300 border-indigo-500/30 hover:bg-indigo-600/25"
+                      ? "bg-indigo-600/15 text-indigo-300 border-indigo-500/30 hover:bg-indigo-600/25 shadow-sm"
                       : "bg-zinc-800/50 text-zinc-500 border-zinc-700/50 hover:text-zinc-300 hover:border-zinc-600",
                     wouldBeUnderMin && "opacity-60 cursor-not-allowed",
                   )}
@@ -1026,7 +1030,7 @@ export default function AnalyzePage() {
                         : `Add ${key} to combined signal`
                   }
                 >
-                  {isSelected && <Check className="w-3 h-3" />}
+                  {isSelected && <Check className="w-3 h-3 text-indigo-400" />}
                   {label}
                 </button>
               );
@@ -1069,7 +1073,7 @@ export default function AnalyzePage() {
                       Recommended
                     </span>
                   )}
-                  <span className="text-xs text-zinc-500 font-mono ml-auto">
+                  <span className="text-xs text-zinc-500 font-mono ml-auto tabular-nums">
                     {activeTierData.occurrences} historical matches
                   </span>
                 </div>
@@ -1086,7 +1090,7 @@ export default function AnalyzePage() {
                         <WinRateBar label={fp === "252" ? "1Y" : `${fp}d`} value={pd.win_rate} />
                         <span
                           className={cn(
-                            "text-xs font-mono font-semibold w-16 text-right shrink-0",
+                            "text-xs font-mono font-semibold w-16 text-right shrink-0 tabular-nums",
                             pd.avg_return >= 0
                               ? "text-emerald-400"
                               : "text-red-400",
@@ -1245,19 +1249,23 @@ function IndicatorCompactRow({
   };
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3">
+    <div className="flex items-center gap-4 px-4 py-3 hover:bg-zinc-800/30 transition-colors">
       <span className="text-xs font-medium text-zinc-400 w-32 shrink-0 truncate">
         {indicator.name}
       </span>
-      <span className="text-sm font-mono font-bold text-zinc-200 w-20 shrink-0 text-right">
+      <span className="text-sm font-mono font-bold text-zinc-200 w-20 shrink-0 text-right tabular-nums">
         {typeof indicator.value === "number"
           ? indicator.value.toFixed(2)
           : indicator.value}
       </span>
       <span
         className={cn(
-          "px-2 py-0.5 rounded text-[10px] font-semibold shrink-0",
+          "px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 border",
           badgeStyles[indicator.state_color],
+          indicator.state_color === "green" && "border-emerald-500/20",
+          indicator.state_color === "red" && "border-red-500/20",
+          indicator.state_color === "yellow" && "border-amber-500/20",
+          indicator.state_color === "neutral" && "border-zinc-700/40",
         )}
       >
         {indicator.state_color === "green"
@@ -1270,21 +1278,32 @@ function IndicatorCompactRow({
       </span>
       <div className="flex-1" />
       {indicator.win_rate > 0 && (
-        <span
-          className={cn(
-            "text-xs font-mono font-semibold",
-            indicator.win_rate >= 60
-              ? "text-emerald-400"
-              : indicator.win_rate <= 40
-                ? "text-red-400"
-                : "text-zinc-400",
-          )}
-        >
-          {indicator.win_rate.toFixed(1)}%
-        </span>
+        <div className="flex items-center gap-1.5">
+          <div className="w-10 h-1.5 bg-zinc-800 rounded-full overflow-hidden hidden sm:block">
+            <div
+              className={cn(
+                "h-full rounded-full",
+                indicator.win_rate >= 60 ? "bg-emerald-500" : indicator.win_rate <= 40 ? "bg-red-500" : "bg-zinc-500",
+              )}
+              style={{ width: `${Math.min(indicator.win_rate, 100)}%` }}
+            />
+          </div>
+          <span
+            className={cn(
+              "text-xs font-mono font-semibold tabular-nums",
+              indicator.win_rate >= 60
+                ? "text-emerald-400"
+                : indicator.win_rate <= 40
+                  ? "text-red-400"
+                  : "text-zinc-400",
+            )}
+          >
+            {indicator.win_rate.toFixed(1)}%
+          </span>
+        </div>
       )}
       {indicator.occurrences > 0 && (
-        <span className="text-[11px] text-zinc-600 font-mono">
+        <span className="text-[11px] text-zinc-600 font-mono tabular-nums">
           n={indicator.occurrences}
         </span>
       )}
@@ -1346,20 +1365,20 @@ function CombinedFallback({
               return (
                 <div key={key} className="flex items-center gap-3">
                   <span className="text-xs text-zinc-500 font-mono w-8 text-right shrink-0">{label}</span>
-                  <div className="flex-1 h-5 bg-zinc-800 rounded-full overflow-hidden relative">
+                  <div className="flex-1 h-5 bg-zinc-800/80 rounded-full overflow-hidden relative">
                     <div
                       className={cn(
-                        "h-full rounded-full transition-all duration-500",
-                        wr >= 60 ? "bg-emerald-500" : wr >= 40 ? "bg-indigo-500" : "bg-red-500",
+                        "h-full rounded-full transition-all duration-500 bg-gradient-to-r",
+                        wr >= 60 ? "from-emerald-600 to-emerald-400" : wr >= 40 ? "from-indigo-600 to-indigo-400" : "from-red-600 to-red-400",
                       )}
                       style={{ width: `${Math.max(wr, 2)}%` }}
                     />
-                    <span className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-bold text-white drop-shadow">
+                    <span className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-bold text-white drop-shadow tabular-nums">
                       {wr.toFixed(1)}%
                     </span>
                   </div>
                   <span className={cn(
-                    "text-xs font-mono w-16 text-right shrink-0",
+                    "text-xs font-mono w-16 text-right shrink-0 tabular-nums",
                     avg >= 0 ? "text-emerald-400" : "text-red-400",
                   )}>
                     {avg >= 0 ? "+" : ""}{avg.toFixed(1)}%

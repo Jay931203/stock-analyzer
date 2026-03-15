@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { SearchBar } from "./SearchBar";
-import { TrendingUp, TrendingDown, User, LogOut, Circle } from "lucide-react";
+import { TrendingUp, TrendingDown, User, LogOut, ChevronDown } from "lucide-react";
 
 interface IndexPrice {
   symbol: string;
@@ -67,7 +67,6 @@ export function Header() {
         });
         setIndices(updated);
 
-        // Get market state from first available index
         const firstState = updated.find((u) => u.marketState)?.marketState;
         setMarketBadge(getMarketStateBadge(firstState));
       } catch {
@@ -87,76 +86,92 @@ export function Header() {
   }, []);
 
   return (
-    <header className="flex items-center gap-4 h-14 px-4 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-sm shrink-0">
+    <header className="flex items-center gap-4 h-14 px-4 border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md shrink-0">
       {/* Search */}
       <SearchBar />
 
-      {/* Market indices */}
-      <div className="hidden md:flex items-center gap-5 ml-auto">
+      {/* Market indices - ticker tape style */}
+      <div className="hidden md:flex items-center gap-0 ml-auto">
         {/* Market state badge */}
         {marketBadge && (
-          <span className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-400 border border-zinc-700 rounded-full px-2.5 py-1">
-            <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", marketBadge.color)} />
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-400 border border-zinc-700/60 rounded-full px-2.5 py-1 mr-3">
+            <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse-dot", marketBadge.color)} />
             {marketBadge.label}
           </span>
         )}
 
-        {indices.map((idx) => {
+        {indices.map((idx, i) => {
           const positive = idx.change >= 0;
           return (
-            <div key={idx.symbol} className="flex items-center gap-1.5 text-xs">
-              <span className="text-zinc-500 font-medium">{idx.symbol}</span>
-              <span className="font-mono text-zinc-200">
-                {idx.price > 0 ? `$${formatPrice(idx.price)}` : "--"}
-              </span>
-              {idx.price > 0 && (
-                <span
-                  className={cn(
-                    "flex items-center gap-0.5 font-mono text-[11px] px-1.5 py-0.5 rounded",
-                    positive
-                      ? "text-emerald-400 bg-emerald-500/10"
-                      : "text-red-400 bg-red-500/10",
-                  )}
-                >
-                  {positive ? (
-                    <TrendingUp className="w-3 h-3" />
-                  ) : (
-                    <TrendingDown className="w-3 h-3" />
-                  )}
-                  {positive ? "+" : ""}
-                  {idx.changePercent.toFixed(2)}%
-                </span>
+            <div key={idx.symbol} className="flex items-center">
+              {i > 0 && (
+                <div className="w-px h-6 bg-zinc-800/60 mx-3" />
               )}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-zinc-400 tracking-wide">{idx.symbol}</span>
+                <span className="font-mono text-sm font-semibold text-zinc-100 tabular-nums">
+                  {idx.price > 0 ? formatPrice(idx.price) : "--"}
+                </span>
+                {idx.price > 0 && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-0.5 font-mono text-[11px] font-semibold px-2 py-0.5 rounded-md tabular-nums",
+                      positive
+                        ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/15"
+                        : "text-red-400 bg-red-500/10 border border-red-500/15",
+                    )}
+                  >
+                    {positive ? (
+                      <TrendingUp className="w-3 h-3" />
+                    ) : (
+                      <TrendingDown className="w-3 h-3" />
+                    )}
+                    {positive ? "+" : ""}
+                    {idx.changePercent.toFixed(2)}%
+                  </span>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
 
       {/* User menu */}
-      <div className="relative ml-auto md:ml-0 flex items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-500 border border-zinc-700">
+      <div className="relative ml-auto md:ml-0 flex items-center gap-2.5">
+        {/* Plan badge with gradient */}
+        <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md bg-gradient-to-r from-zinc-800 to-zinc-800/80 text-zinc-500 border border-zinc-700/60">
           Free
         </span>
+
+        {/* Modern user menu trigger */}
         <button
           onClick={() => setUserMenuOpen(!userMenuOpen)}
-          className="flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800/80 transition-all duration-200"
           aria-label="User menu"
         >
-          <User className="w-4 h-4" />
+          <div className="flex items-center justify-center w-5 h-5 rounded-md bg-zinc-800 border border-zinc-700/50">
+            <User className="w-3 h-3" />
+          </div>
+          <ChevronDown className={cn(
+            "w-3 h-3 transition-transform duration-200",
+            userMenuOpen && "rotate-180",
+          )} />
         </button>
+
         {userMenuOpen && (
           <>
             <div
               className="fixed inset-0 z-40"
               onClick={() => setUserMenuOpen(false)}
             />
-            <div className="absolute right-0 top-full mt-1 w-44 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-50 py-1">
-              <button className="flex items-center gap-2 w-full px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors">
-                <User className="w-3.5 h-3.5" />
+            <div className="absolute right-0 top-full mt-1.5 w-44 bg-zinc-900 border border-zinc-700/60 rounded-xl shadow-xl shadow-black/20 z-50 py-1 backdrop-blur-lg">
+              <button className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800/60 transition-colors rounded-lg mx-0">
+                <User className="w-3.5 h-3.5 text-zinc-500" />
                 Profile
               </button>
-              <button className="flex items-center gap-2 w-full px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors">
-                <LogOut className="w-3.5 h-3.5" />
+              <div className="mx-2 my-1 border-t border-zinc-800/60" />
+              <button className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800/60 transition-colors rounded-lg mx-0">
+                <LogOut className="w-3.5 h-3.5 text-zinc-500" />
                 Sign Out
               </button>
             </div>
