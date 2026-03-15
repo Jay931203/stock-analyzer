@@ -279,7 +279,12 @@ def _recompute_analysis(ticker: str, period: str = "10y") -> AnalysisResponse:
         price_distribution=price_distribution,
     )
 
-    combined = _calc_combined(df, states, indicators)
+    try:
+        combined = _calc_combined(df, states, indicators)
+    except Exception as e:
+        print(f"[analyze] _calc_combined failed for {ticker}: {e}")
+        traceback.print_exc()
+        combined = None
     data_range = f"{df.index[0].strftime('%Y-%m-%d')} ~ {df.index[-1].strftime('%Y-%m-%d')} ({len(df)} days)"
 
     response = AnalysisResponse(
@@ -1609,21 +1614,13 @@ def _calc_combined(df, states: dict, indicators: dict = None) -> CombinedProbabi
         traceback.print_exc()
         return None
 
-    # smart_result["tiers"] contains ProbabilityResult objects (not dicts)
+    # smart_result has "tiers" (dict of ProbabilityResult) and "best_tier" (str name)
     tiers = smart_result.get("tiers", {})
+    best_tier_name = smart_result.get("best_tier", "normal")
+    best_tier = tiers.get(best_tier_name)
 
-    # Pick the best tier with sufficient data
-    best_tier = None
-    best_tier_name = "none"
-    for tier_name in ["strict", "normal", "relaxed"]:
-        tier_data = tiers.get(tier_name)
-        if tier_data and tier_data.occurrences >= 5:
-            best_tier = tier_data
-            best_tier_name = tier_name
-            break
-
-    # Fallback to relaxed even if < 5
-    if not best_tier:
+    # Fallback if best_tier is empty
+    if not best_tier or best_tier.occurrences == 0:
         for tier_name in ["relaxed", "normal", "strict"]:
             tier_data = tiers.get(tier_name)
             if tier_data and tier_data.occurrences > 0:
@@ -1632,7 +1629,10 @@ def _calc_combined(df, states: dict, indicators: dict = None) -> CombinedProbabi
                 break
 
     if not best_tier or best_tier.occurrences == 0:
+        print(f"[combined] No tier has occurrences > 0 for selected={selected}")
         return None
+
+    print(f"[combined] Using tier={best_tier_name} occ={best_tier.occurrences} for selected={selected}")
 
     # Convert ProbabilityResult to ProbabilityData format
     prob_data = _to_prob_data(best_tier)
