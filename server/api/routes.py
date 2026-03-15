@@ -3,6 +3,7 @@
 import os
 import re as _re
 import time
+import traceback
 from datetime import datetime, timezone, timedelta
 
 import pandas as pd
@@ -613,37 +614,18 @@ async def get_signals(
             pcache["ts"] = now
             signals_data = supabase_data
 
-    # 3. No cache: compute synchronously (first ever load)
-    # fetch_price_history caches full 10y data in SQLite and trims to period.
-    # Non-default periods just trim cached data — no yfinance network call needed.
+    # 3. No cache at all: return empty immediately. NEVER compute synchronously.
+    # The cron job (/api/signals/refresh) is the ONLY place that computes signals.
+    # This prevents 60-second blocking requests on cold start.
     if not signals_data:
-        try:
-            signals_data = _compute_signals(data_period)
-            pcache["data"] = signals_data
-            pcache["ts"] = now
-            if is_default:
-                write_cached_signals(signals_data["signals"])
-        except Exception as exc:
-            import traceback
-            traceback.print_exc()
-            signals_data = {"signals": [], "scanned": 0, "updated": ""}
+        signals_data = {
+            "signals": [],
+            "scanned": 0,
+            "updated": "No data yet. Signals refresh every 15 minutes.",
+        }
 
-    # Background refresh if stale (user never waits)
-    # NOTE: On Vercel serverless, BackgroundTasks may not complete after response.
-    # The cron job (/api/signals/refresh) handles periodic updates instead.
-    is_stale = now - pcache["ts"] > _SIGNALS_TTL
-    if is_stale and background_tasks and not _IS_VERCEL:
-        def _bg_refresh():
-            try:
-                fresh = _compute_signals(data_period)
-                pcache["data"] = fresh
-                pcache["ts"] = time.time()
-                if is_default:
-                    snapshot_and_detect(fresh["signals"])
-                    write_cached_signals(fresh["signals"])
-            except Exception:
-                pass
-        background_tasks.add_task(_bg_refresh)
+    # No background refresh here — the cron job (/api/signals/refresh) handles
+    # all signal computation every 15 minutes. User requests only read cache.
 
     # Show all signals to everyone (gating disabled during launch phase)
     all_signals = signals_data["signals"][:limit]
@@ -1246,10 +1228,10 @@ async def time_machine(
             if isinstance(p20, dict):
                 win_rate_20d = p20.get("win_rate")
 
-            if win_rate_20d is not None and occurrences >= 3:
-                if win_rate_20d >= 55:
+            if win_rate_20d is not None and occurrences >= 10:
+                if win_rate_20d >= 60:
                     signal_direction = "bullish"
-                elif win_rate_20d <= 45:
+                elif win_rate_20d <= 40:
                     signal_direction = "bearish"
                 else:
                     signal_direction = "neutral"
@@ -1263,6 +1245,14 @@ async def time_machine(
                 if wr is not None:
                     win_rates[str(p_key)] = round(wr, 1)
 
+    # Low confidence warning when insufficient historical matches
+    confidence_warning = None
+    if occurrences < 10:
+        confidence_warning = (
+            f"Low confidence: only {occurrences} historical matches found. "
+            f"Need at least 10 for a reliable directional call."
+        )
+
     signal = {
         "direction": signal_direction,
         "win_rate_20d": round(win_rate_20d, 1) if win_rate_20d is not None else None,
@@ -1270,6 +1260,7 @@ async def time_machine(
         "occurrences": occurrences,
         "tier": used_tier,
         "conditions": [{"indicator": ind} for ind in selected_indicators],
+        "confidence_warning": confidence_warning,
     }
 
     # ── Compute ACTUAL forward returns ──
@@ -1287,7 +1278,7 @@ async def time_machine(
     # ── Compute accuracy ──
     # Only judge accuracy when we had a clear signal with sufficient historical data
     accuracy = None
-    if signal_direction in ("bullish", "bearish") and occurrences >= 3 and "20" in actual_returns:
+    if signal_direction in ("bullish", "bearish") and occurrences >= 10 and "20" in actual_returns:
         actual_went_up = actual_returns["20"]["went_up"]
         actual_dir = "up" if actual_went_up else "down"
         was_correct = (
@@ -1607,18 +1598,26 @@ def _calc_combined(df, states: dict, indicators: dict = None) -> CombinedProbabi
     current_values = _build_current_values(indicators, states) if indicators else {}
 
     # Use adaptive matching — progressively widens bins to find matches
-    smart_result = calc_adaptive_combined(
-        df, selected, current_values,
-        lookback_days=len(df),
-        compute_impact=False,
-    )
+    try:
+        smart_result = calc_adaptive_combined(
+            df, selected, current_values,
+            lookback_days=len(df),
+            compute_impact=False,
+        )
+    except Exception as e:
+        print(f"[combined] adaptive matching failed: {e}")
+        traceback.print_exc()
+        return None
+
+    # smart_result["tiers"] contains ProbabilityResult objects (not dicts)
+    tiers = smart_result.get("tiers", {})
 
     # Pick the best tier with sufficient data
     best_tier = None
     best_tier_name = "none"
     for tier_name in ["strict", "normal", "relaxed"]:
-        tier_data = smart_result.get(tier_name)
-        if tier_data and tier_data.get("occurrences", 0) >= 5:
+        tier_data = tiers.get(tier_name)
+        if tier_data and tier_data.occurrences >= 5:
             best_tier = tier_data
             best_tier_name = tier_name
             break
@@ -1626,18 +1625,17 @@ def _calc_combined(df, states: dict, indicators: dict = None) -> CombinedProbabi
     # Fallback to relaxed even if < 5
     if not best_tier:
         for tier_name in ["relaxed", "normal", "strict"]:
-            tier_data = smart_result.get(tier_name)
-            if tier_data and tier_data.get("occurrences", 0) > 0:
+            tier_data = tiers.get(tier_name)
+            if tier_data and tier_data.occurrences > 0:
                 best_tier = tier_data
                 best_tier_name = tier_name
                 break
 
-    if not best_tier or best_tier.get("occurrences", 0) == 0:
+    if not best_tier or best_tier.occurrences == 0:
         return None
 
-    # Convert to ProbabilityData format
-    periods_data = best_tier.get("periods", {})
-    prob_data = _to_prob_data_from_dict(periods_data, best_tier.get("occurrences", 0))
+    # Convert ProbabilityResult to ProbabilityData format
+    prob_data = _to_prob_data(best_tier)
 
     # Build condition strings
     condition_strs = []
@@ -1654,7 +1652,7 @@ def _calc_combined(df, states: dict, indicators: dict = None) -> CombinedProbabi
         conditions=condition_strs,
         probability=prob_data,
         tier=best_tier_name,
-        occurrences=best_tier.get("occurrences", 0),
+        occurrences=best_tier.occurrences,
     )
 
 

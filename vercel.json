@@ -17,5 +17,11 @@
     { "src": "/s/(.*)", "dest": "/api/index.py" },
     { "src": "/sitemap\\.xml", "dest": "/api/index.py" },
     { "src": "/robots\\.txt", "dest": "/api/index.py" }
+  ],
+  "crons": [
+    {
+      "path": "/api/signals/refresh",
+      "schedule": "*/15 * * * *"
+    }
   ]
 }
