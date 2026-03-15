@@ -1673,7 +1673,7 @@ def _calc_combined(df, states: dict, indicators: dict = None) -> CombinedProbabi
         conditions=condition_strs,
         probability=prob_data,
         tier=best_tier_name,
-        occurrences=best_tier.occurrences,
+        occurrences=best_result.occurrences,
     )
 
 
